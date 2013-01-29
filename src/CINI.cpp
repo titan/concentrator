@@ -29,6 +29,12 @@ along with CINI.  If not, see <http://www.gnu.org/licenses/>.
 #include "CINIProperty.h"
 #include "CINIComment.h"
 
+#ifdef DEBUG_INI
+#define DEBUG printf
+#else
+#define DEBUG(...)
+#endif
+
 /**
 * Constructor.
 * Use the default filename 'new.ini'
@@ -71,7 +77,7 @@ CINI::~CINI()
 */
 void CINI::Parse(const std::string & filename)
 {
-   printf("CINI::Parse(%s)\n", filename.c_str());
+   DEBUG("CINI::Parse(%s)\n", filename.c_str());
 	this->m_data.clear();
 	this->m_filename = filename;
 
@@ -87,7 +93,7 @@ void CINI::Parse(const std::string & filename)
 	std::fstream file(this->m_filename.c_str());
 	if(file.is_open())
 	{
-      printf("open %s OK\n", filename.c_str());
+      DEBUG("open %s OK\n", filename.c_str());
 		// While there is no errors.
 		while(file.good())
 		{

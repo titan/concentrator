@@ -6,20 +6,29 @@
 #include"Utils.h"
 #include"libs_emsys_odm.h"
 
+#ifdef DEBUG_UTILS
+#define DEBUG printf
+#else
+#define DEBUG(...)
+#endif
+
 void PrintData( const uint8* pData, const uint32 DataLen )
 {
+
+#ifdef DEBUG_UTILS
    assert(pData && DataLen>0);
    if(NULL == pData || 0 >= DataLen)
    {
       return;
    }
-   printf("<--");
+   DEBUG("<--");
    uint32 i = 0;
    for(; i<DataLen; i++)
    {
-      printf("0x%02x,", pData[i]);
+      DEBUG("0x%02x,", pData[i]);
    }
-   printf("-->\n");
+   DEBUG("-->\n");
+#endif
 }
 
 void Revert(uint8* pData, uint32 DataLen)
@@ -352,7 +361,7 @@ uint32 DateTime2TimeStamp(uint32 Year, uint32 Month, uint32 Day, uint32 Hour, ui
 {
    uint8 DateTimeStr[128] = {0};
    sprintf((char*)DateTimeStr, "%04d-%02d-%02d %02d:%02d:%02d", Year, Month, Day, Hour, Minute, Second);
-   printf("DateTime2TimeStamp()---DateTimeStr=%s\n", DateTimeStr);
+   DEBUG("DateTime2TimeStamp()---DateTimeStr=%s\n", DateTimeStr);
    // tm_new tm;
    tm TmTime;
    TmTime.tm_sec = Second;
@@ -367,7 +376,7 @@ uint32 DateTime2TimeStamp(uint32 Year, uint32 Month, uint32 Day, uint32 Hour, ui
 
 bool TimeStamp2TimeStr(uint32 UTCTime, uint32* pDateTime, uint32 DateTimeLen)
 {
-   printf("TimeStamp2TimeStr()----DateTimeLen=%d\n", DateTimeLen);
+   DEBUG("TimeStamp2TimeStr()----DateTimeLen=%d\n", DateTimeLen);
    if( (NULL == pDateTime) || (DATETIME_LEN != DateTimeLen) )
    {
       assert(0);
@@ -391,7 +400,7 @@ const char* GetLocalTimeStr()
    uint32 TimeData[7] = {0};
    if(ERROR_OK != GetDateTime(TimeData, 1))//RTC
    {
-      printf("GetLocalTimeStr()----Can't read time from RTC\n");
+      DEBUG("GetLocalTimeStr()----Can't read time from RTC\n");
       return false;
    }
    sprintf(DateTimeStr, "%04d-%02d-%02d %02d:%02d:%02d", TimeData[0], TimeData[1], TimeData[2], TimeData[3], TimeData[4], TimeData[5]);
@@ -403,7 +412,7 @@ bool GetLocalTimeStamp(uint32& UTCTime)
    uint32 TimeData[DATETIME_LEN] = {0};
    if(ERROR_OK != GetDateTime(TimeData, 1))//RTC
    {
-      printf("GetLocalTimeStamp()----Can't read time from RTC\n");
+      DEBUG("GetLocalTimeStamp()----Can't read time from RTC\n");
       return false;
    }
    tm tm_CurrentTime;
@@ -416,7 +425,7 @@ bool GetLocalTimeStamp(uint32& UTCTime)
    uint32 CurrentTime = mktime(&tm_CurrentTime);
    if(-1 == CurrentTime)
    {
-      printf("GetLocalTimeStamp()--NOT invalid calender-year can't be over 1900+137--%04d-%02d-%02d %02d:%02d:%02d\n", TimeData[0], TimeData[1], TimeData[2], TimeData[3], TimeData[4], TimeData[5]);
+      DEBUG("GetLocalTimeStamp()--NOT invalid calender-year can't be over 1900+137--%04d-%02d-%02d %02d:%02d:%02d\n", TimeData[0], TimeData[1], TimeData[2], TimeData[3], TimeData[4], TimeData[5]);
       return false;
    }
    UTCTime = CurrentTime;

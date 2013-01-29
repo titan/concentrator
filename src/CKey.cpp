@@ -8,6 +8,13 @@
 #include"CKey.h"
 #include"CScreen.h"
 #define KEY_NAME	"/dev/KBD0"
+
+#ifdef DEBUG_KEY
+#define DEBUG printf
+#else
+#define DEBUG(...)
+#endif
+
 CKey* CKey::m_Instance = NULL;
 CLock CKey::m_Lock;
 CKey* CKey::GetInstance()
@@ -35,7 +42,7 @@ uint32 CKey::Run()
 	fd = open(KEY_NAME,O_RDONLY);
 	if (fd <0)
 	{
-		printf("open device key error!\n");
+		DEBUG("open device key error!\n");
 		return 0;
 	}
 
@@ -67,36 +74,36 @@ uint32 CKey::Run()
                   {
                      case 0x28:
                         key = KEY_DOWN;
-                        printf("Key 'Down Arrow up'\n");
+                        DEBUG("Key 'Down Arrow up'\n");
                         break;
 
                      case 0x26:
                         key = KEY_UP;
-                        printf("Key 'Up Arrow up'\n");
+                        DEBUG("Key 'Up Arrow up'\n");
                         break;
 
                      case 0x25:
                         key = KEY_LEFT;
-                        printf("Key 'Left Arrow up'\n");
+                        DEBUG("Key 'Left Arrow up'\n");
                         break;
 
                      case 0x27:
                         key = KEY_RIGHT;
-                        printf("Key 'Right Arrow up'\n");
+                        DEBUG("Key 'Right Arrow up'\n");
                         break;
 
                      case 0x0D:
                         key = KEY_ENTER;
-                        printf("Key 'Enter up'\n");
+                        DEBUG("Key 'Enter up'\n");
                         break;
 
                      case 0x1B:
                         key = KEY_ESC;
-                        printf("Key 'Esc up'\n");
+                        DEBUG("Key 'Esc up'\n");
                         break;
 
                      default:
-                        printf("Key 'NULL up'\n");
+                        DEBUG("Key 'NULL up'\n");
                         break;
                   }
                   CScreen::GetInstance()->InputKey(key);

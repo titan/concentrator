@@ -1,5 +1,12 @@
 #include<stdio.h>
 #include"IThread.h"
+
+#ifdef DEBUG_THREAD
+#define DEBUG printf
+#else
+#define DEBUG(...)
+#endif
+
 /*******************************IThread*******************************************/
 void* IThread::thread_handler(void* thread)
 {
@@ -19,7 +26,7 @@ IThread::~IThread()
 
 bool IThread::Start(int32 Priority)
 {
-   printf("IThread::Start()\n");
+   DEBUG("IThread::Start()\n");
 
 	pthread_create(&m_hThread, 0, thread_handler, this);
 	if(m_hThread)
@@ -27,7 +34,7 @@ bool IThread::Start(int32 Priority)
       return true;
 	}else
    {
-      printf("IThread::Start()-----fail to create thread\n");
+      DEBUG("IThread::Start()-----fail to create thread\n");
       return false;
    }
 }

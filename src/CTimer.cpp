@@ -1,6 +1,13 @@
 #include<assert.h>
 #include"Utils.h"
 #include"CTimer.h"
+
+#ifdef DEBUG_TIMER
+#define DEBUG printf
+#else
+#define DEBUG(...)
+#endif
+
 /*********************************CTimer****************************************/
 bool CTimer::StartTimer(uint32 Interval/*second*/)
 {
@@ -81,7 +88,7 @@ bool CFixTimer::Start(uint32 TimeOffset)
    uint32 TimeData[DATETIME_LEN] = {0};
    if(ERROR_OK != GetDateTime(TimeData, 1))//RTC
    {
-      printf("CFixTimer::Start()----Can't read time from RTC\n");
+      DEBUG("CFixTimer::Start()----Can't read time from RTC\n");
       return false;
    }
 
@@ -106,7 +113,7 @@ bool CFixTimer::Start(uint32 TimeOffset)
    }
    if(0 == m_nInterval )
    {
-      printf("CFixTimer::Start()----m_nInterval=0\n");
+      DEBUG("CFixTimer::Start()----m_nInterval=0\n");
       return false;
    }
 
@@ -116,7 +123,7 @@ bool CFixTimer::Start(uint32 TimeOffset)
       TimeData[i] = 0;
    }
    TimeData[m_TimerType+1] = TimeOffset;
-   printf("CFixTimer::Start()----NextTime=%04u-%02u-%02u %02u:%02u:%02u\n", TimeData[0], TimeData[1], TimeData[2], TimeData[3], TimeData[4], TimeData[5]);
+   DEBUG("CFixTimer::Start()----NextTime=%04u-%02u-%02u %02u:%02u:%02u\n", TimeData[0], TimeData[1], TimeData[2], TimeData[3], TimeData[4], TimeData[5]);
    m_NextTime = DateTime2TimeStamp(TimeData[0], TimeData[1], TimeData[2], TimeData[3], TimeData[4], TimeData[5]);
    return true;
 }
@@ -125,7 +132,7 @@ bool CFixTimer::Done()
 {
    if(0 == m_nInterval )
    {
-      printf("CFixTimer::Done()----m_nInterval=0\n");
+      DEBUG("CFixTimer::Done()----m_nInterval=0\n");
       return false;
    }
 

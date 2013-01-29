@@ -10,6 +10,12 @@
 #include"CForwarderMonitor.h"
 #include"CPortal.h"
 
+#ifdef DEBUG_SCREEN
+#define DEBUG printf
+#else
+#define DEBUG(...)
+#endif
+
 const uint8 SCREEN_CHAR_WIDTH = 16;//16 char len
 const uint8 SCREEN_CHAR_HEIGH = 8;//8
 const uint32 MAX_HEAT_INFO_COUNT = 4;
@@ -35,7 +41,7 @@ static void PrintChar(char x, char y, const char* pChar, uint8 CharLen)
 
 static void PrintInfo(uint8* pData, uint32 DataLen)
 {
-   // printf("PrintInfo()\n");
+   DEBUG("PrintInfo()\n");
    if( (NULL == pData) || (0 == DataLen) )
    {
       return;
@@ -55,10 +61,10 @@ static void PrintInfo(uint8* pData, uint32 DataLen)
    {
       uint32 SentDataLen = DataLen;
       InfoCom.WriteBuf(pData, SentDataLen);
-      // printf("PrintInfo()----DataLen=%d, SentDataLen=%d\n", DataLen, SentDataLen);
+      DEBUG("PrintInfo()----DataLen=%d, SentDataLen=%d\n", DataLen, SentDataLen);
    }else
    {
-      // printf("PrintInfo()----%s NOT open\n", InfoComPort.c_str());
+      DEBUG("PrintInfo()----%s NOT open\n", InfoComPort.c_str());
    }
 }
 /***************************************************************************/
@@ -134,7 +140,7 @@ CScreen* CScreen::GetInstance()
 
 void CScreen::PowerOn()
 {
-   // printf("CScreen::PowerOn()\n");
+   DEBUG("CScreen::PowerOn()\n");
    //init LCD
    LcdGpin();
    Lcd_TestBuf();
@@ -146,7 +152,7 @@ void CScreen::PowerOn()
 
 void CScreen::InputKey(KeyE KeyValue)
 {
-   // printf("CScreen::InputKey(%d)\n", KeyValue);
+   DEBUG("CScreen::InputKey(%d)\n", KeyValue);
    m_ScreenLock.Lock();
    m_Timer.StartTimer( LCD_TIMEOUT );
    LcdLedOn();
@@ -203,7 +209,7 @@ void CScreen::InputKey(KeyE KeyValue)
 
 void CScreen::Draw()
 {
-   // printf("CScreen::Draw()----m_CurrentScreen=%d, m_SubScreen=%d\n", m_CurrentScreen, m_SubScreen);
+   DEBUG("CScreen::Draw()----m_CurrentScreen=%d, m_SubScreen=%d\n", m_CurrentScreen, m_SubScreen);
    m_ScreenLock.Lock();
    if( m_Timer.Done() )
    {
@@ -299,7 +305,7 @@ void CScreen::ClearScreenLineRect(ScreenLineE nLineIndex)
 
 void CScreen::DrawPowerOnInit()
 {
-   // printf("CScreen::DrawPowerOnInit()\n");
+   DEBUG("CScreen::DrawPowerOnInit()\n");
    if(false == m_IsFirstLineDrawn)
    {
       ClearScreenLineRect(SCREEN_LINE_3_1);
@@ -322,7 +328,7 @@ void CScreen::DrawPowerOnInit()
    uint32 TimeData[7] = {0};
    if(ERROR_OK != GetDateTime(TimeData, 1))//RTC
    {
-      // printf("DrawPowerOnInit()----Can't read time from RTC\n");
+      DEBUG("DrawPowerOnInit()----Can't read time from RTC\n");
       return;
    }
    char DateTimeStr[32] = {0};
@@ -332,7 +338,7 @@ void CScreen::DrawPowerOnInit()
 
 void CScreen::DrawMachineStatus()
 {
-   // printf("CScreen::DrawMachineStatus()\n");
+   DEBUG("CScreen::DrawMachineStatus()\n");
    char MaxLen = sizeof(ForwarderNameHZ)>sizeof(GeneralHeatNameHZ)?sizeof(ForwarderNameHZ):sizeof(GeneralHeatNameHZ);
    MaxLen = MaxLen>sizeof(GPRSChar)?MaxLen:sizeof(GPRSChar);
 
@@ -449,7 +455,7 @@ void CScreen::DrawMachineStatus()
    }
 
    //Line 3:GPRS
-   // printf("CScreen::DrawMachineStatus()----print GPRS\n");
+   DEBUG("CScreen::DrawMachineStatus()----print GPRS\n");
    static StatusE GPRSStatus = STATUS_CHECKING;
    if(false == m_IsThirdLineDataReady)
    {
@@ -469,14 +475,14 @@ void CScreen::DrawMachineStatus()
          {
             case STATUS_OK:
                {
-                  // printf("CScreen::DrawMachineStatus()----GPRS OK\n");
+                  DEBUG("CScreen::DrawMachineStatus()----GPRS OK\n");
                   PrintChar(2*Line_3_3_X+1/*space*/+2*MaxLen, Line_3_3_Y, OKChar, sizeof(OKChar));
                }
                break;
 
             case STATUS_CHECKING:
                {
-                  // printf("CScreen::DrawMachineStatus()----GPRS checking\n");
+                  DEBUG("CScreen::DrawMachineStatus()----GPRS checking\n");
                   PrintHZ(Line_3_3_X+1/*space*/+MaxLen, Line_3_3_Y, CheckingHZ, sizeof(CheckingHZ));
                }
                break;
@@ -490,7 +496,7 @@ void CScreen::DrawMachineStatus()
             case STATUS_ERROR:
             default:
                {
-                  // printf("CScreen::DrawMachineStatus()----GPRS error\n");
+                  DEBUG("CScreen::DrawMachineStatus()----GPRS error\n");
                   PrintChar(2*Line_3_3_X+1/*space*/+2*MaxLen, Line_3_3_Y, ErrorChar, sizeof(ErrorChar));
                }
                break;
@@ -499,7 +505,7 @@ void CScreen::DrawMachineStatus()
       }
    }else
    {
-      // printf("CScreen::DrawMachineStatus()----GPRS checking\n");
+      DEBUG("CScreen::DrawMachineStatus()----GPRS checking\n");
       if(false == m_IsThirdLineDrawn)
       {
          ClearScreenLineRect(SCREEN_LINE_3_3);
@@ -509,12 +515,12 @@ void CScreen::DrawMachineStatus()
       }
    }
 
-   // printf("CScreen::DrawMachineStatus()----End\n");
+   DEBUG("CScreen::DrawMachineStatus()----End\n");
 }
 
 void CScreen::DrawGPRSStatus()
 {
-   // printf("CScreen::DrawGPRSStatus()\n");
+   DEBUG("CScreen::DrawGPRSStatus()\n");
    static StatusE GPRSStatus = STATUS_ERROR;
    if(false == m_IsFirstLineDataReady)
    {
@@ -654,7 +660,7 @@ void CScreen::DrawGPRSStatus()
 
 void CScreen::DrawGeneralHeatINFO()
 {
-   // printf("CScreen::DrawGeneralHeatINFO()\n");
+   DEBUG("CScreen::DrawGeneralHeatINFO()\n");
    static HeatNodeInfoListT HeatNodeInfoList;
    static StatusE HeatStatus = STATUS_ERROR;
    if(false == m_IsFirstLineDataReady)
@@ -782,7 +788,7 @@ void CScreen::DrawGeneralHeatINFO()
 
 void CScreen::DrawForwarderINFO()
 {
-   // printf("CScreen::DrawForwarderINFO()\n");
+   DEBUG("CScreen::DrawForwarderINFO()\n");
    static ForwarderInfoListT ForwarderInfoList;
    if(false == m_IsFirstLineDataReady)
    {
@@ -806,11 +812,11 @@ void CScreen::DrawForwarderINFO()
                m_SubScreen = ForwarderInfoList.size()-1;
             }
 
-            // printf("CScreen::DrawForwarderINFO()----1\n");
+            DEBUG("CScreen::DrawForwarderINFO()----1\n");
             //print out this forwarder's A1ResponseStr
             PrintInfo(ForwarderInfoList[m_SubScreen].A1ResponseStr, ForwarderInfoList[m_SubScreen].A1ResponseStrLen);
 
-            // printf("CScreen::DrawForwarderINFO()----2\n");
+            DEBUG("CScreen::DrawForwarderINFO()----2\n");
             //Line 1
             PrintHZ(Line_2_1_X, Line_2_1_Y, ForwarderNameHZ, sizeof(ForwarderNameHZ));
             uint16 ForwarderID = (ForwarderInfoList[m_SubScreen].ForwarderID>>16) & 0xFFFF;

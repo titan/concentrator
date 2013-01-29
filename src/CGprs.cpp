@@ -12,6 +12,12 @@ using namespace std;
 #endif
 #include"libs_emsys_odm.h"
 
+#ifdef DEBUG_GPRS
+#define DEBUG printf
+#else
+#define DEBUG(...)
+#endif
+
 #include"Utils.h"
 const uint8 AT_MAX_RETRY = 10;
 const uint32 AT_BUFFER_MAX_LEN = 512;
@@ -163,7 +169,7 @@ bool CGprs::Connect(const char* IP, const uint32 Port)
 
    for(uint8 i = 0; i < 3; i++)
    {
-      printf("Send %s\n", ATCommandList[AT_AT]);
+      DEBUG("Send %s\n", ATCommandList[AT_AT]);
       SendLen = strlen(ATCommandList[AT_AT]);
       WriteBuf((uint8*)ATCommandList[AT_AT], SendLen, MIN_TIME_OUT);
       sleep(1);
@@ -171,126 +177,126 @@ bool CGprs::Connect(const char* IP, const uint32 Port)
    ReceiveLen = sizeof(ATResponse);
    memset(ATResponse, 0, sizeof(ATResponse));
    ReadBuf(ATResponse, ReceiveLen, MIN_TIME_OUT);
-   printf("ATResponse:%s\n", (char*)ATResponse);
+   DEBUG("ATResponse:%s\n", (char*)ATResponse);
    ATResponseStr.assign((char*)ATResponse, 0, ReceiveLen-1);
-   printf("OK Ack str=%s\n", ATCommandList[AT_OK_ACK]);
+   DEBUG("OK Ack str=%s\n", ATCommandList[AT_OK_ACK]);
    if( string::npos == ATResponseStr.find(ATCommandList[AT_OK_ACK]) )
    {
-      printf("%s Error\n", ATCommandList[AT_AT]);
+      DEBUG("%s Error\n", ATCommandList[AT_AT]);
       return false;
    }
 
    sleep(1);
-   printf("Send %s\n", ATCommandList[AT_ATE0]);
+   DEBUG("Send %s\n", ATCommandList[AT_ATE0]);
    SendLen = strlen(ATCommandList[AT_ATE0]);
    WriteBuf((uint8*)ATCommandList[AT_ATE0], SendLen, MIN_TIME_OUT);
    ReceiveLen = sizeof(ATResponse);
    memset(ATResponse, 0, sizeof(ATResponse));
    sleep(1);
    ReadBuf(ATResponse, ReceiveLen, MIN_TIME_OUT);
-   printf("ATResponse:%s\n", (char*)ATResponse);
+   DEBUG("ATResponse:%s\n", (char*)ATResponse);
    if( string::npos == ATResponseStr.find(ATCommandList[AT_OK_ACK]) )
    {
-      printf("%s Error\n", ATCommandList[AT_ATE0]);
+      DEBUG("%s Error\n", ATCommandList[AT_ATE0]);
       return false;
    }
 
    sleep(1);
-   printf("Send %s\n", ATCommandList[AT_ATE0]);
+   DEBUG("Send %s\n", ATCommandList[AT_ATE0]);
    SendLen = strlen(ATCommandList[AT_ATE0]);
    WriteBuf((uint8*)ATCommandList[AT_ATE0], SendLen, MIN_TIME_OUT);
    ReceiveLen = sizeof(ATResponse);
    memset(ATResponse, 0, sizeof(ATResponse));
    sleep(1);
    ReadBuf(ATResponse, ReceiveLen, MIN_TIME_OUT);
-   printf("ATResponse:%s\n", (char*)ATResponse);
+   DEBUG("ATResponse:%s\n", (char*)ATResponse);
    ATResponseStr.assign((char*)ATResponse, 0, ReceiveLen-1);
-   printf("OK Ack str=%s\n", ATCommandList[AT_OK_ACK]);
+   DEBUG("OK Ack str=%s\n", ATCommandList[AT_OK_ACK]);
    if( string::npos == ATResponseStr.find(ATCommandList[AT_OK_ACK]) )
    {
-      printf("%s Error\n", ATCommandList[AT_ATE0]);
+      DEBUG("%s Error\n", ATCommandList[AT_ATE0]);
       return false;
    }
 
    sleep(1);
-   printf("Send %s\n", ATCommandList[AT_CGSN]);
+   DEBUG("Send %s\n", ATCommandList[AT_CGSN]);
    SendLen = strlen(ATCommandList[AT_CGSN]);
    WriteBuf((uint8*)ATCommandList[AT_CGSN], SendLen, MIN_TIME_OUT);
    ReceiveLen = sizeof(ATResponse);
    memset(ATResponse, 0, sizeof(ATResponse));
    sleep(1);
    ReadBuf(ATResponse, ReceiveLen, MIN_TIME_OUT);
-   printf("ATResponse:%s\n", (char*)ATResponse);
+   DEBUG("ATResponse:%s\n", (char*)ATResponse);
    ATResponseStr.assign((char*)ATResponse, 0, ReceiveLen-1);
    if( string::npos == ATResponseStr.find(ATCommandList[AT_OK_ACK]) )
    {
-      printf("%s Error\n", ATCommandList[AT_CGSN]);
+      DEBUG("%s Error\n", ATCommandList[AT_CGSN]);
       return false;
    }
    memcpy(m_IMEI, ATResponse+strlen(AT_FLAG), sizeof(m_IMEI));
-   printf("m_IMEI=%s\n", (char*)m_IMEI);
+   DEBUG("m_IMEI=%s\n", (char*)m_IMEI);
 
    sleep(1);
-   printf("Send %s\n", ATCommandList[AT_CIPMODE_1]);
+   DEBUG("Send %s\n", ATCommandList[AT_CIPMODE_1]);
    SendLen = strlen(ATCommandList[AT_CIPMODE_1]);
    WriteBuf((uint8*)ATCommandList[AT_CIPMODE_1], SendLen, MIN_TIME_OUT);
    ReceiveLen = sizeof(ATResponse);
    memset(ATResponse, 0, sizeof(ATResponse));
    sleep(1);
    ReadBuf(ATResponse, ReceiveLen, MIN_TIME_OUT);
-   printf("ATResponse:%s\n", (char*)ATResponse);
+   DEBUG("ATResponse:%s\n", (char*)ATResponse);
    ATResponseStr.assign((char*)ATResponse, 0, ReceiveLen-1);
    if( string::npos == ATResponseStr.find(ATCommandList[AT_OK_ACK]) )
    {
-      printf("%s Error\n", ATCommandList[AT_CIPMODE_1]);
+      DEBUG("%s Error\n", ATCommandList[AT_CIPMODE_1]);
       return false;
    }
 
    sleep(1);
-   printf("Send %s\n", ATCommandList[AT_CIPSRIP_0]);
+   DEBUG("Send %s\n", ATCommandList[AT_CIPSRIP_0]);
    SendLen = strlen(ATCommandList[AT_CIPSRIP_0]);
    WriteBuf((uint8*)ATCommandList[AT_CIPSRIP_0], SendLen, MIN_TIME_OUT);
    ReceiveLen = sizeof(ATResponse);
    memset(ATResponse, 0, sizeof(ATResponse));
    sleep(1);
    ReadBuf(ATResponse, ReceiveLen, MIN_TIME_OUT);
-   printf("ATResponse:%s\n", (char*)ATResponse);
+   DEBUG("ATResponse:%s\n", (char*)ATResponse);
    ATResponseStr.assign((char*)ATResponse, 0, ReceiveLen-1);
    if( string::npos == ATResponseStr.find(ATCommandList[AT_OK_ACK]) )
    {
-      printf("%s Error\n", ATCommandList[AT_CIPSRIP_0]);
+      DEBUG("%s Error\n", ATCommandList[AT_CIPSRIP_0]);
       return false;
    }
 
    sleep(1);
-   printf("Send %s\n", ATCommandList[AT_CIPHEAD_1]);
+   DEBUG("Send %s\n", ATCommandList[AT_CIPHEAD_1]);
    SendLen = strlen(ATCommandList[AT_CIPHEAD_1]);
    WriteBuf((uint8*)ATCommandList[AT_CIPHEAD_1], SendLen, MIN_TIME_OUT);
    ReceiveLen = sizeof(ATResponse);
    memset(ATResponse, 0, sizeof(ATResponse));
    sleep(1);
    ReadBuf(ATResponse, ReceiveLen, MIN_TIME_OUT);
-   printf("ATResponse:%s\n", (char*)ATResponse);
+   DEBUG("ATResponse:%s\n", (char*)ATResponse);
    ATResponseStr.assign((char*)ATResponse, 0, ReceiveLen-1);
    if( string::npos == ATResponseStr.find(ATCommandList[AT_OK_ACK]) )
    {
-      printf("%s Error\n", ATCommandList[AT_CIPHEAD_1]);
+      DEBUG("%s Error\n", ATCommandList[AT_CIPHEAD_1]);
       return false;
    }
 
    sleep(1);
-   printf("Send %s\n", ATCommandList[AT_CIPSPRT_2]);
+   DEBUG("Send %s\n", ATCommandList[AT_CIPSPRT_2]);
    SendLen = strlen(ATCommandList[AT_CIPSPRT_2]);
    WriteBuf((uint8*)ATCommandList[AT_CIPSPRT_2], SendLen, MIN_TIME_OUT);
    ReceiveLen = sizeof(ATResponse);
    memset(ATResponse, 0, sizeof(ATResponse));
    sleep(1);
    ReadBuf(ATResponse, ReceiveLen, MIN_TIME_OUT);
-   printf("ATResponse:%s\n", (char*)ATResponse);
+   DEBUG("ATResponse:%s\n", (char*)ATResponse);
    ATResponseStr.assign((char*)ATResponse, 0, ReceiveLen-1);
    if( string::npos == ATResponseStr.find(ATCommandList[AT_OK_ACK]) )
    {
-      printf("%s Error\n", ATCommandList[AT_CIPSPRT_2]);
+      DEBUG("%s Error\n", ATCommandList[AT_CIPSPRT_2]);
       return false;
    }
 
@@ -298,14 +304,14 @@ bool CGprs::Connect(const char* IP, const uint32 Port)
    for(; i < AT_MAX_RETRY; i++)
    {
       sleep(1);
-      printf("Send %s\n", ATCommandList[AT_CREG_QUERY]);
+      DEBUG("Send %s\n", ATCommandList[AT_CREG_QUERY]);
       SendLen = strlen(ATCommandList[AT_CREG_QUERY]);
       WriteBuf((uint8*)ATCommandList[AT_CREG_QUERY], SendLen, MIN_TIME_OUT);
       ReceiveLen = sizeof(ATResponse);
       memset(ATResponse, 0, sizeof(ATResponse));
       sleep(1);
       ReadBuf(ATResponse, ReceiveLen, MIN_TIME_OUT);
-      printf("ATResponse:%s\n", (char*)ATResponse);
+      DEBUG("ATResponse:%s\n", (char*)ATResponse);
       char* pComma = strchr((char*)ATResponse, AT_COMMA);
       if(NULL == pComma)
       {
@@ -318,23 +324,23 @@ bool CGprs::Connect(const char* IP, const uint32 Port)
    }
    if(i >= AT_MAX_RETRY)
    {
-      printf("%s Error\n", ATCommandList[AT_CREG_QUERY]);
+      DEBUG("%s Error\n", ATCommandList[AT_CREG_QUERY]);
       return false;
    }
 
    sleep(1);
-   printf("Send %s\n", ATCommandList[AT_CIPCSGP_UNINET]);
+   DEBUG("Send %s\n", ATCommandList[AT_CIPCSGP_UNINET]);
    SendLen = strlen(ATCommandList[AT_CIPCSGP_UNINET]);
    WriteBuf((uint8*)ATCommandList[AT_CIPCSGP_UNINET], SendLen, MIN_TIME_OUT);
    ReceiveLen = sizeof(ATResponse);
    memset(ATResponse, 0, sizeof(ATResponse));
    sleep(1);
    ReadBuf(ATResponse, ReceiveLen, MIN_TIME_OUT);
-   printf("ATResponse:%s\n", (char*)ATResponse);
+   DEBUG("ATResponse:%s\n", (char*)ATResponse);
    ATResponseStr.assign((char*)ATResponse, 0, ReceiveLen-1);
    if( string::npos == ATResponseStr.find(ATCommandList[AT_OK_ACK]) )
    {
-      printf("%s Error\n", ATCommandList[AT_CIPCSGP_UNINET]);
+      DEBUG("%s Error\n", ATCommandList[AT_CIPCSGP_UNINET]);
       return false;
    }
 
@@ -343,18 +349,18 @@ bool CGprs::Connect(const char* IP, const uint32 Port)
    {
       sleep(1);
       sprintf((char*)SendBuffer, ATCommandList[AT_CLPORT_SET], m_SrcPort);
-      printf("Send %s\n", SendBuffer);
+      DEBUG("Send %s\n", SendBuffer);
       SendLen = strlen(SendBuffer);
       WriteBuf((uint8*)SendBuffer, SendLen, MIN_TIME_OUT);
       ReceiveLen = sizeof(ATResponse);
       memset(ATResponse, 0, sizeof(ATResponse));
       sleep(1);
       ReadBuf(ATResponse, ReceiveLen, MIN_TIME_OUT);
-      printf("ATResponse:%s\n", (char*)ATResponse);
+      DEBUG("ATResponse:%s\n", (char*)ATResponse);
       ATResponseStr.assign((char*)ATResponse, 0, ReceiveLen-1);
       if( string::npos == ATResponseStr.find(ATCommandList[AT_OK_ACK]) )
       {
-         printf("%s Error\n", SendBuffer);
+         DEBUG("%s Error\n", SendBuffer);
          return false;
       }
    }
@@ -365,23 +371,23 @@ bool CGprs::Connect(const char* IP, const uint32 Port)
       //close GPRS
       SendLen = strlen(ATCommandList[AT_CIPCLOSE]);
       strcpy(SendBuffer, ATCommandList[AT_CIPCLOSE]);
-      printf("Send %s\n", (char*)SendBuffer);
+      DEBUG("Send %s\n", (char*)SendBuffer);
       WriteBuf((uint8*)SendBuffer, SendLen, MAX_TIME_OUT);
       sleep(1);
       ReceiveLen = sizeof(ATResponse);
       memset(ATResponse, 0, sizeof(ATResponse));
       ReadBuf(ATResponse, ReceiveLen, MAX_TIME_OUT);
-      printf("ATResponse:%s\n", (char*)ATResponse);
+      DEBUG("ATResponse:%s\n", (char*)ATResponse);
       //get GPRS status
       SendLen = strlen(ATCommandList[AT_CIPSTATUS]);
       strcpy(SendBuffer, ATCommandList[AT_CIPSTATUS]);
-      printf("Send %s\n", (char*)SendBuffer);
+      DEBUG("Send %s\n", (char*)SendBuffer);
       WriteBuf((uint8*)SendBuffer, SendLen, MAX_TIME_OUT);
       sleep(1);
       ReceiveLen = sizeof(ATResponse);
       memset(ATResponse, 0, sizeof(ATResponse));
       ReadBuf(ATResponse, ReceiveLen, MAX_TIME_OUT);
-      printf("ATResponse:%s\n", (char*)ATResponse);
+      DEBUG("ATResponse:%s\n", (char*)ATResponse);
       ATResponseStr.assign((char*)ATResponse, 0, ReceiveLen-1);
       if( (string::npos ==ATResponseStr.find("INITIAL"))
           && (string::npos ==ATResponseStr.find("STATUS"))
@@ -389,21 +395,21 @@ bool CGprs::Connect(const char* IP, const uint32 Port)
       {
          SendLen = strlen(ATCommandList[AT_CIPSHUT]);
          strcpy(SendBuffer, ATCommandList[AT_CIPSHUT]);
-         printf("Send %s\n", (char*)SendBuffer);
+         DEBUG("Send %s\n", (char*)SendBuffer);
          WriteBuf((uint8*)SendBuffer, SendLen, MAX_TIME_OUT);
          sleep(3);
          ReceiveLen = sizeof(ATResponse);
          memset(ATResponse, 0, sizeof(ATResponse));
          ReadBuf(ATResponse, ReceiveLen, MAX_TIME_OUT);
-         printf("ATResponse:%s\n", (char*)ATResponse);
+         DEBUG("ATResponse:%s\n", (char*)ATResponse);
          ATResponseStr.assign((char*)ATResponse, 0, ReceiveLen-1);
          if(string::npos == ATResponseStr.find( ATCommandList[AT_OK_ACK] ))
          {
-            printf("CGprs::Connect()---GPRS Status wrong\n");
+            DEBUG("CGprs::Connect()---GPRS Status wrong\n");
             return false;
          }else
          {
-            printf("CGprs::Connect()---shut down GPRS, wait 60 seconds\n");
+            DEBUG("CGprs::Connect()---shut down GPRS, wait 60 seconds\n");
             sleep(60);
             continue;
          }
@@ -416,7 +422,7 @@ bool CGprs::Connect(const char* IP, const uint32 Port)
       {
          memset(SendBuffer, 0, sizeof(SendBuffer));
          sprintf(SendBuffer, "%s,\"%s\",\"%d\"\r\n", ATCommandList[AT_CIPSTART], m_DestIP, m_DestPort);
-         printf("Send %s\n", (char*)SendBuffer);
+         DEBUG("Send %s\n", (char*)SendBuffer);
 
          SendLen = strlen((char*)SendBuffer);
          WriteBuf((uint8*)SendBuffer, SendLen, MAX_TIME_OUT);
@@ -425,7 +431,7 @@ bool CGprs::Connect(const char* IP, const uint32 Port)
          sleep(1);
 
          ReadBuf(ATResponse, ReceiveLen, MAX_TIME_OUT);
-         printf("ATResponse:%s\n", (char*)ATResponse);
+         DEBUG("ATResponse:%s\n", (char*)ATResponse);
          ATResponseStr.assign((char*)ATResponse, 0, ReceiveLen-1);
          if( string::npos !=ATResponseStr.find("ALREADY CONNECT")  )
          {
@@ -439,7 +445,7 @@ bool CGprs::Connect(const char* IP, const uint32 Port)
 
          if(string::npos !=ATResponseStr.find("CONNECT") )
          {
-            printf("CGprs::Connect()----Connect OK\n");
+            DEBUG("CGprs::Connect()----Connect OK\n");
             Ret = true;
             break;
          }
@@ -464,7 +470,7 @@ bool CGprs::Connect(const char* IP, const uint32 Port)
    }
    if(i >= AT_MAX_RETRY)
    {
-      printf("CGprs::Connect()----Error\n");
+      DEBUG("CGprs::Connect()----Error\n");
       return false;
    }
 
@@ -531,7 +537,7 @@ ECommError CGprs::SendData(uint8* pBuffer, uint32& BufferLen, int32 TimeOut)
 {
    if(false == m_IsConnected)
    {
-      printf("CGprs::SendData()-----Disconnected\n");
+      DEBUG("CGprs::SendData()-----Disconnected\n");
       return COMM_FAIL;
    }
    return WriteBuf(pBuffer, BufferLen, TimeOut);
@@ -539,7 +545,7 @@ ECommError CGprs::SendData(uint8* pBuffer, uint32& BufferLen, int32 TimeOut)
 
 ECommError CGprs::SendData(uint8* pBuffer, uint32& BufferLen, int32 SendTimeOut, uint8* pAckBuffer, uint32& AckBufferLen, int32 RecTimeOut)
 {
-   printf("CGprs::SendData()----SendData\n");
+   DEBUG("CGprs::SendData()----SendData\n");
    PrintData(pBuffer, BufferLen);
    ECommError Ret = SendData(pBuffer, BufferLen, SendTimeOut);
    if(COMM_OK != Ret)
@@ -547,7 +553,7 @@ ECommError CGprs::SendData(uint8* pBuffer, uint32& BufferLen, int32 SendTimeOut,
       return Ret;
    }
 
-   printf("CGprs::SendData()----ReceData\n");
+   DEBUG("CGprs::SendData()----ReceData\n");
    Ret = ReceiveData(pAckBuffer, AckBufferLen, RecTimeOut);
    PrintData(pAckBuffer, AckBufferLen);
    if(COMM_OK != Ret)
@@ -560,29 +566,29 @@ ECommError CGprs::SendData(uint8* pBuffer, uint32& BufferLen, int32 SendTimeOut,
 
 ECommError CGprs::ReceiveData(uint8* pBuffer, uint32& BufferLen, int32 TimeOut)
 {
-   printf("CGprs::ReceiveData()----BufferLen=%d\n", BufferLen);
+   DEBUG("CGprs::ReceiveData()----BufferLen=%d\n", BufferLen);
    if(false == m_IsConnected)
    {
-      printf("CGprs::ReceiveData()-----Disconnected\n");
+      DEBUG("CGprs::ReceiveData()-----Disconnected\n");
       return COMM_FAIL;
    }
    ECommError Ret = ReadBuf(pBuffer, BufferLen, TimeOut);
-   printf("CGprs::ReceiveData()----BufferLen=%d, Ret=%d\n", BufferLen, Ret);
+   DEBUG("CGprs::ReceiveData()----BufferLen=%d, Ret=%d\n", BufferLen, Ret);
    return Ret;
 }
 
 ECommError CGprs::ReceiveData(uint8* pBuffer, uint32& BufferLen, const uint8* pBeginFlag, uint32 BeginFlagLen, uint32 BufferLenPos, int32 TimeOut)
 {
-   printf("CGprs::ReceiveData()\n");
+   DEBUG("CGprs::ReceiveData()\n");
    if(false == m_IsConnected)
    {
-      printf("CGprs::ReceiveData()----NOT connect\n");
+      DEBUG("CGprs::ReceiveData()----NOT connect\n");
       return COMM_FAIL;
    }
 
    if( (NULL==pBuffer) && (BufferLen<BufferLenPos + GPRS_PACKET_LEN_LEN) )
    {
-      printf("CGprs::ReceiveData()----parameter error\n");
+      DEBUG("CGprs::ReceiveData()----parameter error\n");
       return COMM_FAIL;
    }
    //flush read Buffer
@@ -608,7 +614,7 @@ ECommError CGprs::ReceiveData(uint8* pBuffer, uint32& BufferLen, const uint8* pB
       }
 
       ECommError Ret = ReadBuf(ReadBuffer+nTotalReadBytes, nReadBytes, TimeOut);
-      printf("CGprs::ReceiveData()--Retry %d-Result = %d, readbytes=%d-nTotalReadBytes=%d\n", i, Ret, nReadBytes, nTotalReadBytes);
+      DEBUG("CGprs::ReceiveData()--Retry %d-Result = %d, readbytes=%d-nTotalReadBytes=%d\n", i, Ret, nReadBytes, nTotalReadBytes);
       if(COMM_OK != Ret)
       {
          return Ret;
@@ -636,7 +642,7 @@ ECommError CGprs::ReceiveData(uint8* pBuffer, uint32& BufferLen, const uint8* pB
             continue;
          }
          BeginFlagIndex = Index;
-         printf("CGprs::ReadBuffer()---Find BeginFlag  BeginFlagIndex=%d\n", BeginFlagIndex);
+         DEBUG("CGprs::ReadBuffer()---Find BeginFlag  BeginFlagIndex=%d\n", BeginFlagIndex);
       }
       //get the packet len
       if( (-1 != BeginFlagIndex) && (false == IsBufferLenFound ) )
@@ -645,7 +651,7 @@ ECommError CGprs::ReceiveData(uint8* pBuffer, uint32& BufferLen, const uint8* pB
          PacketLen += 4;//the packet data should add CRC and header data
          if( (PacketLen<(BufferLenPos+GPRS_PACKET_LEN_LEN)) && (PacketLen>MAX_GPRS_PACKET_LEN) )
          {
-            printf("CGprs::ReceiveData()----PacketLen=%u should be in [%u,%u]\n", PacketLen, (BufferLenPos+GPRS_PACKET_LEN_LEN), MAX_GPRS_PACKET_LEN);
+            DEBUG("CGprs::ReceiveData()----PacketLen=%u should be in [%u,%u]\n", PacketLen, (BufferLenPos+GPRS_PACKET_LEN_LEN), MAX_GPRS_PACKET_LEN);
             return COMM_FAIL;
          }
          IsBufferLenFound = true;
@@ -654,15 +660,15 @@ ECommError CGprs::ReceiveData(uint8* pBuffer, uint32& BufferLen, const uint8* pB
    }
    if((i >= MAX_WRITEREAD_COUNT) || (PacketLen != nTotalReadBytes))
    {
-      printf("CGprs::ReceiveData()---PacketLen(%u):nTotalReadBytes(%d) Can't read valid data\n", PacketLen, nTotalReadBytes);
+      DEBUG("CGprs::ReceiveData()---PacketLen(%u):nTotalReadBytes(%d) Can't read valid data\n", PacketLen, nTotalReadBytes);
       return COMM_NODATA;
    }
-   printf("CGprs::ReceiveData()---PacketLen=%u, nTotalReadBytes=%d\n", PacketLen, nTotalReadBytes);
+   DEBUG("CGprs::ReceiveData()---PacketLen=%u, nTotalReadBytes=%d\n", PacketLen, nTotalReadBytes);
 
    //copy buffer
    if( PacketLen > BufferLen )
    {
-      printf("CGprs::ReceiveData()---Buffer NOT enough, %d bytes needed, memory size=%d\n", PacketLen, BufferLen);
+      DEBUG("CGprs::ReceiveData()---Buffer NOT enough, %d bytes needed, memory size=%d\n", PacketLen, BufferLen);
       return COMM_MEMORY_NOT_ENOUGH;
    }
    memcpy(pBuffer, ReadBuffer+BeginFlagIndex, PacketLen);
@@ -676,53 +682,53 @@ bool CGprs::GetSignalIntesity(uint8& nSignalIntesity)
    if(false == m_IsConnected)
    {
       nSignalIntesity = 0;
-      printf("CGprs::GetSignalIntesity()----NOT connect\n");
+      DEBUG("CGprs::GetSignalIntesity()----NOT connect\n");
       return true;
    }
 
    uint32 SendLen = strlen(ATCommandList[AT_EXIT_TRANSFER_DATA_MODE]);
    uint8 ATResponse[AT_BUFFER_MAX_LEN] = {0};
    uint32 ReceiveLen = sizeof(ATResponse);
-   printf("CGprs::GetSignalIntesity()----Send:%s\n", ATCommandList[AT_EXIT_TRANSFER_DATA_MODE]);
+   DEBUG("CGprs::GetSignalIntesity()----Send:%s\n", ATCommandList[AT_EXIT_TRANSFER_DATA_MODE]);
    WriteBuf((uint8*)ATCommandList[AT_EXIT_TRANSFER_DATA_MODE], SendLen, MIN_TIME_OUT);
    sleep(1);
    // ReadBuf(ATResponse, ReceiveLen, MIN_TIME_OUT);
-   // printf("CGprs::GetSignalIntesity()----Receive:%s\n", ATResponse);
+   // DEBUG("CGprs::GetSignalIntesity()----Receive:%s\n", ATResponse);
    // string ATStr((char*)ATResponse, ReceiveLen);
-   // printf("CGprs::GetSignalIntesity()----AT_OK_ACK:%s\n", ATCommandList[AT_OK_ACK]);
+   // DEBUG("CGprs::GetSignalIntesity()----AT_OK_ACK:%s\n", ATCommandList[AT_OK_ACK]);
    // if(string::npos ==ATStr.find(ATCommandList[AT_OK_ACK]) )
    // {
-      // printf("CGprs::GetSignalIntesity()----Exit\n");
+      // DEBUG("CGprs::GetSignalIntesity()----Exit\n");
       // return false;
    // }
    string ATStr;
    bool Ret = false;
 
    SendLen = strlen(ATCommandList[AT_CSQ_QUERY]);
-   printf("CGprs::GetSignalIntesity()----Send:%s\n", ATCommandList[AT_CSQ_QUERY]);
+   DEBUG("CGprs::GetSignalIntesity()----Send:%s\n", ATCommandList[AT_CSQ_QUERY]);
    WriteBuf((uint8*)ATCommandList[AT_CSQ_QUERY], SendLen, MIN_TIME_OUT);
    sleep(1);
    memset(ATResponse, 0, sizeof(ATResponse));
    ReceiveLen = sizeof(ATResponse);
    ReadBuf(ATResponse, ReceiveLen, MAX_TIME_OUT);
-   printf("CGprs::GetSignalIntesity()----Receive:%s\n", ATResponse);
+   DEBUG("CGprs::GetSignalIntesity()----Receive:%s\n", ATResponse);
    ATStr.assign((char*)ATResponse, ReceiveLen);
    size_t Pos = ATStr.find(ATCommandList[AT_CSQ_ACK]);
    if(string::npos !=Pos)//found
    {
       Ret = true;
-      printf("CGprs::GetSignalIntesity()----%s", (char*)ATResponse);
+      DEBUG("CGprs::GetSignalIntesity()----%s", (char*)ATResponse);
       sscanf((char*)(&ATResponse[Pos+strlen(ATCommandList[AT_CSQ_ACK])]), "%d,", &nSignalIntesity);
    }
 
    SendLen = strlen(ATCommandList[AT_ENTER_TRANSFER_DATA_MODE]);
-   printf("CGprs::GetSignalIntesity()----Send:%s\n", ATCommandList[AT_ENTER_TRANSFER_DATA_MODE]);
+   DEBUG("CGprs::GetSignalIntesity()----Send:%s\n", ATCommandList[AT_ENTER_TRANSFER_DATA_MODE]);
    WriteBuf((uint8*)ATCommandList[AT_ENTER_TRANSFER_DATA_MODE], SendLen, MIN_TIME_OUT);
    memset(ATResponse, 0, sizeof(ATResponse));
    ReceiveLen = sizeof(ATResponse);
    sleep(1);
    ReadBuf(ATResponse, ReceiveLen, MIN_TIME_OUT);
-   printf("CGprs::GetSignalIntesity()----Receive:%s\n", ATResponse);
+   DEBUG("CGprs::GetSignalIntesity()----Receive:%s\n", ATResponse);
 
    return Ret;
 }
