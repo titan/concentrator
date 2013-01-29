@@ -11,7 +11,7 @@
 #define CFG_USART_LIB 1
 #endif
 #include"libs_emsys_odm.h"
-const uint8 DATETIME_LEN = 6;
+const uint8 DATETIME_LEN = 7;
 void PrintData( const uint8* pData, const uint32 DataLen );
 void Revert(uint8* pData, uint32 DataLen);
 bool IsChar(const char CharData);

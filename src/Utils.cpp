@@ -14,8 +14,6 @@
 
 void PrintData( const uint8* pData, const uint32 DataLen )
 {
-
-#ifdef DEBUG_UTILS
    assert(pData && DataLen>0);
    if(NULL == pData || 0 >= DataLen)
    {
@@ -28,7 +26,6 @@ void PrintData( const uint8* pData, const uint32 DataLen )
       DEBUG("0x%02x,", pData[i]);
    }
    DEBUG("-->\n");
-#endif
 }
 
 void Revert(uint8* pData, uint32 DataLen)

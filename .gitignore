@@ -1,2 +1,5 @@
 *.o
 *.d
+core.*
+libEMZY_ARM_ODM.*
+concentrator
