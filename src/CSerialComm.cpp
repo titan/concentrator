@@ -138,7 +138,7 @@ ECommError CSerialComm::WriteBuf(uint8* pBuffer, uint32& BufferLen, int32 TimeOu
   {
     uint32 WritedBytes = BufferLen-TotalWritedBytes;
     int32 Ret = WriteCom(m_hComm, (char*)(pBuffer+TotalWritedBytes), &WritedBytes, TimeOut);
-    DEBUG("CSerialComm::WriteBuf()---Ret=%d, WritedBytes=%d\n", Ret, WritedBytes);
+    DEBUG("CSerialComm::WriteBuf(0x%x)---Ret=%d, WritedBytes=%d\n", m_hComm, Ret, WritedBytes);
     if( (-1 == Ret) || (WriteCount > MAX_WRITEREAD_COUNT) )
     {
       return COMM_FAIL;
@@ -151,9 +151,9 @@ ECommError CSerialComm::WriteBuf(uint8* pBuffer, uint32& BufferLen, int32 TimeOu
 
 ECommError CSerialComm::ReadBuf(uint8* pBuffer, uint32& BufferLen, int32 TimeOut)
 {
-   DEBUG("CSerialComm::ReadBuf()----BufferLen(read)=%d\n", BufferLen);
+   DEBUG("CSerialComm::ReadBuf(0x%x)----BufferLen(read)=%d\n", m_hComm, BufferLen);
    int32 Ret = ReadCom(m_hComm, (char*)pBuffer, &BufferLen, TimeOut);
-   DEBUG("CSerialComm::ReadBuf()----Ret=%d, BufferLen=%d\n", Ret, BufferLen);
+   DEBUG("CSerialComm::ReadBuf(0x%x)----Ret=%d, BufferLen=%d\n", m_hComm, Ret, BufferLen);
    if(Ret != 0)
    {
       return COMM_FAIL;
@@ -169,7 +169,7 @@ ECommError CSerialComm::ReadBuf(uint8* pBuffer, uint32& BufferLen, const uint8 B
 
 ECommError CSerialComm::ReadBuf(uint8* pBuffer, uint32& BufferLen, const uint8* pBeginFlag, uint32 BeginFlagLen, const uint8* pEndFlag, uint32 EndFlagLen, int32 TimeOut)
 {
-   DEBUG("CSerialComm::ReadBuf()\n");
+   DEBUG("CSerialComm::ReadBuf(0x%x)\n", m_hComm);
    //flush read Buffer
    tcflush(m_hComm,TCIFLUSH);
    //find the begin flag
@@ -183,7 +183,7 @@ ECommError CSerialComm::ReadBuf(uint8* pBuffer, uint32& BufferLen, const uint8* 
    {
       uint32 nReadBytes = sizeof(ReadBuffer);
       ECommError Ret = ReadBuf(ReadBuffer+nTotalReadBytes, nReadBytes, TimeOut);
-      DEBUG("CSerialComm::ReadBuf()--Retry %d-Result = %d, readbytes=%d-nTotalReadBytes=%d\n", i, Ret, nReadBytes, nTotalReadBytes);
+      DEBUG("CSerialComm::ReadBuf(0x%x)--Retry %d-Result = %d, readbytes=%d-nTotalReadBytes=%d\n", m_hComm, i, Ret, nReadBytes, nTotalReadBytes);
       if(COMM_OK != Ret)
       {
          return Ret;
@@ -207,7 +207,7 @@ ECommError CSerialComm::ReadBuf(uint8* pBuffer, uint32& BufferLen, const uint8* 
          }
          BeginFlagIndex = Index;
          i = 0;//reset index becasue there should be data coming
-         DEBUG("CSerialComm::ReadBuffer()---Find BeginFlag  BeginFlagIndex=%d\n", BeginFlagIndex);
+         DEBUG("CSerialComm::ReadBuffer(0x%x)---Find BeginFlag  BeginFlagIndex=%d\n", m_hComm, BeginFlagIndex);
       }
       //find the EndFlag
       if( pEndFlag && (-1 != BeginFlagIndex) && (-1 == EndFlagIndex) && (nTotalReadBytes >= EndFlagLen) )
@@ -226,13 +226,13 @@ ECommError CSerialComm::ReadBuf(uint8* pBuffer, uint32& BufferLen, const uint8* 
             continue;
          }
          EndFlagIndex = Index;
-         DEBUG("CSerialComm::ReadBuf()---Find EndFlag  EndFlagIndex=%d\n", EndFlagIndex);
+         DEBUG("CSerialComm::ReadBuf(0x%x)---Find EndFlag  EndFlagIndex=%d\n", m_hComm, EndFlagIndex);
          break;
       }
    }
    if(i >= MAX_WRITEREAD_COUNT)
    {
-      DEBUG("CSerialComm::ReadBuf()---Can't read valid data\n");
+      DEBUG("CSerialComm::ReadBuf(0x%x)---Can't read valid data\n", m_hComm);
       return COMM_NODATA;
    }
 
@@ -240,7 +240,7 @@ ECommError CSerialComm::ReadBuf(uint8* pBuffer, uint32& BufferLen, const uint8* 
    int32 TotalReadBytesCount = EndFlagIndex-BeginFlagIndex+EndFlagLen;
    if( TotalReadBytesCount > BufferLen )
    {
-      DEBUG("CSerialComm::ReadBuf()---Buffer NOT enough, %d bytes needed, memory size=%d\n", TotalReadBytesCount, BufferLen);
+      DEBUG("CSerialComm::ReadBuf(0x%x)---Buffer NOT enough, %d bytes needed, memory size=%d\n", m_hComm, TotalReadBytesCount, BufferLen);
       return COMM_MEMORY_NOT_ENOUGH;
    }
    memcpy(pBuffer, ReadBuffer+BeginFlagIndex, TotalReadBytesCount);
@@ -251,7 +251,7 @@ ECommError CSerialComm::ReadBuf(uint8* pBuffer, uint32& BufferLen, const uint8* 
 
 ECommError CSerialComm::ReadMinByte(uint8* pBuffer, uint32& BufferLen, const uint32 MinBufferLen, const uint8* pBeginFlag, uint32 BeginFlagLen, const uint8* pEndFlag, uint32 EndFlagLen, int32 TimeOut)
 {
-   DEBUG("CSerialComm::ReadMinByte()\n");
+   DEBUG("CSerialComm::ReadMinByte(0x%x)\n", m_hComm);
    //flush read Buffer
    tcflush(m_hComm,TCIFLUSH);
    //find the begin flag
@@ -269,7 +269,7 @@ ECommError CSerialComm::ReadMinByte(uint8* pBuffer, uint32& BufferLen, const uin
       for(; j < MAX_WRITEREAD_COUNT; j++)
       {
          Ret = ReadBuf(ReadBuffer+nTotalReadBytes, nReadBytes, TimeOut);
-         DEBUG("CSerialComm::ReadMinByte()--Retry %d-read j=%d Result = %d, readbytes=%d-nTotalReadBytes=%d\n", i, j, Ret, nReadBytes, nTotalReadBytes);
+         DEBUG("CSerialComm::ReadMinByte(0x%x)--Retry %d-read j=%d Result = %d, readbytes=%d-nTotalReadBytes=%d\n", m_hComm, i, j, Ret, nReadBytes, nTotalReadBytes);
          if(COMM_OK != Ret)
          {
             return Ret;
@@ -302,7 +302,7 @@ ECommError CSerialComm::ReadMinByte(uint8* pBuffer, uint32& BufferLen, const uin
             continue;
          }
          BeginFlagIndex = Index;
-         DEBUG("CSerialComm::ReadMinByte()---Find BeginFlag  BeginFlagIndex=%d\n", BeginFlagIndex);
+         DEBUG("CSerialComm::ReadMinByte(0x%x)---Find BeginFlag  BeginFlagIndex=%d\n", m_hComm, BeginFlagIndex);
       }
       //find the EndFlag
       if( pEndFlag && (-1 != BeginFlagIndex) && (-1 == EndFlagIndex) && (nTotalReadBytes >= EndFlagLen) )
@@ -320,13 +320,13 @@ ECommError CSerialComm::ReadMinByte(uint8* pBuffer, uint32& BufferLen, const uin
             continue;
          }
          EndFlagIndex = Index;
-         DEBUG("CSerialComm::ReadMinByte()---Find EndFlag  EndFlagIndex=%d\n", EndFlagIndex);
+         DEBUG("CSerialComm::ReadMinByte(0x%x)---Find EndFlag  EndFlagIndex=%d\n", m_hComm, EndFlagIndex);
          break;
       }
    }
    if(i >= MAX_WRITEREAD_COUNT)
    {
-      DEBUG("CSerialComm::ReadMinByte()---Can't read valid data\n");
+      DEBUG("CSerialComm::ReadMinByte(0x%x)---Can't read valid data\n", m_hComm);
       return COMM_NODATA;
    }
 
@@ -334,7 +334,7 @@ ECommError CSerialComm::ReadMinByte(uint8* pBuffer, uint32& BufferLen, const uin
    int32 TotalReadBytesCount = EndFlagIndex-BeginFlagIndex+EndFlagLen;
    if( TotalReadBytesCount > BufferLen )
    {
-      DEBUG("CSerialComm::ReadMinByte()---Buffer NOT enough, %d bytes needed, memory size=%d\n", TotalReadBytesCount, BufferLen);
+      DEBUG("CSerialComm::ReadMinByte(0x%x)---Buffer NOT enough, %d bytes needed, memory size=%d\n", m_hComm, TotalReadBytesCount, BufferLen);
       return COMM_MEMORY_NOT_ENOUGH;
    }
    memcpy(pBuffer, ReadBuffer+BeginFlagIndex, TotalReadBytesCount);

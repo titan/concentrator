@@ -19,6 +19,10 @@ using namespace std;
 #endif
 
 #include"Utils.h"
+const uint32 DATA_BUF_LEN = 10240;
+const uint32 DATA_BUF_REAL_LEN = 16384;
+const uint32 TMP_BUF_LEN = 2048;
+const uint32 TMP_BUF_REAL_LEN = 2064;
 const uint8 AT_MAX_RETRY = 10;
 const uint32 AT_BUFFER_MAX_LEN = 512;
 const uint32 MIN_TIME_OUT = 60*ONE_SECOND;
@@ -533,14 +537,105 @@ bool CGprs::GetIMEI(uint8* pIMEI, uint32& IMEILen)
    return true;
 }
 
+bool CGprs::SwitchMode(enum GPRSWorkMode to) {
+    if (this->mode == WORK_MODE_TT) {
+        if (to == WORK_MODE_HTTP) {
+
+            sleep(1);
+            if (Command("+++", RX_TIMEOUT) != COMM_OK) goto switch_to_http_err0;
+            if (Command("AT+CSQ\r\n", RX_TIMEOUT, "+CSQ:") != COMM_OK) goto switch_to_http_err1;
+            if (Command("AT+CGATT?\r\n", RX_TIMEOUT, "+CGATT:") != COMM_OK) goto switch_to_http_err1;
+            if (Command("AT+HTTPINIT\r\n") != COMM_OK) goto switch_to_http_err1;
+            if (Command("AT+SAPBR=3,1,\"CONTYPE\",\"GPRS\"\r\n") != COMM_OK) goto switch_to_http_err1;
+#ifdef CHINA_MOBILE
+            if (Command("AT+SAPBR=3,1,\"APN\",\"UNINET\"\r\n") != COMM_OK) goto switch_to_http_err1;
+#else
+            if (Command("AT+SAPBR=3,1,\"APN\",\"CMNET\"\r\n") != COMM_OK) goto switch_to_http_err1;
+#endif
+            if (Command("AT+SAPBR=1,1\r\n") != COMM_OK) goto switch_to_http_err1;
+            if (Command("AT+HTTPINIT\r\n") != COMM_OK) goto switch_to_http_err1;
+
+            this->mode = to;
+            return true;
+        }
+    switch_to_http_err1:
+        Command("ATO\r\n", RX_TIMEOUT, "CONNECT");
+    switch_to_http_err0:
+        return false;
+    } else {
+        if (to == WORK_MODE_TT) {
+            if (Command("AT+HTTPTERM\r\n") != COMM_OK) return false;
+            if (Command("ATO\r\n", RX_TIMEOUT, "CONNECT") != COMM_OK) return false;
+            this->mode = to;
+            return true;
+        } else {
+            return false;
+        }
+    }
+}
+
+
+ECommError CGprs::HttpGet(char * url, uint8 * buf, size_t * size) {
+    uint8 tmpbuf[TMP_BUF_REAL_LEN] = {0};
+    uint32 len = TMP_BUF_LEN;
+    if (false == m_IsConnected) {
+        DEBUG("CGprs::HttpGet()-----Disconnected\n");
+        return COMM_FAIL;
+    }
+    if (this->mode != WORK_MODE_HTTP) {
+        DEBUG("CGprs::HttpGet()----- it's tt mode, switch to http mode\n");
+        if (!SwitchMode(WORK_MODE_HTTP)) {
+            DEBUG("CGprs::HttpGet()-----Switch work mode fail\n");
+            return COMM_FAIL;
+        }
+    } else {
+        DEBUG("CGprs::HttpGet()----- it's http mode\n");
+    }
+
+    if (Command("AT+HTTPPARA=\"CID\",1\r\n", RX_TIMEOUT) != COMM_OK) return COMM_FAIL;
+    if (Command("AT+HTTPPARA=\"REDIR\",1\r\n", RX_TIMEOUT) != COMM_OK) return COMM_FAIL;
+    bzero(tmpbuf, TMP_BUF_REAL_LEN);
+    sprintf((char *)tmpbuf, "AT+HTTPPARA=\"URL\",\"%s\"\r\n", url);
+    if (Command((char *)tmpbuf, RX_TIMEOUT) != COMM_OK) return COMM_FAIL;
+    if (Command("AT+HTTPACTION=0\r\n", RX_TIMEOUT) != COMM_OK) return COMM_FAIL;
+
+    bzero(tmpbuf, TMP_BUF_REAL_LEN);
+    if (WaitString("+HTTPACTION:", RX_TIMEOUT, (char *)tmpbuf, len) != COMM_OK) return COMM_FAIL;
+
+    char * s = strstr((char *)tmpbuf, ",");
+    s ++;
+    char * l = strstr(s, ",");
+    * l = 0;
+    l ++;
+    if (strcmp(s, "200") != 0) {
+        return COMM_FAIL;
+    }
+    len = strtol(l, NULL, 10);
+    if ((size_t) len > * size) {
+        return COMM_FAIL;
+    }
+    * size = len;
+    bzero(tmpbuf, TMP_BUF_REAL_LEN);
+    if (Command("AT+HTTPREAD\r\n", RX_TIMEOUT, "+HTTPREAD:", (char *)tmpbuf, len) != COMM_OK) return COMM_FAIL;
+    len = strtol((char *)(tmpbuf + 10), NULL, 10);
+    if (ReadRawData(buf, len, RX_TIMEOUT) != COMM_OK) return COMM_FAIL;
+    if (WaitString("OK", RX_TIMEOUT, (char *)tmpbuf, len) != COMM_OK) return COMM_FAIL;
+    return COMM_OK;
+}
+
 ECommError CGprs::SendData(uint8* pBuffer, uint32& BufferLen, int32 TimeOut)
 {
-   if(false == m_IsConnected)
-   {
-      DEBUG("CGprs::SendData()-----Disconnected\n");
-      return COMM_FAIL;
-   }
-   return WriteBuf(pBuffer, BufferLen, TimeOut);
+    if (false == m_IsConnected) {
+       DEBUG("CGprs::SendData()-----Disconnected\n");
+       return COMM_FAIL;
+    }
+    if (this->mode != WORK_MODE_TT) {
+        if (!SwitchMode(WORK_MODE_TT)) {
+            DEBUG("CGprs::SendData()-----Switch work mode fail\n");
+            return COMM_FAIL;
+        }
+    }
+    return WriteBuf(pBuffer, BufferLen, TimeOut);
 }
 
 ECommError CGprs::SendData(uint8* pBuffer, uint32& BufferLen, int32 SendTimeOut, uint8* pAckBuffer, uint32& AckBufferLen, int32 RecTimeOut)
@@ -566,115 +661,111 @@ ECommError CGprs::SendData(uint8* pBuffer, uint32& BufferLen, int32 SendTimeOut,
 
 ECommError CGprs::ReceiveData(uint8* pBuffer, uint32& BufferLen, int32 TimeOut)
 {
-   DEBUG("CGprs::ReceiveData()----BufferLen=%d\n", BufferLen);
-   if(false == m_IsConnected)
-   {
-      DEBUG("CGprs::ReceiveData()-----Disconnected\n");
-      return COMM_FAIL;
-   }
-   ECommError Ret = ReadBuf(pBuffer, BufferLen, TimeOut);
-   DEBUG("CGprs::ReceiveData()----BufferLen=%d, Ret=%d\n", BufferLen, Ret);
-   return Ret;
+    DEBUG("CGprs::ReceiveData()----BufferLen=%d\n", BufferLen);
+    if(false == m_IsConnected) {
+       DEBUG("CGprs::ReceiveData()-----Disconnected\n");
+       return COMM_FAIL;
+    }
+    if (this->mode != WORK_MODE_TT) {
+        if (!SwitchMode(WORK_MODE_TT)) {
+            DEBUG("CGprs::ReceiveData()-----Switch work mode fail\n");
+            return COMM_FAIL;
+        }
+    }
+    ECommError Ret = ReadBuf(pBuffer, BufferLen, TimeOut);
+    DEBUG("CGprs::ReceiveData()----BufferLen=%d, Ret=%d\n", BufferLen, Ret);
+    return Ret;
 }
 
 ECommError CGprs::ReceiveData(uint8* pBuffer, uint32& BufferLen, const uint8* pBeginFlag, uint32 BeginFlagLen, uint32 BufferLenPos, int32 TimeOut)
 {
-   DEBUG("CGprs::ReceiveData()\n");
-   if(false == m_IsConnected)
-   {
-      DEBUG("CGprs::ReceiveData()----NOT connect\n");
-      return COMM_FAIL;
-   }
-
-   if( (NULL==pBuffer) && (BufferLen<BufferLenPos + GPRS_PACKET_LEN_LEN) )
-   {
-      DEBUG("CGprs::ReceiveData()----parameter error\n");
-      return COMM_FAIL;
-   }
-   //flush read Buffer
-   tcflush(m_hComm,TCIFLUSH);
-   //find the begin flag
-   uint8 ReadBuffer[MAX_GPRS_PACKET_LEN]={0};
-   int32 BeginFlagIndex = -1;
-   int32 EndFlagIndex = -1;
-
-   int32 nTotalReadBytes = 0;
-   uint8 i = 0;
-   bool IsBufferLenFound = false;
-   uint32 PacketLen = 0;
-   for(; i < MAX_WRITEREAD_COUNT; i++)
-   {
-      uint32 nReadBytes = 0;
-      if( IsBufferLenFound )
-      {
-         nReadBytes = PacketLen - nTotalReadBytes;
-      }else
-      {
-         nReadBytes = BufferLenPos + GPRS_PACKET_LEN_LEN;
-      }
-
-      ECommError Ret = ReadBuf(ReadBuffer+nTotalReadBytes, nReadBytes, TimeOut);
-      DEBUG("CGprs::ReceiveData()--Retry %d-Result = %d, readbytes=%d-nTotalReadBytes=%d\n", i, Ret, nReadBytes, nTotalReadBytes);
-      if(COMM_OK != Ret)
-      {
-         return Ret;
-      }
-      nTotalReadBytes += nReadBytes;
-
-      if( IsBufferLenFound && (nTotalReadBytes >= PacketLen) )
-      {
-         break;
-      }
-
-      //find the BeginFlag
-      if( pBeginFlag && (-1 == BeginFlagIndex) && (nTotalReadBytes >= BeginFlagLen)  )
-      {
-         int32 Index = 0;
-         for(; Index < (nTotalReadBytes-BeginFlagLen); Index++)
-         {
-            if(0 == memcmp(ReadBuffer+Index, pBeginFlag, BeginFlagLen) )
-            {
-               break;
-            }
-         }
-         if(memcmp(ReadBuffer+Index, pBeginFlag, BeginFlagLen))
-         {
-            continue;
-         }
-         BeginFlagIndex = Index;
-         DEBUG("CGprs::ReadBuffer()---Find BeginFlag  BeginFlagIndex=%d\n", BeginFlagIndex);
-      }
-      //get the packet len
-      if( (-1 != BeginFlagIndex) && (false == IsBufferLenFound ) )
-      {
-         memcpy( &PacketLen, ReadBuffer+BufferLenPos, sizeof(PacketLen) );
-         PacketLen += 4;//the packet data should add CRC and header data
-         if( (PacketLen<(BufferLenPos+GPRS_PACKET_LEN_LEN)) && (PacketLen>MAX_GPRS_PACKET_LEN) )
-         {
-            DEBUG("CGprs::ReceiveData()----PacketLen=%u should be in [%u,%u]\n", PacketLen, (BufferLenPos+GPRS_PACKET_LEN_LEN), MAX_GPRS_PACKET_LEN);
+    DEBUG("CGprs::ReceiveData()\n");
+    if(false == m_IsConnected) {
+        DEBUG("CGprs::ReceiveData()----NOT connect\n");
+        return COMM_FAIL;
+    }
+    if (this->mode != WORK_MODE_TT) {
+        if (!SwitchMode(WORK_MODE_TT)) {
+            DEBUG("CGprs::ReceiveData()-----Switch work mode fail\n");
             return COMM_FAIL;
-         }
-         IsBufferLenFound = true;
-         i = 0;//retry from the beginning
-      }
-   }
-   if((i >= MAX_WRITEREAD_COUNT) || (PacketLen != nTotalReadBytes))
-   {
-      DEBUG("CGprs::ReceiveData()---PacketLen(%u):nTotalReadBytes(%d) Can't read valid data\n", PacketLen, nTotalReadBytes);
-      return COMM_NODATA;
-   }
-   DEBUG("CGprs::ReceiveData()---PacketLen=%u, nTotalReadBytes=%d\n", PacketLen, nTotalReadBytes);
+        }
+    }
 
-   //copy buffer
-   if( PacketLen > BufferLen )
-   {
-      DEBUG("CGprs::ReceiveData()---Buffer NOT enough, %d bytes needed, memory size=%d\n", PacketLen, BufferLen);
-      return COMM_MEMORY_NOT_ENOUGH;
-   }
-   memcpy(pBuffer, ReadBuffer+BeginFlagIndex, PacketLen);
-   BufferLen = PacketLen;
+    if ((NULL==pBuffer) && (BufferLen<BufferLenPos + GPRS_PACKET_LEN_LEN)) {
+        DEBUG("CGprs::ReceiveData()----parameter error\n");
+        return COMM_FAIL;
+    }
+    //flush read Buffer
+    tcflush(m_hComm,TCIFLUSH);
+    //find the begin flag
+    uint8 ReadBuffer[MAX_GPRS_PACKET_LEN]={0};
+    int32 BeginFlagIndex = -1;
+    //int32 EndFlagIndex = -1;
 
-   return COMM_OK;
+    uint32 nTotalReadBytes = 0;
+    uint8 i = 0;
+    bool IsBufferLenFound = false;
+    uint32 PacketLen = 0;
+    for (; i < MAX_WRITEREAD_COUNT; i++) {
+        uint32 nReadBytes = 0;
+        if (IsBufferLenFound) {
+            nReadBytes = PacketLen - nTotalReadBytes;
+        } else {
+            nReadBytes = BufferLenPos + GPRS_PACKET_LEN_LEN;
+        }
+
+        ECommError Ret = ReadBuf(ReadBuffer+nTotalReadBytes, nReadBytes, TimeOut);
+        DEBUG("CGprs::ReceiveData()--Retry %d-Result = %d, readbytes=%d-nTotalReadBytes=%d\n", i, Ret, nReadBytes, nTotalReadBytes);
+        if (COMM_OK != Ret) {
+            return Ret;
+        }
+        nTotalReadBytes += nReadBytes;
+
+        if (IsBufferLenFound && (nTotalReadBytes >= PacketLen)) {
+            break;
+        }
+
+        //find the BeginFlag
+        if (pBeginFlag && (-1 == BeginFlagIndex) && (nTotalReadBytes >= BeginFlagLen)) {
+            uint32 Index = 0;
+            for (; Index < (nTotalReadBytes-BeginFlagLen); Index++) {
+                if (0 == memcmp(ReadBuffer+Index, pBeginFlag, BeginFlagLen)) {
+                    break;
+                }
+            }
+            if (memcmp(ReadBuffer+Index, pBeginFlag, BeginFlagLen)) {
+                continue;
+            }
+            BeginFlagIndex = Index;
+            DEBUG("CGprs::ReadBuffer()---Find BeginFlag  BeginFlagIndex=%d\n", BeginFlagIndex);
+        }
+        //get the packet len
+        if ((-1 != BeginFlagIndex) && (false == IsBufferLenFound )) {
+            memcpy( &PacketLen, ReadBuffer+BufferLenPos, sizeof(PacketLen) );
+            PacketLen += 4;//the packet data should add CRC and header data
+            if ((PacketLen<(BufferLenPos+GPRS_PACKET_LEN_LEN)) && (PacketLen>MAX_GPRS_PACKET_LEN)) {
+                DEBUG("CGprs::ReceiveData()----PacketLen=%u should be in [%u,%u]\n", PacketLen, (BufferLenPos+GPRS_PACKET_LEN_LEN), MAX_GPRS_PACKET_LEN);
+                return COMM_FAIL;
+            }
+            IsBufferLenFound = true;
+            i = 0;//retry from the beginning
+        }
+    }
+    if ((i >= MAX_WRITEREAD_COUNT) || (PacketLen != nTotalReadBytes)) {
+        DEBUG("CGprs::ReceiveData()---PacketLen(%u):nTotalReadBytes(%d) Can't read valid data\n", PacketLen, nTotalReadBytes);
+        return COMM_NODATA;
+    }
+    DEBUG("CGprs::ReceiveData()---PacketLen=%u, nTotalReadBytes=%d\n", PacketLen, nTotalReadBytes);
+
+    //copy buffer
+    if (PacketLen > BufferLen) {
+        DEBUG("CGprs::ReceiveData()---Buffer NOT enough, %d bytes needed, memory size=%d\n", PacketLen, BufferLen);
+        return COMM_MEMORY_NOT_ENOUGH;
+    }
+    memcpy(pBuffer, ReadBuffer+BeginFlagIndex, PacketLen);
+    BufferLen = PacketLen;
+
+    return COMM_OK;
 }
 
 bool CGprs::GetSignalIntesity(uint8& nSignalIntesity)
@@ -686,12 +777,15 @@ bool CGprs::GetSignalIntesity(uint8& nSignalIntesity)
       return true;
    }
 
-   uint32 SendLen = strlen(ATCommandList[AT_EXIT_TRANSFER_DATA_MODE]);
+   uint32 SendLen = 0;
    uint8 ATResponse[AT_BUFFER_MAX_LEN] = {0};
    uint32 ReceiveLen = sizeof(ATResponse);
-   DEBUG("CGprs::GetSignalIntesity()----Send:%s\n", ATCommandList[AT_EXIT_TRANSFER_DATA_MODE]);
-   WriteBuf((uint8*)ATCommandList[AT_EXIT_TRANSFER_DATA_MODE], SendLen, MIN_TIME_OUT);
-   sleep(1);
+   if (mode == WORK_MODE_TT) {
+       SendLen = strlen(ATCommandList[AT_EXIT_TRANSFER_DATA_MODE]);
+       DEBUG("CGprs::GetSignalIntesity()----Send:%s\n", ATCommandList[AT_EXIT_TRANSFER_DATA_MODE]);
+       WriteBuf((uint8*)ATCommandList[AT_EXIT_TRANSFER_DATA_MODE], SendLen, MIN_TIME_OUT);
+       sleep(1);
+   }
    // ReadBuf(ATResponse, ReceiveLen, MIN_TIME_OUT);
    // DEBUG("CGprs::GetSignalIntesity()----Receive:%s\n", ATResponse);
    // string ATStr((char*)ATResponse, ReceiveLen);
@@ -718,7 +812,7 @@ bool CGprs::GetSignalIntesity(uint8& nSignalIntesity)
    {
       Ret = true;
       DEBUG("CGprs::GetSignalIntesity()----%s", (char*)ATResponse);
-      sscanf((char*)(&ATResponse[Pos+strlen(ATCommandList[AT_CSQ_ACK])]), "%d,", &nSignalIntesity);
+      sscanf((char*)(&ATResponse[Pos+strlen(ATCommandList[AT_CSQ_ACK])]), "%d,", (int *)&nSignalIntesity);
    }
 
    SendLen = strlen(ATCommandList[AT_ENTER_TRANSFER_DATA_MODE]);
@@ -731,4 +825,82 @@ bool CGprs::GetSignalIntesity(uint8& nSignalIntesity)
    DEBUG("CGprs::GetSignalIntesity()----Receive:%s\n", ATResponse);
 
    return Ret;
+}
+
+ECommError CGprs::Command(const char * cmd, int32 timeout, const char * reply, char * buf, uint32 & len) {
+    uint32 l = (uint32)strlen(cmd);
+    Delay(99 * 1000);   // to prevent transmission corruption
+    DEBUG("Send %s ", cmd);
+    if (COMM_OK != WriteBuf((uint8 *)cmd, l, timeout)) {
+        return COMM_FAIL;
+    }
+    return WaitString(reply, timeout, buf, len);
+}
+
+ECommError CGprs::WaitString(const char * str, int32 timeout, char * buf, uint32 & len) {
+    uint8 retry = 0;
+    uint32 idx = 0;
+    uint32 one = 1;
+
+    DEBUG("Wait for %s\n", str);
+    while (true && retry < AT_MAX_RETRY) {
+        if (COMM_OK != ReadBuf((uint8 *)(buf + idx), one, timeout)) {
+            retry ++;
+            continue;
+        }
+
+        if (buf[idx] == '\r') continue; // <cr>
+        else if (buf[idx] == '\n') { // line received
+            buf[idx] = 0;
+            len = idx;
+
+            DEBUG("ATResponse: %d bytes, %s\n", len, buf);
+
+            if (strncmp(buf, str, strlen(str)) == 0)
+                return COMM_OK;
+            else if (strncmp(buf, "ERROR", 5) == 0)
+                return COMM_FAIL;
+            idx = 0;
+            retry ++;
+        } else {
+            idx ++;
+        }
+    }
+    return COMM_FAIL;
+}
+
+ECommError CGprs::ReadRawData(uint8 * buf, uint32 len, int32 timeout) {
+    uint8 retry = 0;
+    uint32 idx = 0;
+    uint32 one = 1;
+    while (idx < len && retry < AT_MAX_RETRY) {
+        if (COMM_OK != ReadBuf(buf + idx, one, timeout)) {
+            retry ++;
+            continue;
+        }
+        idx ++;
+    }
+    if (idx == len) {
+        DEBUG("ATResponse: %d bytes\n", len);
+        for (uint32 i = 0; i < len; i ++) {
+            DEBUG("%02X ", (unsigned int)(buf[i]));
+            if (i % 8 == 7) {
+                DEBUG(" ");
+            }
+            if (i % 16 == 15) {
+                DEBUG("\n");
+            }
+        }
+        DEBUG("\n");
+        return COMM_OK;
+    } else {
+        return COMM_FAIL;
+    }
+}
+
+void CGprs::Delay(uint32 ms) {
+    struct timespec rqtp;
+    rqtp.tv_sec = 0;
+    rqtp.tv_nsec = ms * 1000 * 1000;      //1000 ns = 1 us, 1000 us = 1ms
+    nanosleep(&rqtp, NULL);
 }

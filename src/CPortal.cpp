@@ -293,6 +293,7 @@ void CPortal::SendForwarderChargeData()
 
 uint32 CPortal::Run()
 {
+    bool fetched = false;
    DEBUG("CPortal::Run()\n");
    m_GPRSLock.Lock();
    if(NULL == m_pGPRS)
@@ -319,10 +320,22 @@ uint32 CPortal::Run()
       if( IsRegistered() )
       {
          SetLight(LIGHT_GPRS, false);//turn off GPRS light
-         ReSendNotSentData();
-         HeartBeat();
+         // ReSendNotSentData();
+         // HeartBeat();
 
-         GPRS_Receive();
+         // GPRS_Receive();
+         if (!fetched) {
+             m_GPRSLock.Lock();
+             uint8 tmpbuf[16384] = {0};
+             uint32 len = 10240;
+             printf(" ============ start to http get\n");
+             if (COMM_OK == m_pGPRS->HttpGet("http://www.atzgb.com/pdf/concentrator/concentrator_000.rar", tmpbuf, &len)) {
+                 fetched = true;
+                 printf(" ================== concentrator content ====================== \n");
+                 printf("%s\n", (char *)tmpbuf);
+             }
+             m_GPRSLock.UnLock();
+         }
       }else
       {
          SetLight(LIGHT_GPRS, true);//turn on GPRS light
@@ -331,9 +344,9 @@ uint32 CPortal::Run()
          m_GPRSLock.UnLock();
       }
 
-      OnFixTimer();
-      SendForwarderChargeData();
-      SendForwarderConsumeData();
+      OnFixTimer(); // insert fixed time packet into NotSentList
+      SendForwarderChargeData(); //insert packet into NotSentList
+      SendForwarderConsumeData(); //insert packet into Notsentlist
       GetGPRSInfoTask();
 
       sleep(1);
