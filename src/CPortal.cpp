@@ -10,6 +10,8 @@
 #include<assert.h>
 #include"CPortal.h"
 #include"Utils.h"
+#include "CINI.h"
+#include <fstream>
 
 #ifdef DEBUG_PORTAL
 #define DEBUG printf
@@ -293,7 +295,6 @@ void CPortal::SendForwarderChargeData()
 
 uint32 CPortal::Run()
 {
-    bool fetched = false;
    DEBUG("CPortal::Run()\n");
    m_GPRSLock.Lock();
    if(NULL == m_pGPRS)
@@ -320,22 +321,11 @@ uint32 CPortal::Run()
       if( IsRegistered() )
       {
          SetLight(LIGHT_GPRS, false);//turn off GPRS light
-         // ReSendNotSentData();
-         // HeartBeat();
+         ReSendNotSentData();
+         HeartBeat();
 
-         // GPRS_Receive();
-         if (!fetched) {
-             m_GPRSLock.Lock();
-             uint8 tmpbuf[16384] = {0};
-             uint32 len = 10240;
-             printf(" ============ start to http get\n");
-             if (COMM_OK == m_pGPRS->HttpGet("http://www.atzgb.com/pdf/concentrator/concentrator_000.rar", tmpbuf, &len)) {
-                 fetched = true;
-                 printf(" ================== concentrator content ====================== \n");
-                 printf("%s\n", (char *)tmpbuf);
-             }
-             m_GPRSLock.UnLock();
-         }
+         GPRS_Receive();
+         CheckNewVersion();
       }else
       {
          SetLight(LIGHT_GPRS, true);//turn on GPRS light
@@ -902,6 +892,7 @@ void CPortal::ReSendNotSentData()
 
 bool CPortal::CopyLogData()
 {
+    return false;
 }
 
 void CPortal::GetGPRSInfoTask()
@@ -1103,3 +1094,116 @@ void CPortal::SendForwarderConsumeData()
    }
    m_PortalLock.UnLock();
 }
+
+#define SECKEY "CONCENTRATOR"
+#define PKGKEY "PACKAGE"
+void CPortal::CheckNewVersion() {
+    if (access("./download", F_OK) == -1) {
+        if (mkdir("./download", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == -1) {
+            DEBUG("CPortal::CheckNewVersion()---Cannot make download dir\n");
+            system("rm -f /dev/shm/concentrator_000.rar");
+            return; // error
+        }
+    }
+    uint8 tmpbuf[16384] = {0};
+    uint32 len = 10240;
+    if (access("/dev/shm/concentrator_000.rar", F_OK) == -1) {
+        m_GPRSLock.Lock();
+        DEBUG("CPortal::CheckNewVersion()---Download concentrator_000.rar\n");
+        if (COMM_OK == m_pGPRS->HttpGet("http://www.atzgb.com/pdf/concentrator/concentrator_000.rar", tmpbuf, &len)) {
+            // dos2unix
+            for (uint32 i = 0; i < len; i ++) {
+                if (tmpbuf[i] == '\r')
+                    tmpbuf[i] = '\n';
+            }
+            ofstream fout("/dev/shm/concentrator_000.rar");
+            fout.write((char *)tmpbuf, len);
+            fout.close();
+            m_GPRSLock.UnLock();
+        } else {
+            m_GPRSLock.UnLock();
+            DEBUG("CPortal::CheckNewVersion()---Download concentrator_000.rar failed.\n");
+            system("rm -f /dev/shm/concentrator_000.rar");
+            return;
+        }
+    }
+    DEBUG("CPortal::CheckNewVersion()---Parsing concentrator_000.rar\n");
+    CINI ini("/dev/shm/concentrator_000.rar");
+    string crc = ini.GetValueString(SECKEY, "CRC", "");
+    char buf[64] = {0};
+    bzero(buf, 64);
+    sprintf(buf, "%08X", CRC32File("./concentrator"));
+    if (crc.compare(string(buf)) != 0) {
+        // need to upgrade
+        int count = ini.GetValueInt(SECKEY, "PACKAGE_COUNT", 0);
+        DEBUG("CPortal::CheckNewVersion()---Download %d packages\n", count);
+        m_GPRSLock.Lock();
+        // check and download slices
+        for (int i = 1; i <= count; i ++) {
+            char key[32] = {0};
+            bzero(key, 32);
+            bzero(buf, 64);
+            sprintf(key, "concentrator_%03d.rar", i);
+            sprintf(buf, "./download/%s", key);
+            if (access(buf, F_OK) == 0) {
+                char tmp[64] = {0};
+                bzero(tmp, 64);
+                sprintf(tmp, "%08X", CRC32File(buf));
+                string blockCRC = ini.GetValueString(PKGKEY, key, "");
+                if (strcmp(tmp, blockCRC.c_str()) == 0) {
+                    continue;
+                }
+            }
+            char url[1024] = {0};
+            bzero(url, 1024);
+            sprintf(url, "http://www.atzgb.com/pdf/concentrator/%s", key);
+            if (COMM_OK != m_pGPRS->HttpGet(url, tmpbuf, &len)) {
+                // error
+                m_GPRSLock.UnLock();
+                DEBUG("CPortal::CheckNewVersion()---Download %s fail.\n", url);
+                system("rm -f /dev/shm/concentrator_000.rar");
+                return;
+            }
+            ofstream fout(buf, ios::binary);
+            fout.write((char *)tmpbuf, len);
+            fout.close();
+            DEBUG("CPortal::CheckNewVersion()---Download %s success.\n", url);
+        }
+        m_GPRSLock.UnLock();
+        // combine slices
+
+        ofstream fout("/dev/shm/concentrator", ios::binary);
+        for (int i = 1; i <= count; i ++) {
+            bzero(buf, 64);
+            sprintf(buf, "./download/concentrator_%03d.rar", i);
+            ifstream fin(buf);
+            bzero(tmpbuf, 16384);
+            do {
+                fin.read((char *)tmpbuf, 16384);
+                fout.write((char *)tmpbuf, fin.gcount());
+            } while (!fin.eof());
+            fin.close();
+        }
+        fout.close();
+
+        char buf[64] = {0};
+        bzero(buf, 64);
+        sprintf(buf, "%08X", CRC32File("/dev/shm/concentrator"));
+        if (crc.compare(buf) == 0) {
+            DEBUG("CPortal::CheckNewVersion()---Upgrade success.\n");
+            // okay, upgrade it
+            system("chmod 755 /dev/shm/concentrator");
+            system("mv /dev/shm/concentrator ./concentrator");
+            system("reboot");
+        } else {
+            DEBUG("CPortal::CheckNewVersion()---CRC is incorrect. Upgrade fail.\n");
+        }
+    } else {
+        DEBUG("CPortal::CheckNewVersion()---It's up to date!\n");
+    }
+    system("rm -f /dev/shm/concentrator_000.rar");
+    return;
+}
+
+#undef SECKEY
+#undef PKGKEY

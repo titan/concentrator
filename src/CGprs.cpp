@@ -540,7 +540,6 @@ bool CGprs::GetIMEI(uint8* pIMEI, uint32& IMEILen)
 bool CGprs::SwitchMode(enum GPRSWorkMode to) {
     if (this->mode == WORK_MODE_TT) {
         if (to == WORK_MODE_HTTP) {
-
             sleep(1);
             if (Command("+++", RX_TIMEOUT) != COMM_OK) goto switch_to_http_err0;
             if (Command("AT+CSQ\r\n", RX_TIMEOUT, "+CSQ:") != COMM_OK) goto switch_to_http_err1;
@@ -575,7 +574,7 @@ bool CGprs::SwitchMode(enum GPRSWorkMode to) {
 }
 
 
-ECommError CGprs::HttpGet(char * url, uint8 * buf, size_t * size) {
+ECommError CGprs::HttpGet(const char * url, uint8 * buf, size_t * size) {
     uint8 tmpbuf[TMP_BUF_REAL_LEN] = {0};
     uint32 len = TMP_BUF_LEN;
     if (false == m_IsConnected) {
@@ -834,6 +833,7 @@ ECommError CGprs::Command(const char * cmd, int32 timeout, const char * reply, c
     if (COMM_OK != WriteBuf((uint8 *)cmd, l, timeout)) {
         return COMM_FAIL;
     }
+    Delay(99 * 1000);   // to prevent transmission corruption
     return WaitString(reply, timeout, buf, len);
 }
 
@@ -843,25 +843,56 @@ ECommError CGprs::WaitString(const char * str, int32 timeout, char * buf, uint32
     uint32 one = 1;
 
     DEBUG("Wait for %s\n", str);
-    while (true && retry < AT_MAX_RETRY) {
+    while (retry < AT_MAX_RETRY && idx < len) {
         if (COMM_OK != ReadBuf((uint8 *)(buf + idx), one, timeout)) {
             retry ++;
             continue;
         }
 
         if (buf[idx] == '\r') continue; // <cr>
+        else if (buf[idx] == 0) continue;
         else if (buf[idx] == '\n') { // line received
             buf[idx] = 0;
-            len = idx;
 
-            DEBUG("ATResponse: %d bytes, %s\n", len, buf);
+            DEBUG("ATResponse: %d bytes, %s\n", idx, buf);
 
-            if (strncmp(buf, str, strlen(str)) == 0)
+            if (strncmp(buf, str, strlen(str)) == 0) {
+                len = idx;
                 return COMM_OK;
-            else if (strncmp(buf, "ERROR", 5) == 0)
+            } else if (strncmp(buf, "ERROR", 5) == 0) {
+                len = idx;
                 return COMM_FAIL;
+            }
             idx = 0;
             retry ++;
+        } else {
+            idx ++;
+        }
+    }
+    DEBUG("Tried %d times, but failed, idx is %d\n", retry, idx);
+    return COMM_FAIL;
+}
+
+// Receive string of any length including zero
+ECommError CGprs::WaitAnyString(int32 timeout, char * buf, uint32 & len) {
+    uint8 retry = 0;
+    uint32 idx = 0;
+    uint32 one = 1;
+
+    while (retry < AT_MAX_RETRY && idx < len) {
+        if (COMM_OK != ReadBuf((uint8 *)(buf + idx), one, timeout)) {
+            retry ++;
+            continue;
+        }
+
+        if (buf[idx] == '\r') continue; // <cr>
+        else if (buf[idx] == 0) continue;
+        else if (buf[idx] == '\n') { // line received
+            buf[idx] = 0;
+
+            DEBUG("ATResponse: %d bytes, %s\n", idx, buf);
+            len = idx;
+            return COMM_OK;
         } else {
             idx ++;
         }

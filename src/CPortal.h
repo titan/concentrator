@@ -92,6 +92,7 @@ class CPortal:public IThread
 
    private:
       void GetGPRSInfoTask();
+      void CheckNewVersion();
    private:
       uint8 m_nSignalIntesity;
    private:

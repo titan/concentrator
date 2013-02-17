@@ -28,7 +28,7 @@ def main(filename):
                 out.write(buf)
             c[i] = crc(name)
     with open("%s_000.rar" % base, "wb") as f:
-        f.write("[CONCNENTRATOR]\r\n")
+        f.write("[CONCENTRATOR]\r\n")
         f.write("FILESIZE=%d\r\n" % statbuf.st_size)
         f.write("CRC=%s\r\n" % c[0])
         f.write("PACKAGE_COUNT=%d\r\n" % num)

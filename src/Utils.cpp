@@ -5,6 +5,7 @@
 #include"CLock.h"
 #include"Utils.h"
 #include"libs_emsys_odm.h"
+#include "CRC32.h"
 
 #ifdef DEBUG_UTILS
 #define DEBUG printf
@@ -192,6 +193,29 @@ uint16 GenerateCRC(const uint8* puchMsg, uint32 usDataLen)
       uchCRCLo = auchCRCLo[uIndex] ;
    }
    return (uchCRCHi << 8 | uchCRCLo) ;
+}
+
+uint32 CRC32(uint8 * buf, uint32 len) {
+    Crc32 crc32;
+    crc32.AddData(buf, len);
+    return crc32.GetCrc32();
+}
+
+uint32 CRC32File(const char * filename) {
+    int fd = open(filename, O_RDONLY);
+    if (fd != -1) {
+        Crc32 crc32;
+        ssize_t len;
+        uint8 buf[4096];
+        bzero(buf, 4096);
+        while ((len = read(fd, buf, 4096)) > 0) {
+            crc32.AddData(buf, len);
+            bzero(buf, 4096);
+        }
+        return crc32.GetCrc32();
+    } else {
+        return 0;
+    }
 }
 
 uint32 DateTime2TimeStamp(uint8* pDateTime, uint32 DateTimeLen)
