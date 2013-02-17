@@ -37,7 +37,11 @@ class CScreen
    public:
       static CScreen* GetInstance();
    private:
-      CScreen():m_CurrentScreen(SCREEN_POWERON), m_SubScreen(0), m_IsFirstLineDataReady(false), m_IsSecondLineDataReady(false), m_IsThirdLineDataReady(false){};
+      CScreen():m_CurrentScreen(SCREEN_POWERON), m_SubScreen(0), m_IsFirstLineDataReady(false), m_IsSecondLineDataReady(false), m_IsThirdLineDataReady(false){
+          m_IsFirstLineDrawn = false;
+          m_IsSecondLineDrawn = false;
+          m_IsThirdLineDrawn = false;
+      };
       static CScreen* m_Instance;
       static CLock m_ScreenLock;
       uint32 m_CurrentScreen;
