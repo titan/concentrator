@@ -354,7 +354,7 @@ uint32 mktime_new( tm_new * tim_p)
 {
     unsigned long tim=0;
     unsigned long days = 0;
-    unsigned long year;
+    long year;
 
     /* compute hours, minutes, seconds */
     tim += tim_p->tm_sec + (tim_p->tm_min * _SEC_IN_MINUTE) +
@@ -404,7 +404,8 @@ bool TimeStamp2TimeStr(uint32 UTCTime, uint32* pDateTime, uint32 DateTimeLen)
       return false;
    }
    UTCTime += 8*60*60;//converted to be Beijing Time
-   tm* pTmTime = gmtime((const time_t*)(&UTCTime));
+   time_t t = (const time_t)(UTCTime);
+   tm* pTmTime = gmtime(&t);
    pDateTime[0] = pTmTime->tm_year+1900;
    pDateTime[1] = pTmTime->tm_mon+1;//tm:month from 0-11, RTC:month from 1-12
    pDateTime[2] = pTmTime->tm_mday;
@@ -443,13 +444,13 @@ bool GetLocalTimeStamp(uint32& UTCTime)
    tm_CurrentTime.tm_hour = TimeData[3];
    tm_CurrentTime.tm_min = TimeData[4];
    tm_CurrentTime.tm_sec = TimeData[5];
-   uint32 CurrentTime = mktime(&tm_CurrentTime);
+   time_t CurrentTime = mktime(&tm_CurrentTime);
    if(-1 == CurrentTime)
    {
       DEBUG("GetLocalTimeStamp()--NOT invalid calender-year can't be over 1900+137--%04d-%02d-%02d %02d:%02d:%02d\n", TimeData[0], TimeData[1], TimeData[2], TimeData[3], TimeData[4], TimeData[5]);
       return false;
    }
-   UTCTime = CurrentTime;
+   UTCTime = (uint32)CurrentTime;
 
    return true;
 }

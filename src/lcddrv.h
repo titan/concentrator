@@ -31,7 +31,7 @@ GLOBAL void LcdChangDirection(void);
 GLOBAL void LcdClearBuff(void);
 GLOBAL void Lcd_test(void);
 void Lcd_TestBuf(void);
-void display_full_screen(unsigned char screen_number);
+//void display_full_screen(unsigned char screen_number);
 void display_func(unsigned char y_pos, unsigned char y_len,
 				  unsigned char x_pos, unsigned char x_len,
 				  const unsigned char * data, unsigned char disp_en);

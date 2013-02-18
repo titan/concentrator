@@ -343,7 +343,7 @@ void lcdwritechar(char codenum ,char y ,char x ,unsigned char disp_invert,
 //	 wcom(0x10|((x>>1)&0x0f));
 //	 wcom(0x00|((x<<3)&0x0f));
 		LCD_DOC_C();
-		LCD_CMD_SET_PAGE(y+1);
+		LCD_CMD_SET_PAGE((y+1));
 		LCD_CMD_SET_COLUMN(x_pos);
 		LCD_DOC_D();
 	 if(mark_L)
@@ -395,7 +395,7 @@ void lcdwritehz(char hznum ,char y ,char x , unsigned char  disp_invert)
 //	wcom(0x10|((x>>1)&0x0f));
 //	wcom(0x00|((x<<3)&0x0f));
 	LCD_DOC_C();
-	LCD_CMD_SET_PAGE(y+1);
+	LCD_CMD_SET_PAGE((y+1));
 	LCD_CMD_SET_COLUMN(x_pos);
 	LCD_DOC_D();
 	for(seg=0;seg<16;seg++)
@@ -440,7 +440,7 @@ void display_func(unsigned char y_pos, unsigned char y_len,
 					{
 						wdata(P,INVERT_OFF);
 						wdata(P,INVERT_OFF);
-						if(x>=x_len-1)
+						if(x>=(unsigned char)(x_len-1))
 						{
 							x=0;
 							y++;
@@ -477,8 +477,10 @@ void display_func(unsigned char y_pos, unsigned char y_len,
 	}
 }
 
+/*
 void display_full_screen(unsigned char screen_number)
 {
+*/
 	/* unsigned int x,y,P;	 */
 	/* unsigned int i,j; */
 	/* const unsigned char *map; */
@@ -531,7 +533,7 @@ void display_full_screen(unsigned char screen_number)
 			/* } */
 		/* } */
   /*  } */
-}
+/*}*/
 
 void LcdInit(uint8 Flag)	//初始化LCD
 {
@@ -676,7 +678,7 @@ void Lcd_test(void)
 	uint8 c='A';
 	LCD_clear();
 	LCD_DISP_Buff_All_LCD();
-	display_full_screen(1);
+	//display_full_screen(1);
 	LCD_clear();
 	for(Count=0;Count <=15;Count++)
 		lcdwritechar(c++,0,x++,0,0,0,0,0);

@@ -99,7 +99,7 @@ void CHeatMonitor::GetHeatData()
       {
          continue;
       }
-      uint8 MacAddress = HeatNodeIter->MacAddress[0]+10*HeatNodeIter->MacAddress[1];
+      //uint8 MacAddress = HeatNodeIter->MacAddress[0]+10*HeatNodeIter->MacAddress[1];
       SendData[COMMAND_HEAT_NODE_ADDRESS_INDEX] = HeatNodeIter->MacAddress[0];
       SendData[COMMAND_CHECKSUM_INDEX] = GetCheckSum(SendData+1, COMMAND_HEAT_NODE_ADDRESS_INDEX);
       PrintData(SendData, sizeof(SendData));

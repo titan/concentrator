@@ -12,7 +12,7 @@ class CTimerThread
       void StartTimer();
       void StopTimer();
       pthread_t GetThreadHandle(){return m_hThreadTimer;}
-      bool IsStarted(){return NULL != m_hThreadTimer;}
+      bool IsStarted(){return 0 != m_hThreadTimer;}
 
    private:
       pthread_t m_hThreadTimer;

@@ -182,11 +182,11 @@ class CForwarderMonitor:public IThread
   private:
     static CForwarderMonitor* m_Instance;
     CForwarderMonitor():m_ForwarderType(FORWARDER_TYPE_TEMPERATURE)
-                        , m_IsNewUserIDFound(false)
-                         , m_DayNoonTimer(DAY_TYPE)
+                        , m_DayNoonTimer(DAY_TYPE)
                         // , m_DayNoonTimer(HOUR_TYPE)//just for test
                         //, m_DayNoonTimer(MINUTE_TYPE)//just for test
-                        , m_ForwardInfoDataReady(false){}
+                        , m_ForwardInfoDataReady(false)
+                        , m_IsNewUserIDFound(false){}
     static CLock m_ForwarderLock;
     ForwarderTypeE m_ForwarderType;
 

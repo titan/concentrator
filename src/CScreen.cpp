@@ -202,6 +202,8 @@ void CScreen::InputKey(KeyE KeyValue)
             }
          }
          break;
+   default:
+       break;
    }
 
    m_ScreenLock.UnLock();
@@ -662,7 +664,7 @@ void CScreen::DrawGeneralHeatINFO()
 {
    DEBUG("CScreen::DrawGeneralHeatINFO()\n");
    static HeatNodeInfoListT HeatNodeInfoList;
-   static StatusE HeatStatus = STATUS_ERROR;
+   //static StatusE HeatStatus = STATUS_ERROR;
    if(false == m_IsFirstLineDataReady)
    {
       m_IsFirstLineDataReady = CHeatMonitor::GetInstance()->GetHeatNodeInfoList(HeatNodeInfoList);

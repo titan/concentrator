@@ -158,14 +158,14 @@ CPortal* CPortal::GetInstance()
 }
 
 
-CPortal::CPortal(): m_SerialIndex(0)
-                    // , m_FixHourTimer(MINUTE_TYPE)//just for test
-                    , m_FixHourTimer(HOUR_TYPE)
+CPortal::CPortal(): m_GetGPRSInforTaskActive(false)
+                    , m_IsGPRSInfoReady(false)
                     , m_SentLog(NULL)
+                    , m_SerialIndex(0)
                     , m_IsRegistered(false)
                     , m_pGPRS(NULL)
-                    , m_GetGPRSInforTaskActive(false)
-                    , m_IsGPRSInfoReady(false)
+                    // , m_FixHourTimer(MINUTE_TYPE)//just for test
+                    , m_FixHourTimer(HOUR_TYPE)
 {
    memset(m_IMEI, 0, sizeof(m_IMEI));
 }
@@ -269,8 +269,7 @@ void CPortal::SendForwarderChargeData()
       memcpy(SentPacketBuffer+PACKET_SUBPACKET_COUNT_POS, &NodeCount, sizeof(NodeCount));
       assert(sizeof(NodeCount) == PACKET_SUB_PACKET_COUNT_LEN);
 
-      uint32 UTCTime = 0;
-      time(((time_t*)(&UTCTime)));
+      uint32 UTCTime = (uint32)time(NULL);
       memcpy(SentPacketBuffer+Pos, &UTCTime, sizeof(UTCTime));
       Pos += sizeof(UTCTime);
 
@@ -411,8 +410,7 @@ void CPortal::SendGeneralHeatData()
       }
       memcpy(SentPacketBuffer+PACKET_SUBPACKET_COUNT_POS, &NodeCount, sizeof(NodeCount));
 
-      uint32 UTCTime = 0;
-      time(((time_t*)(&UTCTime)));
+      uint32 UTCTime = (uint32)time(NULL);
       memcpy(SentPacketBuffer+Pos, &UTCTime, sizeof(UTCTime));
       Pos += sizeof(UTCTime);
 
@@ -486,8 +484,7 @@ void CPortal::SendForwarderData()
       memcpy(SentPacketBuffer+PACKET_SUBPACKET_COUNT_POS, &NodeCount, sizeof(NodeCount));
       assert(sizeof(NodeCount) == PACKET_SUB_PACKET_COUNT_LEN);
 
-      uint32 UTCTime = 0;
-      time(((time_t*)(&UTCTime)));
+      uint32 UTCTime = (uint32)time(NULL);
       memcpy(SentPacketBuffer+Pos, &UTCTime, sizeof(UTCTime));
       Pos += sizeof(UTCTime);
 
@@ -883,7 +880,7 @@ void CPortal::ReSendNotSentData()
    uint16 PacketLen = 0;
    memcpy( &PacketLen, PacketIter->PacketData+PACKET_LEN_POS, sizeof(PacketLen) );
    PacketLen += 4;//PacketData NOT include header(2 bytes) and CRC16(2 bytes)
-   uint32 SentLen = PacketLen;
+   //uint32 SentLen = PacketLen;
    if( GPRS_Send(PacketIter->PacketData, PacketLen) )
    {
       m_NotSentPacketList.erase(PacketIter);
@@ -950,7 +947,7 @@ void CPortal::GPRS_Receive()
          PrintData(RecePacketBuffer, ReceBufferLen);
          if( 0 == memcmp( RecePacketBuffer+PACKET_IMEI_POS, m_IMEI, sizeof(m_IMEI)) )
          {
-            bool Ret = false;
+             //bool Ret = false;
 
             uint16 FunCode = 0;
             memcpy( &FunCode, RecePacketBuffer+PACKET_FUNCTION_CODE_POS, sizeof(FunCode) );
@@ -1071,8 +1068,7 @@ void CPortal::SendForwarderConsumeData()
       memcpy(SentPacketBuffer+PACKET_SUBPACKET_COUNT_POS, &NodeCount, sizeof(NodeCount));
       assert(sizeof(NodeCount) == PACKET_SUB_PACKET_COUNT_LEN);
 
-      uint32 UTCTime = 0;
-      time(((time_t*)(&UTCTime)));
+      uint32 UTCTime = (uint32)time(NULL);
       memcpy(SentPacketBuffer+Pos, &UTCTime, sizeof(UTCTime));
       Pos += sizeof(UTCTime);
 

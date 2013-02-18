@@ -281,7 +281,7 @@ void CForwarderMonitor::GetValveTemperature()
             continue;
          }
 
-         if(-1 == ValveIter->second.ValveRecord.LastTemperatureIndex)
+         if(-1 == (int32)ValveIter->second.ValveRecord.LastTemperatureIndex)
          {
             ValveIter->second.IsDataMissing = true;
             DEBUG("CForwarderMonitor::GetValveTemperature()----ForwarderID=0x%08X, ValveID=0x%04X LastTemperatureIndex=-1\n", ForwarderIter->first, ValveIter->first);
@@ -349,7 +349,7 @@ void CForwarderMonitor::DayNoonTimerTask()
             }
 
             //Get consume data
-            if(-1 != ValveIter->second.ValveRecord.LastConsumeIndex)
+            if(-1 != (int32)ValveIter->second.ValveRecord.LastConsumeIndex)
             {
                const uint32 VALVE_CTRL_GET_CONSUME_RECORD_INDEX_POS = 4;
                uint8 GetValveConsumeDataCommand[] = {VALVE_CTRL_FLAG, VALVE_CTRL_RANDAM, 0x03, VALVE_CTRL_GET_CONSUME_DATA, 0xFF, 0xFF/*a invalid index*/};
@@ -359,7 +359,7 @@ void CForwarderMonitor::DayNoonTimerTask()
             }
 
             //Get charge data
-            if(-1 != ValveIter->second.ValveRecord.LastChargeIndex)
+            if(-1 != (int32)ValveIter->second.ValveRecord.LastChargeIndex)
             {
                const uint32 VALVE_CTRL_GET_CHARGE_RECORD_INDEX_POS = 4;
                uint8 GetValveChargeDataCommand[] = {VALVE_CTRL_FLAG, VALVE_CTRL_RANDAM, 0x02, VALVE_CTRL_GET_CHARGE_DATA, 0xFF/*a invalid index*/};
@@ -760,7 +760,7 @@ bool CForwarderMonitor::ParseData(const uint8* pReceiveData, uint32 ReceiveDataL
                         Pos += PACKET_CONSUME_DATA_LENGTH;
 
                         const uint8 CONSUME_DATA_DATETIME_OFFSET = 0;
-                        const uint8 CONSUME_DATA_DATETIME_LENGTH = 4;
+                        //const uint8 CONSUME_DATA_DATETIME_LENGTH = 4;
                         uint8 DateTimeStr[7] = {0};
                         DateTimeStr[6] = pReceiveData[A3_VALVE_VALUE_POS+CONSUME_DATA_DATETIME_OFFSET];//yy
                         DateTimeStr[5] = pReceiveData[A3_VALVE_VALUE_POS+CONSUME_DATA_DATETIME_OFFSET+1];//yy

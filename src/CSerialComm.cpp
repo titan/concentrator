@@ -177,7 +177,7 @@ ECommError CSerialComm::ReadBuf(uint8* pBuffer, uint32& BufferLen, const uint8* 
    int32 BeginFlagIndex = -1;
    int32 EndFlagIndex = -1;
 
-   int32 nTotalReadBytes = 0;
+   uint32 nTotalReadBytes = 0;
    uint8 i = 0;
    for(; i < MAX_WRITEREAD_COUNT; i++)
    {
@@ -193,7 +193,7 @@ ECommError CSerialComm::ReadBuf(uint8* pBuffer, uint32& BufferLen, const uint8* 
       //find the BeginFlag
       if( pBeginFlag && (-1 == BeginFlagIndex) && (nTotalReadBytes >= BeginFlagLen)  )
       {
-         int32 Index = 0;
+         uint32 Index = 0;
          for(; Index < (nTotalReadBytes-BeginFlagLen); Index++)
          {
             if(0 == memcmp(ReadBuffer+Index, pBeginFlag, BeginFlagLen) )
@@ -212,7 +212,7 @@ ECommError CSerialComm::ReadBuf(uint8* pBuffer, uint32& BufferLen, const uint8* 
       //find the EndFlag
       if( pEndFlag && (-1 != BeginFlagIndex) && (-1 == EndFlagIndex) && (nTotalReadBytes >= EndFlagLen) )
       {
-         int32 Index = nTotalReadBytes-EndFlagLen;
+         uint32 Index = nTotalReadBytes-EndFlagLen;
          for(; Index >= BeginFlagIndex+BeginFlagLen; Index-- )
          {
             if(0 == memcmp(ReadBuffer+Index, pEndFlag, EndFlagLen) )
@@ -237,7 +237,7 @@ ECommError CSerialComm::ReadBuf(uint8* pBuffer, uint32& BufferLen, const uint8* 
    }
 
    //copy buffer
-   int32 TotalReadBytesCount = EndFlagIndex-BeginFlagIndex+EndFlagLen;
+   uint32 TotalReadBytesCount = EndFlagIndex-BeginFlagIndex+EndFlagLen;
    if( TotalReadBytesCount > BufferLen )
    {
       DEBUG("CSerialComm::ReadBuf(0x%x)---Buffer NOT enough, %d bytes needed, memory size=%d\n", m_hComm, TotalReadBytesCount, BufferLen);
@@ -259,7 +259,7 @@ ECommError CSerialComm::ReadMinByte(uint8* pBuffer, uint32& BufferLen, const uin
    int32 BeginFlagIndex = -1;
    int32 EndFlagIndex = -1;
 
-   int32 nTotalReadBytes = 0;
+   uint32 nTotalReadBytes = 0;
    uint8 i = 0;
    for(; i<MAX_WRITEREAD_COUNT; i++)
    {
@@ -289,7 +289,7 @@ ECommError CSerialComm::ReadMinByte(uint8* pBuffer, uint32& BufferLen, const uin
       //find the BeginFlag
       if( pBeginFlag && (-1 == BeginFlagIndex) && (nTotalReadBytes >= BeginFlagLen)  )
       {
-         int32 Index = 0;
+         uint32 Index = 0;
          for(; Index < (nTotalReadBytes-BeginFlagLen); Index++)
          {
             if(0 == memcmp(ReadBuffer+Index, pBeginFlag, BeginFlagLen) )
@@ -307,7 +307,7 @@ ECommError CSerialComm::ReadMinByte(uint8* pBuffer, uint32& BufferLen, const uin
       //find the EndFlag
       if( pEndFlag && (-1 != BeginFlagIndex) && (-1 == EndFlagIndex) && (nTotalReadBytes >= EndFlagLen) )
       {
-         int32 Index = nTotalReadBytes-EndFlagLen;
+         uint32 Index = nTotalReadBytes-EndFlagLen;
          for(; Index >= BeginFlagIndex+BeginFlagLen; Index-- )
          {
             if(0 == memcmp(ReadBuffer+Index, pEndFlag, EndFlagLen) )
@@ -331,7 +331,7 @@ ECommError CSerialComm::ReadMinByte(uint8* pBuffer, uint32& BufferLen, const uin
    }
 
    //copy buffer
-   int32 TotalReadBytesCount = EndFlagIndex-BeginFlagIndex+EndFlagLen;
+   uint32 TotalReadBytesCount = EndFlagIndex-BeginFlagIndex+EndFlagLen;
    if( TotalReadBytesCount > BufferLen )
    {
       DEBUG("CSerialComm::ReadMinByte(0x%x)---Buffer NOT enough, %d bytes needed, memory size=%d\n", m_hComm, TotalReadBytesCount, BufferLen);
