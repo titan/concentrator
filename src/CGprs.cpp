@@ -150,7 +150,104 @@ bool CGprs::Connect()
    return Connect(m_DestIP, m_DestPort);
 }
 
-bool CGprs::Connect(const char* IP, const uint32 Port)
+bool CGprs::Connect(const char * IP, const uint32 Port)
+{
+    if(NULL == IP)
+    {
+        return false;
+    }
+
+    if( false == IsOpen() )
+    {
+        return false;
+    }
+    strcpy(m_DestIP, IP);
+    m_DestPort = Port;
+
+    PowerOn();
+
+    uint8 atbuf[LINE_REAL_LEN] = {0};
+    uint32 len = LINE_LEN;
+    int i = 0;
+    for (i = 0; i < 3; i ++) {
+        if (Command("AT\r\n") != COMM_OK) continue;
+    }
+    for (i = 0; i < 2; i ++) {
+        if (Command("ATE0\r\n") != COMM_OK) continue;
+    }
+
+    bzero(atbuf, LINE_REAL_LEN);
+    if (Command("AT+CGSN\r\n", RX_TIMEOUT, NULL, (char *)atbuf, len) != COMM_OK) return false;
+    memcpy(m_IMEI, atbuf, strlen((char *)atbuf));
+    DEBUG("m_IMEI=%s\n", (char*)m_IMEI);
+
+    for (i = 0; i < 100; i ++) {
+        len = LINE_LEN;
+        bzero(atbuf, LINE_REAL_LEN);
+        if (Command("AT+CREG?\r\n", RX_TIMEOUT, "+CREG:", (char *)atbuf, len) != COMM_OK) continue;
+        char * stat = strchr((char *)atbuf, ',');
+        if (stat != NULL) {
+            stat ++;
+            if (stat[0] == '1' || stat[1] == '5') {
+                break;
+            }
+        } else {
+            continue;
+        }
+    }
+
+    if (i == 100) {
+        DEBUG("AT+CREG? ERROR\n");
+        return false;
+    }
+
+    len = LINE_LEN;
+    bzero(atbuf, LINE_REAL_LEN);
+    if (Command("AT+CSQ\r\n", RX_TIMEOUT, "+CSQ:", (char *)atbuf, len) != COMM_OK) return false;
+    char * sign = strchr((char *)atbuf, ':');
+    sign ++;
+    char * signend = strchr(sign, ',');
+    * signend = 0;
+    int signal = strtol(sign, NULL, 10);
+    if (signal == 99) {
+        DEBUG("No signal\n");
+        return false;
+    } else if (signal < 15) {
+        DEBUG("signal(%d) is weak\n", signal);
+        return false;
+    }
+
+    if (Command("AT+CGATT=1\r\n", NETREG_TIMEOUT) != COMM_OK) return false;
+    if (Command("AT+CGATT?\r\n", RX_TIMEOUT, "+CGATT: 1") != COMM_OK)  return false;
+    WaitString("OK", RX_TIMEOUT);
+
+    for (i = 0; i < 3; i ++) {
+        if (Command("AT+CIPSHUT\r\n", "SHUT OK") != COMM_OK) continue;
+        len = LINE_LEN;
+        bzero(atbuf, len);
+        sprintf((char *)atbuf, "AT+CIPSTART=\"UDP\",\"%s\",\"%d\"\r\n", m_DestIP, m_DestPort);
+        if (Command((char *)atbuf, RX_TIMEOUT, NULL, (char *)atbuf, len) != COMM_OK) continue;
+        if (strstr((char *)atbuf, "OK") != NULL || strstr((char *)atbuf, "ALREADY") != NULL) break;
+    }
+
+    if (i == 3) {
+        DEBUG("CGprs::Connect()----Error\n");
+        return false;
+    }
+
+    len = LINE_LEN;
+    bzero(atbuf, LINE_REAL_LEN);
+    if (Command("AT+CIPMODE=1\r\n", RX_TIMEOUT, NULL, (char *)atbuf, len) != COMM_OK) return false;
+    if (strstr((char *)atbuf, "OK") == NULL) {
+        DEBUG("CGprs::Connect()----Set TT mode error\n");
+        return false;
+    }
+    m_IsConnected = true;
+    return true;
+}
+
+/*
+bool CGprs::ConnectOld(const char* IP, const uint32 Port)
 {
    if(NULL == IP)
    {
@@ -481,6 +578,7 @@ bool CGprs::Connect(const char* IP, const uint32 Port)
    m_IsConnected = true;
    return true;
 }
+*/
 
 void CGprs::Disconnect()
 {
@@ -607,10 +705,12 @@ ECommError CGprs::HttpGet(const char * url, uint8 * buf, size_t * size) {
     * l = 0;
     l ++;
     if (strcmp(s, "200") != 0) {
+        DEBUG("CGprs::HttpGet()---- download failed, http status is %s\n", s);
         return COMM_FAIL;
     }
     len = strtol(l, NULL, 10);
     if ((size_t) len > * size) {
+        DEBUG("CGprs::HttpGet()---- download failed, data length %d > buffer length %d\n", len, * size);
         return COMM_FAIL;
     }
     * size = len;
@@ -834,24 +934,30 @@ ECommError CGprs::Command(const char * cmd, int32 timeout, const char * reply, c
         return COMM_FAIL;
     }
     Delay(99 * 1000);   // to prevent transmission corruption
-    return WaitString(reply, timeout, buf, len);
+    if (reply != NULL && strlen(reply) > 0)
+        return WaitString(reply, timeout, buf, len);
+    else
+        return WaitAnyString(timeout, buf, len);
 }
 
 ECommError CGprs::WaitString(const char * str, int32 timeout, char * buf, uint32 & len) {
-    uint8 retry = 0;
+    int32 retry = 0;
     uint32 idx = 0;
     uint32 one = 1;
 
     DEBUG("Wait for %s\n", str);
-    while (retry < AT_MAX_RETRY && idx < len) {
-        if (COMM_OK != ReadBuf((uint8 *)(buf + idx), one, timeout)) {
+    while (retry < timeout && idx < len) {
+        if (COMM_OK != ReadBuf((uint8 *)(buf + idx), one, 1)) {
             retry ++;
             continue;
         }
 
         if (buf[idx] == '\r') continue; // <cr>
-        else if (buf[idx] == 0) continue;
-        else if (buf[idx] == '\n') { // line received
+        else if (buf[idx] == 0) {
+            retry ++;
+            Delay(1);
+            continue;
+        } else if (buf[idx] == '\n') { // line received
             buf[idx] = 0;
 
             DEBUG("ATResponse: %d bytes, %s\n", idx, buf);
@@ -859,53 +965,64 @@ ECommError CGprs::WaitString(const char * str, int32 timeout, char * buf, uint32
             if (strncmp(buf, str, strlen(str)) == 0) {
                 len = idx;
                 return COMM_OK;
-            } else if (strncmp(buf, "ERROR", 5) == 0) {
+            } else if (strstr(buf, "ERROR") != NULL) {
                 len = idx;
                 return COMM_FAIL;
             }
             idx = 0;
             retry ++;
+            Delay(1);
         } else {
             idx ++;
         }
     }
-    DEBUG("Tried %d times, but failed, idx is %d\n", retry, idx);
+    DEBUG("Waiting for %s timeouted!\n", str);
     return COMM_FAIL;
 }
 
-// Receive string of any length including zero
+// Receive string of any length not including zero
 ECommError CGprs::WaitAnyString(int32 timeout, char * buf, uint32 & len) {
-    uint8 retry = 0;
+    int32 retry = 0;
     uint32 idx = 0;
     uint32 one = 1;
 
-    while (retry < AT_MAX_RETRY && idx < len) {
-        if (COMM_OK != ReadBuf((uint8 *)(buf + idx), one, timeout)) {
+    DEBUG("Wait for any string\n");
+    while (retry < timeout && idx < len) {
+        if (COMM_OK != ReadBuf((uint8 *)(buf + idx), one, 1)) {
             retry ++;
             continue;
         }
 
         if (buf[idx] == '\r') continue; // <cr>
-        else if (buf[idx] == 0) continue;
+        else if (buf[idx] == 0) {
+            retry ++;
+            Delay(1);
+            continue;
+        }
         else if (buf[idx] == '\n') { // line received
             buf[idx] = 0;
 
             DEBUG("ATResponse: %d bytes, %s\n", idx, buf);
-            len = idx;
-            return COMM_OK;
+            if (idx > 0) {
+                len = idx;
+                return COMM_OK;
+            }
+            retry ++;
+            Delay(1);
         } else {
             idx ++;
         }
     }
+    DEBUG("Waiting for any string timeouted!\n");
     return COMM_FAIL;
 }
 
 ECommError CGprs::ReadRawData(uint8 * buf, uint32 len, int32 timeout) {
-    uint8 retry = 0;
+    int32 retry = 0;
     uint32 idx = 0;
     uint32 one = 1;
-    while (idx < len && retry < AT_MAX_RETRY) {
-        if (COMM_OK != ReadBuf(buf + idx, one, timeout)) {
+    while (idx < len && retry < timeout) {
+        if (COMM_OK != ReadBuf(buf + idx, one, 1)) {
             retry ++;
             continue;
         }

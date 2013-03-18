@@ -6,10 +6,11 @@ using namespace std;
 #include"CSerialComm.h"
 
 #define LINE_LEN        54
-#define RX_TIMEOUT      60 * 1000 * 1000   // us
-#define SIM_TIMEOUT     4005 * 1000  // us
-#define NETREG_TIMEOUT  20007 * 1000 // us
-#define SMS_TIMEOUT     18000 * 1000 // us
+#define LINE_REAL_LEN   64
+#define RX_TIMEOUT      450 // ms
+#define SIM_TIMEOUT     4005 // ms
+#define NETREG_TIMEOUT  20007 // ms
+#define SMS_TIMEOUT     18000 // ms
 
 enum GPRSWorkMode {
     WORK_MODE_TT = 0, // Transparent transmission
@@ -47,8 +48,10 @@ class CGprs:public CSerialComm
      ECommError Command(const char * cmd, int32 timeout, const char * reply, char * buf, uint32 & len);
      ECommError Command(const char * cmd, int32 timeout, const char * reply) { char buf[LINE_LEN + 4]; uint32 len = LINE_LEN; bzero(buf, LINE_LEN + 4); return Command(cmd, timeout, reply, buf, len); };
      ECommError Command(const char * cmd, int32 timeout) { return Command(cmd, timeout, "OK"); }
-     ECommError Command(const char * cmd) { return Command(cmd, RX_TIMEOUT, "OK"); }
+     ECommError Command(const char * cmd, const char * reply) { return Command(cmd, RX_TIMEOUT, reply); }
+     ECommError Command(const char * cmd) { return Command(cmd, "OK"); }
      ECommError WaitString(const char * str, int32 timeout, char * buf, uint32 & len);
+     ECommError WaitString(const char * str, int32 timeout) { char buf[LINE_LEN + 4]; uint32 len = LINE_LEN; bzero(buf, LINE_LEN + 4); return WaitString(str, timeout, buf, len); };
      ECommError WaitAnyString(int32 timeout, char * buf, uint32 & len);
      ECommError ReadRawData(uint8 * buf, uint32 len, int32 timeout);
      void Delay(uint32 ms);

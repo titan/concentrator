@@ -1153,6 +1153,7 @@ void CPortal::CheckNewVersion() {
             char url[1024] = {0};
             bzero(url, 1024);
             sprintf(url, "http://www.atzgb.com/pdf/concentrator/%s", key);
+            len = 10240;
             if (COMM_OK != m_pGPRS->HttpGet(url, tmpbuf, &len)) {
                 // error
                 m_GPRSLock.UnLock();
