@@ -11,6 +11,7 @@ using namespace std;
 #define SIM_TIMEOUT     4005 // ms
 #define NETREG_TIMEOUT  20007 // ms
 #define SMS_TIMEOUT     18000 // ms
+#define HTTP_TIMEOUT    180000 // ms
 
 enum GPRSWorkMode {
     WORK_MODE_TT = 0, // Transparent transmission

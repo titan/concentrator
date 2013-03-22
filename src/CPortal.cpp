@@ -1150,6 +1150,18 @@ void CPortal::CheckNewVersion() {
                     continue;
                 }
             }
+            uint8 signalIntesity = 0;
+            if (m_pGPRS->GetSignalIntesity(signalIntesity)) {
+                if (signalIntesity < 15) {
+                    DEBUG("CPortal::CheckNewVersion()---Signal intesity is too weak, ignore %s\n", key);
+                    sleep(1);
+                    continue;
+                }
+            } else {
+                DEBUG("CPortal::CheckNewVersion()---Cannot get signal intesity, ignore %s\n", key);
+                sleep(1);
+                continue;
+            }
             char url[1024] = {0};
             bzero(url, 1024);
             sprintf(url, "http://www.atzgb.com/pdf/concentrator/%s", key);

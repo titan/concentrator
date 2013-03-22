@@ -319,12 +319,11 @@ bool CGprs::SwitchMode(enum GPRSWorkMode to) {
             if (Command("+++", RX_TIMEOUT) != COMM_OK) goto switch_to_http_err0;
             if (Command("AT+CSQ\r\n", RX_TIMEOUT, "+CSQ:") != COMM_OK) goto switch_to_http_err1;
             if (Command("AT+CGATT?\r\n", RX_TIMEOUT, "+CGATT:") != COMM_OK) goto switch_to_http_err1;
-            if (Command("AT+HTTPINIT\r\n") != COMM_OK) goto switch_to_http_err1;
             if (Command("AT+SAPBR=3,1,\"CONTYPE\",\"GPRS\"\r\n") != COMM_OK) goto switch_to_http_err1;
 #ifdef CHINA_MOBILE
-            if (Command("AT+SAPBR=3,1,\"APN\",\"UNINET\"\r\n") != COMM_OK) goto switch_to_http_err1;
-#else
             if (Command("AT+SAPBR=3,1,\"APN\",\"CMNET\"\r\n") != COMM_OK) goto switch_to_http_err1;
+#else
+            if (Command("AT+SAPBR=3,1,\"APN\",\"UNINET\"\r\n") != COMM_OK) goto switch_to_http_err1;
 #endif
             if (Command("AT+SAPBR=1,1\r\n") != COMM_OK) goto switch_to_http_err1;
             if (Command("AT+HTTPINIT\r\n") != COMM_OK) goto switch_to_http_err1;
@@ -333,7 +332,9 @@ bool CGprs::SwitchMode(enum GPRSWorkMode to) {
             return true;
         }
     switch_to_http_err1:
-        Command("ATO\r\n", RX_TIMEOUT, "CONNECT");
+        if (Command("ATO\r\n", RX_TIMEOUT, "CONNECT") != COMM_OK) {
+            m_IsConnected = false;
+        }
     switch_to_http_err0:
         return false;
     } else {
@@ -347,7 +348,6 @@ bool CGprs::SwitchMode(enum GPRSWorkMode to) {
         }
     }
 }
-
 
 ECommError CGprs::HttpGet(const char * url, uint8 * buf, size_t * size) {
     uint8 tmpbuf[TMP_BUF_REAL_LEN] = {0};
@@ -374,7 +374,8 @@ ECommError CGprs::HttpGet(const char * url, uint8 * buf, size_t * size) {
     if (Command("AT+HTTPACTION=0\r\n", RX_TIMEOUT) != COMM_OK) return COMM_FAIL;
 
     bzero(tmpbuf, TMP_BUF_REAL_LEN);
-    if (WaitString("+HTTPACTION:", RX_TIMEOUT, (char *)tmpbuf, len) != COMM_OK) return COMM_FAIL;
+    len = TMP_BUF_LEN;
+    if (WaitString("+HTTPACTION:", HTTP_TIMEOUT, (char *)tmpbuf, len) != COMM_OK) return COMM_FAIL;
 
     char * s = strstr((char *)tmpbuf, ",");
     s ++;
@@ -411,6 +412,10 @@ ECommError CGprs::SendData(uint8* pBuffer, uint32& BufferLen, int32 TimeOut)
             return COMM_FAIL;
         }
     }
+    if (false == m_IsConnected) {
+       DEBUG("CGprs::SendData()-----Disconnected\n");
+       return COMM_FAIL;
+    }
     return WriteBuf(pBuffer, BufferLen, TimeOut);
 }
 
@@ -427,10 +432,6 @@ ECommError CGprs::SendData(uint8* pBuffer, uint32& BufferLen, int32 SendTimeOut,
    DEBUG("CGprs::SendData()----ReceData\n");
    Ret = ReceiveData(pAckBuffer, AckBufferLen, RecTimeOut);
    PrintData(pAckBuffer, AckBufferLen);
-   if(COMM_OK != Ret)
-   {
-      return Ret;
-   }
 
    return Ret;
 }
@@ -438,7 +439,7 @@ ECommError CGprs::SendData(uint8* pBuffer, uint32& BufferLen, int32 SendTimeOut,
 ECommError CGprs::ReceiveData(uint8* pBuffer, uint32& BufferLen, int32 TimeOut)
 {
     DEBUG("CGprs::ReceiveData()----BufferLen=%d\n", BufferLen);
-    if(false == m_IsConnected) {
+    if (false == m_IsConnected) {
        DEBUG("CGprs::ReceiveData()-----Disconnected\n");
        return COMM_FAIL;
     }
@@ -447,6 +448,10 @@ ECommError CGprs::ReceiveData(uint8* pBuffer, uint32& BufferLen, int32 TimeOut)
             DEBUG("CGprs::ReceiveData()-----Switch work mode fail\n");
             return COMM_FAIL;
         }
+    }
+    if (false == m_IsConnected) {
+       DEBUG("CGprs::ReceiveData()-----Disconnected\n");
+       return COMM_FAIL;
     }
     ECommError Ret = ReadBuf(pBuffer, BufferLen, TimeOut);
     DEBUG("CGprs::ReceiveData()----BufferLen=%d, Ret=%d\n", BufferLen, Ret);
@@ -465,6 +470,10 @@ ECommError CGprs::ReceiveData(uint8* pBuffer, uint32& BufferLen, const uint8* pB
             DEBUG("CGprs::ReceiveData()-----Switch work mode fail\n");
             return COMM_FAIL;
         }
+    }
+    if (false == m_IsConnected) {
+        DEBUG("CGprs::ReceiveData()----NOT connect\n");
+        return COMM_FAIL;
     }
 
     if ((NULL==pBuffer) && (BufferLen<BufferLenPos + GPRS_PACKET_LEN_LEN)) {
@@ -546,61 +555,51 @@ ECommError CGprs::ReceiveData(uint8* pBuffer, uint32& BufferLen, const uint8* pB
 
 bool CGprs::GetSignalIntesity(uint8& nSignalIntesity)
 {
-   if(false == m_IsConnected)
-   {
-      nSignalIntesity = 0;
-      DEBUG("CGprs::GetSignalIntesity()----NOT connect\n");
-      return true;
-   }
+    if (false == m_IsConnected) {
+        nSignalIntesity = 0;
+        DEBUG("CGprs::GetSignalIntesity()----NOT connect\n");
+        return true;
+    }
+    uint8 atbuf[LINE_REAL_LEN] = {0};
+    uint32 len = LINE_LEN;
+    bool goBackTT = false;
 
-   uint32 SendLen = 0;
-   uint8 ATResponse[AT_BUFFER_MAX_LEN] = {0};
-   uint32 ReceiveLen = sizeof(ATResponse);
-   if (mode == WORK_MODE_TT) {
-       SendLen = strlen(ATCommandList[AT_EXIT_TRANSFER_DATA_MODE]);
-       DEBUG("CGprs::GetSignalIntesity()----Send:%s\n", ATCommandList[AT_EXIT_TRANSFER_DATA_MODE]);
-       WriteBuf((uint8*)ATCommandList[AT_EXIT_TRANSFER_DATA_MODE], SendLen, MIN_TIME_OUT);
-       sleep(1);
-   }
-   // ReadBuf(ATResponse, ReceiveLen, MIN_TIME_OUT);
-   // DEBUG("CGprs::GetSignalIntesity()----Receive:%s\n", ATResponse);
-   // string ATStr((char*)ATResponse, ReceiveLen);
-   // DEBUG("CGprs::GetSignalIntesity()----AT_OK_ACK:%s\n", ATCommandList[AT_OK_ACK]);
-   // if(string::npos ==ATStr.find(ATCommandList[AT_OK_ACK]) )
-   // {
-      // DEBUG("CGprs::GetSignalIntesity()----Exit\n");
-      // return false;
-   // }
-   string ATStr;
-   bool Ret = false;
+    if (mode == WORK_MODE_TT) {
+        sleep(1);
+        if (Command("+++", RX_TIMEOUT) != COMM_OK) {
+            DEBUG("CGprs::GetSignalIntesity()----Cannot leave TT mode\n");
+            return false;
+        }
+        goBackTT = true;
+        sleep(1);
+    }
 
-   SendLen = strlen(ATCommandList[AT_CSQ_QUERY]);
-   DEBUG("CGprs::GetSignalIntesity()----Send:%s\n", ATCommandList[AT_CSQ_QUERY]);
-   WriteBuf((uint8*)ATCommandList[AT_CSQ_QUERY], SendLen, MIN_TIME_OUT);
-   sleep(1);
-   memset(ATResponse, 0, sizeof(ATResponse));
-   ReceiveLen = sizeof(ATResponse);
-   ReadBuf(ATResponse, ReceiveLen, MAX_TIME_OUT);
-   DEBUG("CGprs::GetSignalIntesity()----Receive:%s\n", ATResponse);
-   ATStr.assign((char*)ATResponse, ReceiveLen);
-   size_t Pos = ATStr.find(ATCommandList[AT_CSQ_ACK]);
-   if(string::npos !=Pos)//found
-   {
-      Ret = true;
-      DEBUG("CGprs::GetSignalIntesity()----%s", (char*)ATResponse);
-      sscanf((char*)(&ATResponse[Pos+strlen(ATCommandList[AT_CSQ_ACK])]), "%d,", (int *)&nSignalIntesity);
-   }
+    len = LINE_LEN;
+    bzero(atbuf, LINE_REAL_LEN);
+    if (Command("AT+CSQ\r\n", RX_TIMEOUT, "+CSQ:", (char *)atbuf, len) != COMM_OK) {
+        if (goBackTT) {
+            if (Command("ATO\r\n", RX_TIMEOUT, "CONNECT") != COMM_OK) {
+                m_IsConnected = false;
+            }
+        }
+        return false;
+    }
+    char * sign = strchr((char *)atbuf, ':');
+    sign ++;
+    char * signend = strchr(sign, ',');
+    * signend = 0;
+    int signal = strtol(sign, NULL, 10);
+    nSignalIntesity = signal;
+    DEBUG("CGprs::GetSignalIntesity()----%s\n", sign);
 
-   SendLen = strlen(ATCommandList[AT_ENTER_TRANSFER_DATA_MODE]);
-   DEBUG("CGprs::GetSignalIntesity()----Send:%s\n", ATCommandList[AT_ENTER_TRANSFER_DATA_MODE]);
-   WriteBuf((uint8*)ATCommandList[AT_ENTER_TRANSFER_DATA_MODE], SendLen, MIN_TIME_OUT);
-   memset(ATResponse, 0, sizeof(ATResponse));
-   ReceiveLen = sizeof(ATResponse);
-   sleep(1);
-   ReadBuf(ATResponse, ReceiveLen, MIN_TIME_OUT);
-   DEBUG("CGprs::GetSignalIntesity()----Receive:%s\n", ATResponse);
+    if (goBackTT) {
+        if (Command("ATO\r\n", RX_TIMEOUT, "CONNECT") != COMM_OK) {
+            m_IsConnected = false;
+        }
+        return false;
+    }
 
-   return Ret;
+    return true;
 }
 
 ECommError CGprs::Command(const char * cmd, int32 timeout, const char * reply, char * buf, uint32 & len) {
@@ -624,8 +623,14 @@ ECommError CGprs::WaitString(const char * str, int32 timeout, char * buf, uint32
 
     DEBUG("Wait for %s\n", str);
     while (retry < timeout && idx < len) {
+        one = 1;
         if (COMM_OK != ReadBuf((uint8 *)(buf + idx), one, 1)) {
             retry ++;
+            continue;
+        }
+        if (one == 0) {
+            retry ++;
+            Delay(1);
             continue;
         }
 
@@ -635,18 +640,21 @@ ECommError CGprs::WaitString(const char * str, int32 timeout, char * buf, uint32
             Delay(1);
             continue;
         } else if (buf[idx] == '\n') { // line received
-            buf[idx] = 0;
+            if (idx != 0) {
+                buf[idx] = 0;
 
-            DEBUG("ATResponse: %d bytes, %s\n", idx, buf);
+                DEBUG("ATResponse: %d bytes, %s\n", idx, buf);
 
-            if (strncmp(buf, str, strlen(str)) == 0) {
-                len = idx;
-                return COMM_OK;
-            } else if (strstr(buf, "ERROR") != NULL) {
-                len = idx;
-                return COMM_FAIL;
+                if (strncmp(buf, str, strlen(str)) == 0) {
+                    len = idx;
+                    return COMM_OK;
+                } else if (strstr(buf, "ERROR") != NULL) {
+                    len = idx;
+                    return COMM_FAIL;
+                } else {
+                    idx = 0;
+                }
             }
-            idx = 0;
             retry ++;
             Delay(1);
         } else {
@@ -665,8 +673,14 @@ ECommError CGprs::WaitAnyString(int32 timeout, char * buf, uint32 & len) {
 
     DEBUG("Wait for any string\n");
     while (retry < timeout && idx < len) {
+        one = 1;
         if (COMM_OK != ReadBuf((uint8 *)(buf + idx), one, 1)) {
             retry ++;
+            continue;
+        }
+        if (one == 0) {
+            retry ++;
+            Delay(1);
             continue;
         }
 
@@ -679,8 +693,8 @@ ECommError CGprs::WaitAnyString(int32 timeout, char * buf, uint32 & len) {
         else if (buf[idx] == '\n') { // line received
             buf[idx] = 0;
 
-            DEBUG("ATResponse: %d bytes, %s\n", idx, buf);
             if (idx > 0) {
+                DEBUG("ATResponse: %d bytes, %s\n", idx, buf);
                 len = idx;
                 return COMM_OK;
             }
@@ -699,6 +713,7 @@ ECommError CGprs::ReadRawData(uint8 * buf, uint32 len, int32 timeout) {
     uint32 idx = 0;
     uint32 one = 1;
     while (idx < len && retry < timeout) {
+        one = 1;
         if (COMM_OK != ReadBuf(buf + idx, one, 1)) {
             retry ++;
             continue;
