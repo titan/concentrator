@@ -16,9 +16,10 @@
 #include"CPortal.h"
 #include"CINI.h"
 #include"Utils.h"
+#include "CCardHost.h"
 
 #ifdef DEBUG_MAIN
-#define DEBUG printf
+#define DEBUG(...) do {printf("%s::%s----", __FILE__, __func__);printf(__VA_ARGS__);} while(false)
 #else
 #define DEBUG(...)
 #endif
@@ -59,12 +60,14 @@ static void TrimInvalidChar(string& Str);
 static void StartForwarder();
 static void StartGeneralHeat();
 static void StartPortal();
+static void StartCardHost();
 int main()
 {
    SetLight(LIGHT_WARNING, false);//turn off warning light
    StartForwarder();
    StartGeneralHeat();
    StartPortal();
+   StartCardHost();
 
    CScreen::GetInstance()->PowerOn();
    CKey::GetInstance()->Start();
@@ -256,4 +259,22 @@ void StartPortal()
    CPortal::GetInstance()->Init(HeartInterval);
 
    CPortal::GetInstance()->Start();
+}
+
+#define SECKEY "HOST"
+void StartCardHost() {
+    if (access("cardhost_cfg.ini", F_OK) == -1) { DEBUG("Missing cardhost_cfg.ini\n"); return;}
+    CINI ini("cardhost_cfg.ini");
+    if (!ini.GetValueBool(SECKEY, "RUN", false)) {DEBUG("Forbid card host service\n"); return;}
+    string name = ini.GetValueString(SECKEY, "DEVICE", "/dev/ttyS4");
+    TrimInvalidChar(name);
+    string cfg = ini.GetValueString(SECKEY, "DEV_CONFIG", "115200,8,1,N");
+    int com = OpenCom((char *)name.c_str(), (char *)cfg.c_str(), O_RDWR | O_NOCTTY);
+    if (com == -1) {
+        DEBUG("Initilize %s with %s failed!\n", name.c_str(), cfg.c_str());
+        return;
+    }
+    DEBUG("Initilize card host servcie with %s(%s)\n", name.c_str(), cfg.c_str());
+    CCardHost::GetInstance()->SetCom(com);
+    CCardHost::GetInstance()->Start();
 }
