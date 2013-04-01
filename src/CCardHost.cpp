@@ -1,5 +1,6 @@
 #include "CCardHost.h"
 #include "Utils.h"
+#include "CForwarderMonitor.h"
 
 #include "libs_emsys_odm.h"
 
@@ -106,9 +107,9 @@ uint32 CCardHost::Run() {
 void CCardHost::ParseAndExecute(uint8 *cmd, uint16 length) {
     uint8 * src, * dst, * code, * data, * crc;
     uint16 len = length - 1; // exclude cmd header
-    uint16 ptr = 0;
+    uint16 ptr = 0, gcrc;
     if (cmd[0] != 0x55) {
-        DEBUG("Not come from 485 host\n");
+        DEBUG("Not come from card host\n");
         return;
     }
     if (cmd[1] == 0xFF) {
@@ -142,7 +143,8 @@ void CCardHost::ParseAndExecute(uint8 *cmd, uint16 length) {
     data = cmd + ptr;
     ptr += len - 3;
     crc = cmd + ptr;
-    if (GenerateCRC(cmd, ptr) != *((uint16 *)crc)) {
+    gcrc = GenerateCRC(cmd, ptr);
+    if (((gcrc>>8) & 0xFF) != crc[1] || (gcrc & 0xFF) != crc[0]) {
         DEBUG("CRC error\n");
         return;
     }
@@ -150,18 +152,46 @@ void CCardHost::ParseAndExecute(uint8 *cmd, uint16 length) {
     switch (*code) {
     case CMD_QUERY:
         DEBUG("Query user command\n");
+        HandleQueryUser(data, crc - data);
         break;
     case CMD_PREPAID:
         DEBUG("Prepaid command\n");
         break;
     case CMD_GETTIME:
         DEBUG("Get time command\n");
-        AckGetTime();
+        HandleGetTime();
         break;
     }
 }
 
-void CCardHost::AckGetTime() {
+void CCardHost::HandleQueryUser(uint8 * buf, uint16 len) {
+    vector<ValveElemT> valves;
+    int retry = 3;
+    do {
+        if (CForwarderMonitor::GetInstance()->GetValveList(valves))
+            break;
+        retry --;
+    } while (retry > 0);
+    if (retry == 0) {
+        AckQueryUser(NULL, 0);
+        return;
+    }
+
+    for(vector<ValveElemT>::iterator valveIter = valves.begin(); valveIter != valves.end(); valveIter++) {
+        if (memcmp(valveIter->ValveData.ValveTemperature.UserID, buf, len) == 0 && valveIter->IsActive) {
+            if (len == 8) {
+                // just user id, no more data to send
+                AckQueryUser(NULL, 0);
+            } else {
+                // todo: send the command to valve
+            }
+            return;
+        }
+    }
+    AckQueryUser(NULL, 0);
+}
+
+void CCardHost::HandleGetTime() {
     uint32 ptr = 0, time = 0;
     uint16 crc = 0;
     uint8 * buf = (uint8 *)cbuffer_write(cmdbuf);
@@ -188,7 +218,54 @@ void CCardHost::AckGetTime() {
         *(uint32 *)(buf + ptr) = time; ptr += 4;
         buf[1] = ptr + 2; // set cmd length
         crc = GenerateCRC(buf, ptr);
-        *(uint16 *)(buf + ptr) = crc;
+        buf[ptr] = crc & 0xFF; ptr ++;
+        buf[ptr] = (crc>>8) & 0xFF;
         cbuffer_write_done(cmdbuf);
     }
+}
+
+void CCardHost::AckQueryUser(uint8 * data, uint16 len) {
+    uint32 ptr = 0;
+    uint16 crc = 0;
+    uint8 * buf = (uint8 *)cbuffer_write(cmdbuf);
+    if (buf == NULL) {
+        DEBUG("No enough memory to ack query user command\n");
+        return;
+    }
+    buf[ptr] = 0xAA;
+    // skip cmd length
+    if (len <= 238) ptr += 2; else ptr += 4;
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = 0x00; ptr ++;
+    buf[ptr] = 0x00; ptr ++;
+    buf[ptr] = 0x00; ptr ++;
+    buf[ptr] = 0x00; ptr ++;
+    buf[ptr] = 0x00; ptr ++;
+    buf[ptr] = 0x00; ptr ++;
+    if (len == 0) {
+        buf[ptr] = 0x81; ptr ++;
+    } else {
+        buf[ptr] = 0x01; ptr ++;
+        for (uint16 i = 0; i < len; i ++) {
+            buf[ptr + i] = data[i];
+        }
+        ptr += len;
+    }
+    // set cmd length
+    if (len <= 238) {
+        buf[1] = ptr + 2;
+    } else {
+        buf[1] = 0xFF;
+        buf[2] = ((ptr + 2) >> 8) & 0xFF;
+        buf[3] = (ptr + 2) & 0xFF;
+    }
+    crc = GenerateCRC(buf, ptr);
+    buf[ptr] = crc & 0xFF; ptr ++;
+    buf[ptr] = (crc>>8) & 0xFF;
+    cbuffer_write_done(cmdbuf);
 }

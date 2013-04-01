@@ -229,6 +229,14 @@ class CForwarderMonitor:public IThread
     ForwarderInfoListT m_ForwarderInfoList;
 
   public:
+    bool GetValveList(vector<ValveElemT>& valves);
+  private:
+    void SyncCachedValveList();
+  private:
+    CLock m_ValveListLock;
+    vector<ValveElemT> m_ValveList; // just for cache valves
+
+  public:
     void ConfigValve(uint8* pConfigStr, uint32 ConfigStrLen, ValveCtrlTypeE ValveCtrl, uint8& ValveConfigOKCount);
 
     //update valve values in Forwarder thread
@@ -250,7 +258,7 @@ class CForwarderMonitor:public IThread
 
   public:
     void SendForwarderData();//update fix time data to Portal thread called by the Portal thread
-
+    void QueryUser(uint8 uid[USERID_LEN], uint8 *data, uint16 len);
 
   private:
     bool ParseData(const uint8* pReceiveData, uint32 ReceiveDataLen, const uint8* pSendData, uint32 SendDataLen);

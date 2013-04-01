@@ -2,6 +2,7 @@
 #include"CForwarderMonitor.h"
 #include"CPortal.h"
 #include"Utils.h"
+#include "CCardHost.h"
 
 #ifndef CFG_TIMER_LIB
 #define CFG_TIMER_LIB
@@ -31,6 +32,9 @@ const uint32 MAX_A2_A3_RETRY_COUNT = 2;
 const uint8 VALVE_PACKET_FLAG= 0xF1;
 const uint8 VALVE_CTRL_USERID_FLAG = 0xF1;/*0xF1 0xF1*/
 /****************************************************/
+
+const uint8 VALVE_QUERY_USER_FLAG = 0x12;
+const uint8 VALVE_PREPAID_FLAG = 0x13;
 
 const uint8 VALVE_CTRL_FLAG = 0x0F;
 const uint8 VALVE_CTRL_RANDAM = 0xFB;
@@ -314,6 +318,7 @@ void CForwarderMonitor::GetValveUserID()
    DEBUG("CForwarderMonitor::GetValveUserID()\n");
    const uint8 ValveCommand[] = {VALVE_CTRL_USERID_FLAG, VALVE_CTRL_USERID_FLAG, 0x01};
    SendValveCtrlOneByOne(ValveCommand, sizeof(ValveCommand));
+   SyncCachedValveList();
 }
 
 void CForwarderMonitor::DayNoonTimerTask()
@@ -609,6 +614,12 @@ bool CForwarderMonitor::ParseData(const uint8* pReceiveData, uint32 ReceiveDataL
                UpdateItem(ForwarderID, ValveID, pReceiveData+A3_VALVE_CTRL_POS+3, USERID_LEN, ITEM_TEMPERATURE_USER_ID);
                m_IsNewUserIDFound = true;
                return true;
+            }
+
+            if (VALVE_QUERY_USER_FLAG == pReceiveData[A3_VALVE_CTRL_POS]) {
+                // it's query user command response
+                CCardHost::GetInstance()->AckQueryUser((uint8 *)pReceiveData + A3_VALVE_CTRL_POS + VALVE_CTRL_COMMAND_OFFSET, pReceiveData[A3_VALVE_CTRL_POS+VALVE_CTRL_LEN_OFFSET]);
+                return true;
             }
 
             uint8 A3CtrlRet = pReceiveData[A3_VALVE_CTRL_POS+VALVE_CTRL_COMMAND_OFFSET];
@@ -1004,6 +1015,26 @@ bool CForwarderMonitor::GetStatus(StatusE& Status)
    return true;
 }
 
+void CForwarderMonitor::SyncCachedValveList() {
+   m_ValveListLock.Lock();
+   m_ValveList.clear();
+   for (ForwarderMapT::iterator forwarderIter = m_DraftForwarderMap.begin(); forwarderIter != m_DraftForwarderMap.end(); forwarderIter++) {
+       for (ValveListT::iterator valveIter = forwarderIter->second.ValveList.begin(); valveIter != forwarderIter->second.ValveList.end(); valveIter++) {
+           m_ValveList.push_back(valveIter->second);
+       }
+   }
+   m_ValveListLock.UnLock();
+}
+
+bool CForwarderMonitor::GetValveList(vector<ValveElemT>& valves) {
+   if (m_ValveListLock.TryLock()) {
+       valves = m_ValveList;
+       m_ValveListLock.UnLock();
+       return true;
+   }
+   return false;
+}
+
 void CForwarderMonitor::SetForwarderInfo()
 {
    m_ForwarderInfoListLock.Lock();
@@ -1138,4 +1169,33 @@ void CForwarderMonitor::PrintUserID()//just for test
          PrintData(ValveIter->second.ValveData.ValveTemperature.UserID, sizeof(ValveIter->second.ValveData.ValveTemperature.UserID));
       }
    }
+}
+
+void CForwarderMonitor::QueryUser(uint8 uid[USERID_LEN], uint8 *data, uint16 len) {
+    for (ForwarderMapT::iterator forwarderIter = m_DraftForwarderMap.begin(); forwarderIter != m_DraftForwarderMap.end(); forwarderIter++) {
+        for (ValveListT::iterator valveIter = forwarderIter->second.ValveList.begin(); valveIter != forwarderIter->second.ValveList.end(); valveIter++) {
+            if (memcmp(valveIter->second.ValveData.ValveTemperature.UserID, uid, USERID_LEN) == 0) {
+                uint8 cmd[1024] = {0};
+                uint32 cmdlen = 0;
+                bzero(cmd, 1024);
+                cmd[0] = VALVE_QUERY_USER_FLAG;
+                cmd[1] = VALVE_CTRL_RANDAM;
+                if (len < 0xFF) {
+                    cmd[2] = len & 0xFF;
+                    memcpy(cmd + 3, data, len);
+                    cmdlen = 3 + len;
+                } else {
+                    cmd[2] = 0xFF;
+                    cmd[3] = (len >> 8) & 0xFF;
+                    cmd[4] = len & 0xFF;
+                    memcpy(cmd + 5, data, len);
+                    cmdlen = 5 + len;
+                }
+                if (!SendA2A3(cmd, cmdlen, forwarderIter->first, valveIter->first)) {
+                    // SendA2A3 failed!
+                    CCardHost::GetInstance()->AckQueryUser(NULL, 0);
+                }
+            }
+        }
+    }
 }
