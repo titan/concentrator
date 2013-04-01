@@ -10,6 +10,7 @@ public:
     static CCardHost * GetInstance();
     void SetCom(int com) {this->com = com;};
     void AckQueryUser(uint8 * data, uint16 len); // called by CForwarderMonitor
+    void AckPrepaid(uint8 * data, uint16 len); // called by CForwarderMonitor
 
 private:
     CCardHost();
@@ -17,6 +18,7 @@ private:
     virtual uint32 Run();
     void ParseAndExecute(uint8 * cmd, uint16 len);
     void HandleQueryUser(uint8 * buf, uint16 len);
+    void HandlePrepaid(uint8 * buf, uint16 len);
     void HandleGetTime();
 
 protected:

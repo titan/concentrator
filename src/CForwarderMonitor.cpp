@@ -622,6 +622,12 @@ bool CForwarderMonitor::ParseData(const uint8* pReceiveData, uint32 ReceiveDataL
                 return true;
             }
 
+            if (VALVE_PREPAID_FLAG == pReceiveData[A3_VALVE_CTRL_POS]) {
+                // it's query user command response
+                CCardHost::GetInstance()->AckPrepaid((uint8 *)pReceiveData + A3_VALVE_CTRL_POS + VALVE_CTRL_COMMAND_OFFSET, pReceiveData[A3_VALVE_CTRL_POS+VALVE_CTRL_LEN_OFFSET]);
+                return true;
+            }
+
             uint8 A3CtrlRet = pReceiveData[A3_VALVE_CTRL_POS+VALVE_CTRL_COMMAND_OFFSET];
             DEBUG("CForwarderMonitor::ParseData()----A3RetPos=%u, A3CtrlRet=0x%02X\n", A3_VALVE_CTRL_POS+VALVE_CTRL_COMMAND_OFFSET, A3CtrlRet);
             if( A3CtrlRet&0xE0 )//the high 3 bits = 0 when A2 command is exec successfully
@@ -1194,6 +1200,35 @@ void CForwarderMonitor::QueryUser(uint8 uid[USERID_LEN], uint8 *data, uint16 len
                 if (!SendA2A3(cmd, cmdlen, forwarderIter->first, valveIter->first)) {
                     // SendA2A3 failed!
                     CCardHost::GetInstance()->AckQueryUser(NULL, 0);
+                }
+            }
+        }
+    }
+}
+
+void CForwarderMonitor::Prepaid(uint8 uid[USERID_LEN], uint8 *data, uint16 len) {
+    for (ForwarderMapT::iterator forwarderIter = m_DraftForwarderMap.begin(); forwarderIter != m_DraftForwarderMap.end(); forwarderIter++) {
+        for (ValveListT::iterator valveIter = forwarderIter->second.ValveList.begin(); valveIter != forwarderIter->second.ValveList.end(); valveIter++) {
+            if (memcmp(valveIter->second.ValveData.ValveTemperature.UserID, uid, USERID_LEN) == 0) {
+                uint8 cmd[1024] = {0};
+                uint32 cmdlen = 0;
+                bzero(cmd, 1024);
+                cmd[0] = VALVE_PREPAID_FLAG;
+                cmd[1] = VALVE_CTRL_RANDAM;
+                if (len < 0xFF) {
+                    cmd[2] = len & 0xFF;
+                    memcpy(cmd + 3, data, len);
+                    cmdlen = 3 + len;
+                } else {
+                    cmd[2] = 0xFF;
+                    cmd[3] = (len >> 8) & 0xFF;
+                    cmd[4] = len & 0xFF;
+                    memcpy(cmd + 5, data, len);
+                    cmdlen = 5 + len;
+                }
+                if (!SendA2A3(cmd, cmdlen, forwarderIter->first, valveIter->first)) {
+                    // SendA2A3 failed!
+                    CCardHost::GetInstance()->AckPrepaid(NULL, 0);
                 }
             }
         }

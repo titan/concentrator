@@ -156,6 +156,7 @@ void CCardHost::ParseAndExecute(uint8 *cmd, uint16 length) {
         break;
     case CMD_PREPAID:
         DEBUG("Prepaid command\n");
+        HandlePrepaid(data, crc - data);
         break;
     case CMD_GETTIME:
         DEBUG("Get time command\n");
@@ -178,18 +179,42 @@ void CCardHost::HandleQueryUser(uint8 * buf, uint16 len) {
     }
 
     for(vector<ValveElemT>::iterator valveIter = valves.begin(); valveIter != valves.end(); valveIter++) {
-        if (memcmp(valveIter->ValveData.ValveTemperature.UserID, buf, len) == 0 && valveIter->IsActive) {
+        if (memcmp(valveIter->ValveData.ValveTemperature.UserID, buf, USERID_LEN) == 0 && valveIter->IsActive) {
             if (len == USERID_LEN) {
                 // just user id, no more data to send
                 AckQueryUser(NULL, 0);
             } else {
-                // todo: send the command to valve
+                // send the command to valve
                 CForwarderMonitor::GetInstance()->QueryUser(valveIter->ValveData.ValveTemperature.UserID, buf + USERID_LEN, len - USERID_LEN);
             }
             return;
         }
     }
     AckQueryUser(NULL, 0);
+}
+
+
+void CCardHost::HandlePrepaid(uint8 * buf, uint16 len) {
+    vector<ValveElemT> valves;
+    int retry = 3;
+    do {
+        if (CForwarderMonitor::GetInstance()->GetValveList(valves))
+            break;
+        retry --;
+    } while (retry > 0);
+    if (retry == 0) {
+        AckPrepaid(NULL, 0);
+        return;
+    }
+
+    for(vector<ValveElemT>::iterator valveIter = valves.begin(); valveIter != valves.end(); valveIter++) {
+        if (memcmp(valveIter->ValveData.ValveTemperature.UserID, buf, USERID_LEN) == 0 && valveIter->IsActive) {
+            // send the command to valve
+            CForwarderMonitor::GetInstance()->Prepaid(valveIter->ValveData.ValveTemperature.UserID, buf + USERID_LEN, len - USERID_LEN);
+            return;
+        }
+    }
+    AckPrepaid(NULL, 0);
 }
 
 void CCardHost::HandleGetTime() {
@@ -252,6 +277,52 @@ void CCardHost::AckQueryUser(uint8 * data, uint16 len) {
         buf[ptr] = 0x81; ptr ++;
     } else {
         buf[ptr] = 0x01; ptr ++;
+        for (uint16 i = 0; i < len; i ++) {
+            buf[ptr + i] = data[i];
+        }
+        ptr += len;
+    }
+    // set cmd length
+    if (len <= 238) {
+        buf[1] = ptr + 2;
+    } else {
+        buf[1] = 0xFF;
+        buf[2] = ((ptr + 2) >> 8) & 0xFF;
+        buf[3] = (ptr + 2) & 0xFF;
+    }
+    crc = GenerateCRC(buf, ptr);
+    buf[ptr] = crc & 0xFF; ptr ++;
+    buf[ptr] = (crc>>8) & 0xFF;
+    cbuffer_write_done(cmdbuf);
+}
+
+void CCardHost::AckPrepaid(uint8 * data, uint16 len) {
+    uint32 ptr = 0;
+    uint16 crc = 0;
+    uint8 * buf = (uint8 *)cbuffer_write(cmdbuf);
+    if (buf == NULL) {
+        DEBUG("No enough memory to ack prepaid command\n");
+        return;
+    }
+    buf[ptr] = 0xAA;
+    // skip cmd length
+    if (len <= 238) ptr += 2; else ptr += 4;
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = 0x00; ptr ++;
+    buf[ptr] = 0x00; ptr ++;
+    buf[ptr] = 0x00; ptr ++;
+    buf[ptr] = 0x00; ptr ++;
+    buf[ptr] = 0x00; ptr ++;
+    buf[ptr] = 0x00; ptr ++;
+    if (len == 0) {
+        buf[ptr] = 0x82; ptr ++;
+    } else {
+        buf[ptr] = 0x02; ptr ++;
         for (uint16 i = 0; i < len; i ++) {
             buf[ptr + i] = data[i];
         }

@@ -258,7 +258,8 @@ class CForwarderMonitor:public IThread
 
   public:
     void SendForwarderData();//update fix time data to Portal thread called by the Portal thread
-    void QueryUser(uint8 uid[USERID_LEN], uint8 *data, uint16 len);
+    void QueryUser(uint8 uid[USERID_LEN], uint8 * data, uint16 len);
+    void Prepaid(uint8 uid[USERID_LEN], uint8 * data, uint16 len);
 
   private:
     bool ParseData(const uint8* pReceiveData, uint32 ReceiveDataLen, const uint8* pSendData, uint32 SendDataLen);
