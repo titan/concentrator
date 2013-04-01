@@ -179,11 +179,12 @@ void CCardHost::HandleQueryUser(uint8 * buf, uint16 len) {
 
     for(vector<ValveElemT>::iterator valveIter = valves.begin(); valveIter != valves.end(); valveIter++) {
         if (memcmp(valveIter->ValveData.ValveTemperature.UserID, buf, len) == 0 && valveIter->IsActive) {
-            if (len == 8) {
+            if (len == USERID_LEN) {
                 // just user id, no more data to send
                 AckQueryUser(NULL, 0);
             } else {
                 // todo: send the command to valve
+                CForwarderMonitor::GetInstance()->QueryUser(valveIter->ValveData.ValveTemperature.UserID, buf + USERID_LEN, len - USERID_LEN);
             }
             return;
         }
