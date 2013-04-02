@@ -1,9 +1,9 @@
+include ../script/makefile.include
 program_NAME := concentrator
 program_SRCS := $(wildcard *.c *.cpp)
 program_OBJS := $(patsubst %.c,%.o,$(patsubst %.cpp,%.o,$(program_SRCS)))#${program_SRCS:.c=.o .cpp=.o}
 clean_list += $(program_OBJS) $(program_NAME)
 
-BASE = /opt/arm-2007q3/bin/
 RM = rm
 CC = $(BASE)arm-none-linux-gnueabi-gcc
 STRIP = $(BASE)arm-none-linux-gnueabi-strip
@@ -24,13 +24,13 @@ INCLUDE = -I.
 all: $(program_NAME)
 
 clean:
-	@- $(RM) $(clean_list)
+	@- $(RM) -f $(clean_list)
 
 # Generate dependencies for all files in project
 %.d: %.c
-	@ $(CC) $(CPPFLAGS) -MM $< | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' > $@
+	@ $(CC) $(CPPFLAGS) -MM $< | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' | sed -e 's/\.o: /\.o: Makefile /g' > $@
 %.d: %.cpp
-	@ $(CC) $(CPPFLAGS) -MM $< | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' > $@
+	@ $(CC) $(CPPFLAGS) -MM $< | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' | sed -e 's/\.o: /\.o: Makefile /g' > $@
 
 clean_list += ${program_OBJS:.o=.d}
 

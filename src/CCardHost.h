@@ -1,8 +1,8 @@
 #ifndef __CCARDHOST_H
 #define __CCARDHOST_H
 #include "IThread.h"
-#include "CSerialComm.h"
 #include "cbuffer.h"
+#include "CLock.h"
 
 class CCardHost:public IThread {
 
@@ -11,6 +11,7 @@ public:
     void SetCom(int com) {this->com = com;};
     void AckQueryUser(uint8 * data, uint16 len); // called by CForwarderMonitor
     void AckPrepaid(uint8 * data, uint16 len); // called by CForwarderMonitor
+    void AckTimeOrRemove(uint8 * data, uint16 len);
 
 private:
     CCardHost();
@@ -19,7 +20,7 @@ private:
     void ParseAndExecute(uint8 * cmd, uint16 len);
     void HandleQueryUser(uint8 * buf, uint16 len);
     void HandlePrepaid(uint8 * buf, uint16 len);
-    void HandleGetTime();
+    void HandleGetTime(uint8 * buf, uint16 len);
 
 protected:
     int com;

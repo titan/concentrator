@@ -124,6 +124,8 @@ uint32 CForwarderMonitor::Run()
          // PrintUserID();
       }
 
+      SendCardHostCommand();
+
       GetForwarderInfoTask();
       // PrintUserID();
 
@@ -1178,59 +1180,91 @@ void CForwarderMonitor::PrintUserID()//just for test
 }
 
 void CForwarderMonitor::QueryUser(uint8 uid[USERID_LEN], uint8 *data, uint16 len) {
+    uint8 * cmd = (uint8 *)cbuffer_write(m_CardCmdBuf);
+    if (cmd == NULL) {
+        DEBUG("No enough memory for quering user\n");
+        return;
+    }
     for (ForwarderMapT::iterator forwarderIter = m_DraftForwarderMap.begin(); forwarderIter != m_DraftForwarderMap.end(); forwarderIter++) {
         for (ValveListT::iterator valveIter = forwarderIter->second.ValveList.begin(); valveIter != forwarderIter->second.ValveList.end(); valveIter++) {
             if (memcmp(valveIter->second.ValveData.ValveTemperature.UserID, uid, USERID_LEN) == 0) {
-                uint8 cmd[1024] = {0};
-                uint32 cmdlen = 0;
                 bzero(cmd, 1024);
+                *(uint32 *)cmd = forwarderIter->first; cmd += sizeof(uint32);
+                *(uint16 *)cmd = valveIter->first; cmd += sizeof(uint16);
+                uint16 * cmdlen = (uint16 *)cmd; cmd += sizeof(uint16);
                 cmd[0] = VALVE_QUERY_USER_FLAG;
                 cmd[1] = VALVE_CTRL_RANDAM;
                 if (len < 0xFF) {
                     cmd[2] = len & 0xFF;
                     memcpy(cmd + 3, data, len);
-                    cmdlen = 3 + len;
+                    * cmdlen = 3 + len;
                 } else {
                     cmd[2] = 0xFF;
                     cmd[3] = (len >> 8) & 0xFF;
                     cmd[4] = len & 0xFF;
                     memcpy(cmd + 5, data, len);
-                    cmdlen = 5 + len;
+                    * cmdlen = 5 + len;
                 }
-                if (!SendA2A3(cmd, cmdlen, forwarderIter->first, valveIter->first)) {
-                    // SendA2A3 failed!
-                    CCardHost::GetInstance()->AckQueryUser(NULL, 0);
-                }
+                cbuffer_write_done(m_CardCmdBuf);
             }
         }
     }
 }
 
 void CForwarderMonitor::Prepaid(uint8 uid[USERID_LEN], uint8 *data, uint16 len) {
+    uint8 * cmd = (uint8 *)cbuffer_write(m_CardCmdBuf);
+    if (cmd == NULL) {
+        DEBUG("No enough memory for prepaid\n");
+        return;
+    }
     for (ForwarderMapT::iterator forwarderIter = m_DraftForwarderMap.begin(); forwarderIter != m_DraftForwarderMap.end(); forwarderIter++) {
         for (ValveListT::iterator valveIter = forwarderIter->second.ValveList.begin(); valveIter != forwarderIter->second.ValveList.end(); valveIter++) {
             if (memcmp(valveIter->second.ValveData.ValveTemperature.UserID, uid, USERID_LEN) == 0) {
-                uint8 cmd[1024] = {0};
-                uint32 cmdlen = 0;
                 bzero(cmd, 1024);
+                *(uint32 *)cmd = forwarderIter->first; cmd += sizeof(uint32);
+                *(uint16 *)cmd = valveIter->first; cmd += sizeof(uint16);
+                uint16 * cmdlen = (uint16 *)cmd; cmd += sizeof(uint16);
                 cmd[0] = VALVE_PREPAID_FLAG;
                 cmd[1] = VALVE_CTRL_RANDAM;
                 if (len < 0xFF) {
                     cmd[2] = len & 0xFF;
                     memcpy(cmd + 3, data, len);
-                    cmdlen = 3 + len;
+                    * cmdlen = 3 + len;
                 } else {
                     cmd[2] = 0xFF;
                     cmd[3] = (len >> 8) & 0xFF;
                     cmd[4] = len & 0xFF;
                     memcpy(cmd + 5, data, len);
-                    cmdlen = 5 + len;
+                    * cmdlen = 5 + len;
                 }
-                if (!SendA2A3(cmd, cmdlen, forwarderIter->first, valveIter->first)) {
-                    // SendA2A3 failed!
-                    CCardHost::GetInstance()->AckPrepaid(NULL, 0);
-                }
+                cbuffer_write_done(m_CardCmdBuf);
             }
         }
     }
+}
+
+void CForwarderMonitor::SendCardHostCommand() {
+    uint8 * data = (uint8 *) cbuffer_read(m_CardCmdBuf);
+    if (data == NULL) return;
+    uint32 fid = *(uint32 *)data; data += sizeof(uint32);
+    uint16 vid = *(uint16 *)data; data += sizeof(uint16);
+    uint16 cmdlen = *(uint16 *)data; data += sizeof(uint16);
+    uint8 code = data[0];
+
+    if (!SendA2A3(data, cmdlen, fid, vid)) {
+        cbuffer_read_done(m_CardCmdBuf);
+        // SendA2A3 failed!
+        switch (code) {
+        case VALVE_QUERY_USER_FLAG:
+            CCardHost::GetInstance()->AckQueryUser(NULL, 0);
+            break;
+        case VALVE_PREPAID_FLAG:
+            CCardHost::GetInstance()->AckPrepaid(NULL, 0);
+            break;
+        default:
+            break;
+        }
+        return;
+    }
+    cbuffer_read_done(m_CardCmdBuf);
 }

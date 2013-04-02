@@ -1,8 +1,9 @@
 # 指定编译器设置
-CC=/opt/arm-2007q3/bin/arm-none-linux-gnueabi-gcc
+include ../../script/makefile.include
+CC=$(BASE)arm-none-linux-gnueabi-gcc
 CFLAGS=-fPIC -g -O2
-STRIP=/opt/arm-2007q3/bin/arm-none-linux-gnueabi-strip
-AR=/opt/arm-2007q3/bin/arm-none-linux-gnueabi-ar
+STRIP=$(BASE)arm-none-linux-gnueabi-strip
+AR=$(BASE)arm-none-linux-gnueabi-ar
 EXCFLAGS:=
 EXTERLIBS:=
 

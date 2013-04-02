@@ -152,15 +152,22 @@ void CCardHost::ParseAndExecute(uint8 *cmd, uint16 length) {
     switch (*code) {
     case CMD_QUERY:
         DEBUG("Query user command\n");
+        PrintData(cmd, length);
         HandleQueryUser(data, crc - data);
         break;
     case CMD_PREPAID:
         DEBUG("Prepaid command\n");
+        PrintData(cmd, length);
         HandlePrepaid(data, crc - data);
         break;
     case CMD_GETTIME:
         DEBUG("Get time command\n");
-        HandleGetTime();
+        PrintData(cmd, length);
+        HandleGetTime(data, crc - data);
+        break;
+    default:
+        DEBUG("Unknow command\n");
+        PrintData(cmd, length);
         break;
     }
 }
@@ -217,36 +224,11 @@ void CCardHost::HandlePrepaid(uint8 * buf, uint16 len) {
     AckPrepaid(NULL, 0);
 }
 
-void CCardHost::HandleGetTime() {
-    uint32 ptr = 0, time = 0;
-    uint16 crc = 0;
-    uint8 * buf = (uint8 *)cbuffer_write(cmdbuf);
-    if (buf) {
-        if (!GetLocalTimeStamp(time)) {
-            DEBUG("Cannot get local time, abort!\n");
-            return;
-        }
-        buf[ptr] = 0xAA;
-        ptr += 2; // skip cmd length
-        buf[ptr] = 0xFF; ptr ++;
-        buf[ptr] = 0xFF; ptr ++;
-        buf[ptr] = 0xFF; ptr ++;
-        buf[ptr] = 0xFF; ptr ++;
-        buf[ptr] = 0xFF; ptr ++;
-        buf[ptr] = 0xFF; ptr ++;
-        buf[ptr] = 0x00; ptr ++;
-        buf[ptr] = 0x00; ptr ++;
-        buf[ptr] = 0x00; ptr ++;
-        buf[ptr] = 0x00; ptr ++;
-        buf[ptr] = 0x00; ptr ++;
-        buf[ptr] = 0x00; ptr ++;
-        buf[ptr] = 0x05; ptr ++;
-        *(uint32 *)(buf + ptr) = time; ptr += 4;
-        buf[1] = ptr + 2; // set cmd length
-        crc = GenerateCRC(buf, ptr);
-        buf[ptr] = crc & 0xFF; ptr ++;
-        buf[ptr] = (crc>>8) & 0xFF;
-        cbuffer_write_done(cmdbuf);
+void CCardHost::HandleGetTime(uint8 * data, uint16 len) {
+    if (len == 0) {
+        AckTimeOrRemove(NULL, 0);
+    } else {
+        // todo:
     }
 }
 
@@ -292,8 +274,10 @@ void CCardHost::AckQueryUser(uint8 * data, uint16 len) {
     }
     crc = GenerateCRC(buf, ptr);
     buf[ptr] = crc & 0xFF; ptr ++;
-    buf[ptr] = (crc>>8) & 0xFF;
+    buf[ptr] = (crc>>8) & 0xFF; ptr ++;
     cbuffer_write_done(cmdbuf);
+    DEBUG("Response: ");
+    PrintData(buf, ptr);
 }
 
 void CCardHost::AckPrepaid(uint8 * data, uint16 len) {
@@ -338,6 +322,57 @@ void CCardHost::AckPrepaid(uint8 * data, uint16 len) {
     }
     crc = GenerateCRC(buf, ptr);
     buf[ptr] = crc & 0xFF; ptr ++;
-    buf[ptr] = (crc>>8) & 0xFF;
+    buf[ptr] = (crc>>8) & 0xFF; ptr ++;
     cbuffer_write_done(cmdbuf);
+    DEBUG("Response: ");
+    PrintData(buf, ptr);
+}
+
+void CCardHost::AckTimeOrRemove(uint8 * data, uint16 len) {
+    uint32 ptr = 0, time = 0;
+    uint16 crc = 0;
+    uint8 * buf = (uint8 *)cbuffer_write(cmdbuf);
+
+    if (buf == NULL) {
+        DEBUG("No enough memory to ack prepaid command\n");
+        return;
+    }
+
+    if (len == 0) {
+        if (!GetLocalTimeStamp(time)) {
+            DEBUG("Cannot get local time, abort!\n");
+            return;
+        }
+    }
+    buf[ptr] = 0xAA;
+    ptr += 2; // skip cmd length
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = 0x00; ptr ++;
+    buf[ptr] = 0x00; ptr ++;
+    buf[ptr] = 0x00; ptr ++;
+    buf[ptr] = 0x00; ptr ++;
+    buf[ptr] = 0x00; ptr ++;
+    buf[ptr] = 0x00; ptr ++;
+    if (len == 0) {
+        buf[ptr] = 0x05; ptr ++;
+        *(uint32 *)(buf + ptr) = time; ptr += 4;
+    } else {
+        buf[ptr] = 0x85; ptr ++;
+        for (uint16 i = 0; i < len; i ++) {
+            buf[ptr + i] = data[i];
+        }
+        ptr += len;
+    }
+    buf[1] = ptr + 2; // set cmd length
+    crc = GenerateCRC(buf, ptr);
+    buf[ptr] = crc & 0xFF; ptr ++;
+    buf[ptr] = (crc>>8) & 0xFF; ptr ++;
+    cbuffer_write_done(cmdbuf);
+    DEBUG("Response: ");
+    PrintData(buf, ptr);
 }

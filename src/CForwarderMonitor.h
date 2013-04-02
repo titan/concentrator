@@ -8,6 +8,7 @@
 #include"CSerialComm.h"
 #include"CLock.h"
 #include"sysdefs.h"
+#include "cbuffer.h"
 using namespace std;
 enum ForwarderTypeE
 {
@@ -186,7 +187,9 @@ class CForwarderMonitor:public IThread
                         // , m_DayNoonTimer(HOUR_TYPE)//just for test
                         //, m_DayNoonTimer(MINUTE_TYPE)//just for test
                         , m_ForwardInfoDataReady(false)
-                        , m_IsNewUserIDFound(false){}
+                        , m_IsNewUserIDFound(false)
+                        , m_CardCmdBuf(cbuffer_create(10, 1024)) {}
+    ~CForwarderMonitor() { cbuffer_free(m_CardCmdBuf); }
     static CLock m_ForwarderLock;
     ForwarderTypeE m_ForwarderType;
 
@@ -247,6 +250,7 @@ class CForwarderMonitor:public IThread
     void GetValveRunningTime();
     void GetValveUserID();
     void PrintUserID();//just for test
+    void SendCardHostCommand();
   private:
     uint8 SendValveCtrlOneByOne(const uint8* pValveCtrl, const uint32 ValveCtrlLen);//return how many valves succeed
     void SendA1();
@@ -269,5 +273,6 @@ class CForwarderMonitor:public IThread
   protected:
     CSerialComm* m_pCommController;
     ForwarderMapT m_DraftForwarderMap;
+    cbuffer_t m_CardCmdBuf;
 };
 #endif

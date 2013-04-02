@@ -24,7 +24,7 @@ void PrintData( const uint8* pData, const uint32 DataLen )
    uint32 i = 0;
    for(; i<DataLen; i++)
    {
-      DEBUG("0x%02x,", pData[i]);
+      DEBUG("0x%02x ", pData[i]);
    }
    DEBUG("-->\n");
 }
