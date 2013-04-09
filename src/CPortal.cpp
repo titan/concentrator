@@ -324,7 +324,7 @@ uint32 CPortal::Run()
          HeartBeat();
 
          GPRS_Receive();
-         CheckNewVersion();
+         //CheckNewVersion();
       }else
       {
          SetLight(LIGHT_GPRS, true);//turn on GPRS light

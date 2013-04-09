@@ -16,6 +16,38 @@
 #define CMD_PREPAID  0x02
 #define CMD_GETTIME  0x05
 
+/*
+// only for test
+uint8 sample[] = {
+    // query time
+    //0x55, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x05, 0x11, 0x22, 0x33, 0x44, 0x55, 0x64, 0x1E, 0xD0
+    //0x55, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x05, 0x11, 0x22, 0x33, 0x44, 0x55, 0x65, 0xDF, 0x10
+    //0x55, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x05, 0x58, 0x40
+    //0x55, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x05, 0x11, 0x22, 0x33, 0x44, 0x55, 0x61, 0xDE, 0xD3
+    //0x55, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x05, 0x11, 0x22, 0x33, 0x44, 0x55, 0x62, 0x9E, 0xD2
+    //0x55, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x05, 0x11, 0x22, 0x33, 0x44, 0x55, 0x63, 0x5F, 0x12
+    //0x55, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x05, 0x11, 0x22, 0x33, 0x44, 0x55, 0x64, 0x1E, 0xD0
+
+    // query user
+    //0x55, 0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x1F, 0x73
+
+    // prepaid
+    //0x55, 0x5F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x02, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x20, 0x09, 0x11, 0x15, 0x20, 0x10, 0x03, 0x15, 0x00, 0x31, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x32, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x31, 0x38, 0x39, 0x30, 0x30, 0x30, 0x33, 0x47, 0xAF, 0x46, 0x58, 0x17, 0x54
+};
+*/
+
+void hexdump(const uint8* data, const uint32 len) {
+    uint32 i = 0;
+    for(; i < len; i++) {
+#ifdef DEBUG_CARDHOST
+        printf("%02x ", data[i]);
+#endif
+    }
+#ifdef DEBUG_CARDHOST
+        printf("\n");
+#endif
+}
+
 CCardHost * CCardHost::instance = NULL;
 CCardHost * CCardHost::GetInstance()
 {
@@ -99,22 +131,27 @@ uint32 CCardHost::Run() {
                     wrote = 0;
                 }
             }
-        }
+        } //else ParseAndExecute(sample, sizeof(sample)); // only for test
     }
     return 0;
 }
 
 void CCardHost::ParseAndExecute(uint8 *cmd, uint16 length) {
     uint8 * src, * dst, * code, * data, * crc;
-    uint16 len = length - 1; // exclude cmd header
+    uint16 len;
     uint16 ptr = 0, gcrc;
+    PrintData(cmd, length);
     if (cmd[0] != 0x55) {
         DEBUG("Not come from card host\n");
         return;
     }
     if (cmd[1] == 0xFF) {
+        len = cmd[2];
+        len = len << 8;
+        len |= cmd[3];
         ptr = 4;
     } else {
+        len = cmd[1];
         ptr = 2;
     }
     src = cmd + ptr;
@@ -143,9 +180,10 @@ void CCardHost::ParseAndExecute(uint8 *cmd, uint16 length) {
     data = cmd + ptr;
     ptr += len - 3;
     crc = cmd + ptr;
+
     gcrc = GenerateCRC(cmd, ptr);
-    if (((gcrc>>8) & 0xFF) != crc[1] || (gcrc & 0xFF) != crc[0]) {
-        DEBUG("CRC error\n");
+    if (((gcrc>>8) & 0xFF) != crc[0] || (gcrc & 0xFF) != crc[1]) {
+        DEBUG("CRC error want %0x %0x, generate %0x %0x\n", crc[0], crc[1], (gcrc & 0xFF), ((gcrc >> 8) & 0xFF));
         return;
     }
 
@@ -234,7 +272,7 @@ void CCardHost::HandleGetTime(uint8 * data, uint16 len) {
 
 void CCardHost::AckQueryUser(uint8 * data, uint16 len) {
     uint32 ptr = 0;
-    uint16 crc = 0;
+    uint16 crc = 0, cmdlen = 0;
     uint8 * buf = (uint8 *)cbuffer_write(cmdbuf);
     if (buf == NULL) {
         DEBUG("No enough memory to ack query user command\n");
@@ -242,7 +280,7 @@ void CCardHost::AckQueryUser(uint8 * data, uint16 len) {
     }
     buf[ptr] = 0xAA;
     // skip cmd length
-    if (len <= 238) ptr += 2; else ptr += 4;
+    if (len < 255) ptr += 2; else ptr += 4;
     buf[ptr] = 0xFF; ptr ++;
     buf[ptr] = 0xFF; ptr ++;
     buf[ptr] = 0xFF; ptr ++;
@@ -265,24 +303,25 @@ void CCardHost::AckQueryUser(uint8 * data, uint16 len) {
         ptr += len;
     }
     // set cmd length
-    if (len <= 238) {
-        buf[1] = ptr + 2;
+    cmdlen = 1 + len + 2; // status + data + crc
+    if (cmdlen < 255) {
+        buf[1] = cmdlen & 0xFF;
     } else {
         buf[1] = 0xFF;
-        buf[2] = ((ptr + 2) >> 8) & 0xFF;
-        buf[3] = (ptr + 2) & 0xFF;
+        buf[2] = (cmdlen >> 8) & 0xFF;
+        buf[3] = cmdlen & 0xFF;
     }
     crc = GenerateCRC(buf, ptr);
     buf[ptr] = crc & 0xFF; ptr ++;
     buf[ptr] = (crc>>8) & 0xFF; ptr ++;
     cbuffer_write_done(cmdbuf);
     DEBUG("Response: ");
-    PrintData(buf, ptr);
+    hexdump(buf, ptr);
 }
 
 void CCardHost::AckPrepaid(uint8 * data, uint16 len) {
     uint32 ptr = 0;
-    uint16 crc = 0;
+    uint16 crc = 0, cmdlen = 0;
     uint8 * buf = (uint8 *)cbuffer_write(cmdbuf);
     if (buf == NULL) {
         DEBUG("No enough memory to ack prepaid command\n");
@@ -290,7 +329,7 @@ void CCardHost::AckPrepaid(uint8 * data, uint16 len) {
     }
     buf[ptr] = 0xAA;
     // skip cmd length
-    if (len <= 238) ptr += 2; else ptr += 4;
+    if (len < 255) ptr += 2; else ptr += 4;
     buf[ptr] = 0xFF; ptr ++;
     buf[ptr] = 0xFF; ptr ++;
     buf[ptr] = 0xFF; ptr ++;
@@ -313,24 +352,25 @@ void CCardHost::AckPrepaid(uint8 * data, uint16 len) {
         ptr += len;
     }
     // set cmd length
-    if (len <= 238) {
-        buf[1] = ptr + 2;
+    cmdlen = 1 + len + 2; // status + data + crc
+    if (cmdlen < 255) {
+        buf[1] = cmdlen & 0xFF;
     } else {
         buf[1] = 0xFF;
-        buf[2] = ((ptr + 2) >> 8) & 0xFF;
-        buf[3] = (ptr + 2) & 0xFF;
+        buf[2] = (cmdlen >> 8) & 0xFF;
+        buf[3] = cmdlen & 0xFF;
     }
     crc = GenerateCRC(buf, ptr);
     buf[ptr] = crc & 0xFF; ptr ++;
     buf[ptr] = (crc>>8) & 0xFF; ptr ++;
     cbuffer_write_done(cmdbuf);
     DEBUG("Response: ");
-    PrintData(buf, ptr);
+    hexdump(buf, ptr);
 }
 
 void CCardHost::AckTimeOrRemove(uint8 * data, uint16 len) {
     uint32 ptr = 0, time = 0;
-    uint16 crc = 0;
+    uint16 crc = 0, cmdlen = 0;
     uint8 * buf = (uint8 *)cbuffer_write(cmdbuf);
 
     if (buf == NULL) {
@@ -345,7 +385,8 @@ void CCardHost::AckTimeOrRemove(uint8 * data, uint16 len) {
         }
     }
     buf[ptr] = 0xAA;
-    ptr += 2; // skip cmd length
+    // skip cmd length
+    if (len < 255) ptr += 2; else ptr += 4;
     buf[ptr] = 0xFF; ptr ++;
     buf[ptr] = 0xFF; ptr ++;
     buf[ptr] = 0xFF; ptr ++;
@@ -360,7 +401,10 @@ void CCardHost::AckTimeOrRemove(uint8 * data, uint16 len) {
     buf[ptr] = 0x00; ptr ++;
     if (len == 0) {
         buf[ptr] = 0x05; ptr ++;
-        *(uint32 *)(buf + ptr) = time; ptr += 4;
+        buf[ptr] = (time >> 24) & 0xFF; ptr ++;
+        buf[ptr] = (time >> 16) & 0xFF; ptr ++;
+        buf[ptr] = (time >> 8) & 0xFF; ptr ++;
+        buf[ptr] = time & 0xFF; ptr ++;
     } else {
         buf[ptr] = 0x85; ptr ++;
         for (uint16 i = 0; i < len; i ++) {
@@ -368,11 +412,19 @@ void CCardHost::AckTimeOrRemove(uint8 * data, uint16 len) {
         }
         ptr += len;
     }
-    buf[1] = ptr + 2; // set cmd length
+    // set cmd length
+    cmdlen = 1 + len + 2; // status + data + crc
+    if (cmdlen < 255) {
+        buf[1] = cmdlen & 0xFF;
+    } else {
+        buf[1] = 0xFF;
+        buf[2] = (cmdlen >> 8) & 0xFF;
+        buf[3] = cmdlen & 0xFF;
+    }
     crc = GenerateCRC(buf, ptr);
     buf[ptr] = crc & 0xFF; ptr ++;
     buf[ptr] = (crc>>8) & 0xFF; ptr ++;
     cbuffer_write_done(cmdbuf);
     DEBUG("Response: ");
-    PrintData(buf, ptr);
+    hexdump(buf, ptr);
 }
