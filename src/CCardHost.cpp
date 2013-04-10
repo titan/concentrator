@@ -102,12 +102,14 @@ uint32 CCardHost::Run() {
                 readed += r;
 
                 if (rlen == PKTLEN && readed > 1 && cmd[1] != 0xFF) {
-                    rlen = cmd[1] + 1; //include cmd header
+                    rlen = 1 + 1 + 6 + 6 + cmd[1]; // header + len + src + dst + data
                 } else if (rlen == PKTLEN && readed > 3 && cmd[1] == 0xFF) {
-                    rlen = cmd[2] << 8 + buf[3] + 1; //include cmd header
+                    rlen = 1 + 2 + 6 + 6 + ((uint16)cmd[2]) << 8 + cmd[3]; // header + len + src + dst + data
                 }
                 if (readed == rlen) {
                     readed = 0;
+                    DEBUG("read %d bytes: ", rlen);
+                    hexdump(cmd, rlen);
                     ParseAndExecute(cmd, rlen);
                 }
             }
@@ -116,9 +118,9 @@ uint32 CCardHost::Run() {
                 if (buf == NULL) continue; // no acks to send
                 if (wrote == 0) {
                     if (buf[1] == 0xFF) {
-                        wlen = buf[2] << 8 + buf[3] + 1; //include cmd header
+                        wlen = 1 + 2 + 6 + 6 + ((uint16)buf[2]) << 8 + buf[3]; // header + len + src + dst + data
                     } else {
-                        wlen = buf[1] + 1; //include cmd header
+                        wlen = 1 + 1 + 6 + 6 + buf[1]; // header + len + src + dst + data
                     }
                 }
                 w = write(com, buf + wrote, wlen - wrote);
@@ -267,6 +269,8 @@ void CCardHost::HandleGetTime(uint8 * data, uint16 len) {
         AckTimeOrRemove(NULL, 0);
     } else {
         // todo:
+        AckTimeOrRemove(NULL, 0);
+        DEBUG("Fault device: %02x %02x %02x %02x %02x %02x\n", data[0], data[1], data[2], data[3], data[4], data[5]);
     }
 }
 
