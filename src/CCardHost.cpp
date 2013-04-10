@@ -401,10 +401,11 @@ void CCardHost::AckTimeOrRemove(uint8 * data, uint16 len) {
     buf[ptr] = 0x00; ptr ++;
     if (len == 0) {
         buf[ptr] = 0x05; ptr ++;
-        buf[ptr] = (time >> 24) & 0xFF; ptr ++;
-        buf[ptr] = (time >> 16) & 0xFF; ptr ++;
-        buf[ptr] = (time >> 8) & 0xFF; ptr ++;
         buf[ptr] = time & 0xFF; ptr ++;
+        buf[ptr] = (time >> 8) & 0xFF; ptr ++;
+        buf[ptr] = (time >> 16) & 0xFF; ptr ++;
+        buf[ptr] = (time >> 24) & 0xFF; ptr ++;
+        len = 4;
     } else {
         buf[ptr] = 0x85; ptr ++;
         for (uint16 i = 0; i < len; i ++) {
