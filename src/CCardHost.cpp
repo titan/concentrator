@@ -6,8 +6,14 @@
 
 #ifdef DEBUG_CARDHOST
 #define DEBUG(...) do {printf("%s::%s----", __FILE__, __func__);printf(__VA_ARGS__);} while(false)
+#ifndef hexdump
+#define hexdump(data, len) do {for (uint32 i = 0; i < (uint32)len; i ++) { printf("%02x ", data[i]);} printf("\n");} while(0)
+#endif
 #else
 #define DEBUG(...)
+#ifndef hexdump
+#define hexdump(data, len)
+#endif
 #endif
 
 #define PKTLEN 512
@@ -35,18 +41,6 @@ uint8 sample[] = {
     //0x55, 0x5F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x02, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x20, 0x09, 0x11, 0x15, 0x20, 0x10, 0x03, 0x15, 0x00, 0x31, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x32, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x31, 0x38, 0x39, 0x30, 0x30, 0x30, 0x33, 0x47, 0xAF, 0x46, 0x58, 0x17, 0x54
 };
 */
-
-void hexdump(const uint8* data, const uint32 len) {
-    uint32 i = 0;
-    for(; i < len; i++) {
-#ifdef DEBUG_CARDHOST
-        printf("%02x ", data[i]);
-#endif
-    }
-#ifdef DEBUG_CARDHOST
-        printf("\n");
-#endif
-}
 
 CCardHost * CCardHost::instance = NULL;
 CCardHost * CCardHost::GetInstance()
@@ -142,7 +136,7 @@ void CCardHost::ParseAndExecute(uint8 *cmd, uint16 length) {
     uint8 * src, * dst, * code, * data, * crc;
     uint16 len;
     uint16 ptr = 0, gcrc;
-    PrintData(cmd, length);
+    hexdump(cmd, length);
     if (cmd[0] != 0x55) {
         DEBUG("Not come from card host\n");
         return;
@@ -192,22 +186,22 @@ void CCardHost::ParseAndExecute(uint8 *cmd, uint16 length) {
     switch (*code) {
     case CMD_QUERY:
         DEBUG("Query user command\n");
-        PrintData(cmd, length);
+        hexdump(cmd, length);
         HandleQueryUser(data, crc - data);
         break;
     case CMD_PREPAID:
         DEBUG("Prepaid command\n");
-        PrintData(cmd, length);
+        hexdump(cmd, length);
         HandlePrepaid(data, crc - data);
         break;
     case CMD_GETTIME:
         DEBUG("Get time command\n");
-        PrintData(cmd, length);
+        hexdump(cmd, length);
         HandleGetTime(data, crc - data);
         break;
     default:
         DEBUG("Unknow command\n");
-        PrintData(cmd, length);
+        hexdump(cmd, length);
         break;
     }
 }
@@ -221,15 +215,19 @@ void CCardHost::HandleQueryUser(uint8 * buf, uint16 len) {
         retry --;
     } while (retry > 0);
     if (retry == 0) {
+        DEBUG("Cannot get valve list\n");
         AckQueryUser(NULL, 0);
         return;
     }
 
     for(vector<ValveElemT>::iterator valveIter = valves.begin(); valveIter != valves.end(); valveIter++) {
+        uint8 * user = valveIter->ValveData.ValveTemperature.UserID;
+        DEBUG("User ID(Active? %s): %02x %02x %02x %02x %02x %02x %02x %02x\n", valveIter->IsActive? "true": "false", user[0], user[1], user[2], user[3], user[4], user[5], user[6], user[7]);
         if (memcmp(valveIter->ValveData.ValveTemperature.UserID, buf, USERID_LEN) == 0 && valveIter->IsActive) {
+            DEBUG("Found user: %02x %02x %02x %02x %02x %02x %02x %02x\n", user[0], user[1], user[2], user[3], user[4], user[5], user[6], user[7]);
             if (len == USERID_LEN) {
                 // just user id, no more data to send
-                AckQueryUser(NULL, 0);
+                AckQueryUser(buf, 0);
             } else {
                 // send the command to valve
                 CForwarderMonitor::GetInstance()->QueryUser(valveIter->ValveData.ValveTemperature.UserID, buf + USERID_LEN, len - USERID_LEN);
@@ -240,7 +238,6 @@ void CCardHost::HandleQueryUser(uint8 * buf, uint16 len) {
     AckQueryUser(NULL, 0);
 }
 
-
 void CCardHost::HandlePrepaid(uint8 * buf, uint16 len) {
     vector<ValveElemT> valves;
     int retry = 3;
@@ -250,12 +247,16 @@ void CCardHost::HandlePrepaid(uint8 * buf, uint16 len) {
         retry --;
     } while (retry > 0);
     if (retry == 0) {
+        DEBUG("Cannot get valve list\n");
         AckPrepaid(NULL, 0);
         return;
     }
 
     for(vector<ValveElemT>::iterator valveIter = valves.begin(); valveIter != valves.end(); valveIter++) {
+        uint8 * user = valveIter->ValveData.ValveTemperature.UserID;
+        DEBUG("User ID(Active? %s): %02x %02x %02x %02x %02x %02x %02x %02x\n", valveIter->IsActive? "true": "false", user[0], user[1], user[2], user[3], user[4], user[5], user[6], user[7]);
         if (memcmp(valveIter->ValveData.ValveTemperature.UserID, buf, USERID_LEN) == 0 && valveIter->IsActive) {
+            DEBUG("Found user: %02x %02x %02x %02x %02x %02x %02x %02x\n", user[0], user[1], user[2], user[3], user[4], user[5], user[6], user[7]);
             // send the command to valve
             CForwarderMonitor::GetInstance()->Prepaid(valveIter->ValveData.ValveTemperature.UserID, buf + USERID_LEN, len - USERID_LEN);
             return;
@@ -297,7 +298,7 @@ void CCardHost::AckQueryUser(uint8 * data, uint16 len) {
     buf[ptr] = 0x00; ptr ++;
     buf[ptr] = 0x00; ptr ++;
     buf[ptr] = 0x00; ptr ++;
-    if (len == 0) {
+    if (data == NULL && len == 0) {
         buf[ptr] = 0x81; ptr ++;
     } else {
         buf[ptr] = 0x01; ptr ++;
@@ -316,8 +317,8 @@ void CCardHost::AckQueryUser(uint8 * data, uint16 len) {
         buf[3] = cmdlen & 0xFF;
     }
     crc = GenerateCRC(buf, ptr);
-    buf[ptr] = crc & 0xFF; ptr ++;
     buf[ptr] = (crc>>8) & 0xFF; ptr ++;
+    buf[ptr] = crc & 0xFF; ptr ++;
     cbuffer_write_done(cmdbuf);
     DEBUG("Response: ");
     hexdump(buf, ptr);
@@ -365,8 +366,8 @@ void CCardHost::AckPrepaid(uint8 * data, uint16 len) {
         buf[3] = cmdlen & 0xFF;
     }
     crc = GenerateCRC(buf, ptr);
-    buf[ptr] = crc & 0xFF; ptr ++;
     buf[ptr] = (crc>>8) & 0xFF; ptr ++;
+    buf[ptr] = crc & 0xFF; ptr ++;
     cbuffer_write_done(cmdbuf);
     DEBUG("Response: ");
     hexdump(buf, ptr);
@@ -427,8 +428,8 @@ void CCardHost::AckTimeOrRemove(uint8 * data, uint16 len) {
         buf[3] = cmdlen & 0xFF;
     }
     crc = GenerateCRC(buf, ptr);
-    buf[ptr] = crc & 0xFF; ptr ++;
     buf[ptr] = (crc>>8) & 0xFF; ptr ++;
+    buf[ptr] = crc & 0xFF; ptr ++;
     cbuffer_write_done(cmdbuf);
     DEBUG("Response: ");
     hexdump(buf, ptr);

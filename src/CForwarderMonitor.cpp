@@ -11,9 +11,16 @@
 
 #ifdef DEBUG_FORWARDER
 #define DEBUG printf
+#ifndef hexdump
+#define hexdump(data, len) do {for (uint32 i = 0; i < (uint32)len; i ++) { printf("%02x ", data[i]);} printf("\n");} while(0)
+#endif
 #else
 #define DEBUG(...)
+#ifndef hexdump
+#define hexdump(data, len)
 #endif
+#endif
+
 
 /***************************************************************************/
 const uint8 FORWARDER_COMMAND_BEGIN_FLAG[] = {0xAA, 0x80};
@@ -92,17 +99,21 @@ void CForwarderMonitor::SetCom(CSerialComm* pCom)
 
 uint32 CForwarderMonitor::Run()
 {
+   uint32 i = 0;
    while(1)
    {
       DEBUG("CForwarderMonitor::Run()----begin\n");
       ResetForwarderData();
 
-      SendA1();
-      // PrintUserID();
+      if (i % 60 == 0) {
+          SendA1();
+          // PrintUserID();
 
-      GetValveUserID();
-      // PrintUserID();
-      SaveForwarderMacUserIDTask();
+          GetValveUserID();
+
+          // PrintUserID();
+          SaveForwarderMacUserIDTask();
+      }
       if( m_RepeatTimer.Done() )
       {
          m_ForwarderLock.Lock();
@@ -131,6 +142,7 @@ uint32 CForwarderMonitor::Run()
 
       DEBUG("CForwarderMonitor::Run()---end\n");
       sleep(1);
+      i ++;
    }
 }
 
@@ -409,9 +421,11 @@ bool CForwarderMonitor::SendCommand(uint8* pCommand, uint32 CommandLen)
    SendCommand[Pos] = GenerateXorParity(SendCommand, Pos);
    Pos++;
 
+
    for(uint8 i=0; i<MAX_RETRY_COUNT;i++)
    {
       DEBUG("CForwarderMonitor::SendCommand()--Send Command--Try %d\n", i);
+      hexdump(SendCommand, Pos);
       FlashLight(LIGHT_FORWARD);
       if( COMM_OK != m_pCommController->WriteBuf(SendCommand, Pos, FORWARDER_TIMEOUT) )
       {
@@ -1188,14 +1202,14 @@ void CForwarderMonitor::QueryUser(uint8 uid[USERID_LEN], uint8 *data, uint16 len
                 cmd[0] = VALVE_CTRL_FLAG;
                 cmd[1] = VALVE_CTRL_RANDAM;
                 if (len < 0xFF) {
-                    cmd[2] = len & 0xFF;
+                    cmd[2] = (1 + len) & 0xFF; // command + data
                     cmd[3] = VALVE_CTRL_QUERY_USER;
                     memcpy(cmd + 4, data, len);
                     * cmdlen = 4 + len;
                 } else {
                     cmd[2] = 0xFF;
-                    cmd[3] = (len >> 8) & 0xFF;
-                    cmd[4] = len & 0xFF;
+                    cmd[3] = ((1 + len) >> 8) & 0xFF; // high byte for 'command + data'
+                    cmd[4] = (1 + len) & 0xFF; // low byte for 'command + data'
                     cmd[5] = VALVE_CTRL_QUERY_USER;
                     memcpy(cmd + 6, data, len);
                     * cmdlen = 6 + len;
@@ -1221,18 +1235,21 @@ void CForwarderMonitor::Prepaid(uint8 uid[USERID_LEN], uint8 *data, uint16 len) 
                 uint16 * cmdlen = (uint16 *)cmd; cmd += sizeof(uint16);
                 cmd[0] = VALVE_CTRL_FLAG;
                 cmd[1] = VALVE_CTRL_RANDAM;
+                DEBUG("Prepaid command, sent to valve: ");
                 if (len < 0xFF) {
-                    cmd[2] = len & 0xFF;
+                    cmd[2] = (1 + len) & 0xFF; // command + data
                     cmd[3] = VALVE_CTRL_PREPAID;
                     memcpy(cmd + 4, data, len);
                     * cmdlen = 4 + len;
+                    hexdump(cmd, (4 + len));
                 } else {
                     cmd[2] = 0xFF;
-                    cmd[3] = (len >> 8) & 0xFF;
-                    cmd[4] = len & 0xFF;
+                    cmd[3] = ((1 + len) >> 8) & 0xFF; // high byte for 'command + data'
+                    cmd[4] = (1 + len) & 0xFF; // low byte for 'command + data'
                     cmd[5] = VALVE_CTRL_PREPAID;
                     memcpy(cmd + 6, data, len);
                     * cmdlen = 6 + len;
+                    hexdump(cmd, (6 + len));
                 }
                 cbuffer_write_done(m_CardCmdBuf);
             }
