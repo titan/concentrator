@@ -129,8 +129,6 @@ struct ValveElemT
    ValveRecordDataT ValveRecord;
 };
 
-
-
 enum CommandTypeE
 {
    COMMAND_A1=0xA1,
@@ -174,6 +172,12 @@ struct ForwarderInfoT
    uint32 ValveCount;
 };
 typedef vector<ForwarderInfoT> ForwarderInfoListT;
+
+typedef struct {
+    uint8 uid[USERID_LEN];
+    uint32 fid;
+    uint16 vid;
+} user_t;
 
 class CForwarderMonitor:public IThread
 {
@@ -234,12 +238,7 @@ class CForwarderMonitor:public IThread
     ForwarderInfoListT m_ForwarderInfoList;
 
   public:
-    bool GetValveList(vector<ValveElemT>& valves);
-  private:
-    void SyncCachedValveList();
-  private:
-    CLock m_ValveListLock;
-    vector<ValveElemT> m_ValveList; // just for cache valves
+    bool GetUserList(vector<user_t>& users);
 
   public:
     void ConfigValve(uint8* pConfigStr, uint32 ConfigStrLen, ValveCtrlTypeE ValveCtrl, uint8& ValveConfigOKCount);
@@ -251,7 +250,6 @@ class CForwarderMonitor:public IThread
     void GetValveTemperature();
     void GetValveRunningTime();
     void GetValveUserID();
-    void PrintUserID();//just for test
     void SendCardHostCommand();
   private:
     uint8 SendValveCtrlOneByOne(const uint8* pValveCtrl, const uint32 ValveCtrlLen);//return how many valves succeed
@@ -276,5 +274,7 @@ class CForwarderMonitor:public IThread
     CSerialComm* m_pCommController;
     ForwarderMapT m_DraftForwarderMap;
     cbuffer_t m_CardCmdBuf;
+    vector<user_t> users;
+    CLock users_lock;
 };
 #endif

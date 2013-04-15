@@ -3,6 +3,7 @@
 #include"CPortal.h"
 #include"Utils.h"
 #include "CCardHost.h"
+#include "logdb.h"
 
 #ifndef CFG_TIMER_LIB
 #define CFG_TIMER_LIB
@@ -99,51 +100,62 @@ void CForwarderMonitor::SetCom(CSerialComm* pCom)
 
 uint32 CForwarderMonitor::Run()
 {
-   uint32 i = 0;
-   while(1)
-   {
-      DEBUG("CForwarderMonitor::Run()----begin\n");
-      ResetForwarderData();
+    uint32 i = 0;
+    LOGDB * db = dbopen((char *)"users", DB_RDONLY, sizeof(user_t));
+    if (db != NULL) {
+        user_t user;
+        size_t r;
+        do {
+            r = dbseq(db, &user, R_NEXT);
+            if (r > 0) {
+                users.push_back(user);
+            }
+        } while (r > 0);
+        dbclose(db);
+    }
+    while(1) {
+        DEBUG("CForwarderMonitor::Run()----begin\n");
+        ResetForwarderData();
 
-      if (i % 60 == 0) {
-          SendA1();
-          // PrintUserID();
+        if (i % 60 == 0 || users.size() == 0) {
+            SendA1();
+            // PrintUserID();
 
-          GetValveUserID();
+            GetValveUserID();
 
-          // PrintUserID();
-          SaveForwarderMacUserIDTask();
-      }
-      if( m_RepeatTimer.Done() )
-      {
-         m_ForwarderLock.Lock();
+            // PrintUserID();
+            if (m_IsNewUserIDFound)
+                SaveForwarderMacUserIDTask();
+        }
+        if( m_RepeatTimer.Done() ) {
+            m_ForwarderLock.Lock();
 
-         GetValveTemperature();
-         // PrintUserID();
-         GetValveTime();
-         // PrintUserID();
-         GetValveRunningTime();
-         // PrintUserID();
+            GetValveTemperature();
+            // PrintUserID();
+            GetValveTime();
+            // PrintUserID();
+            GetValveRunningTime();
+            // PrintUserID();
 
-         m_ForwarderLock.UnLock();
+            m_ForwarderLock.UnLock();
 
 
-         SendForwarderData();
-         // PrintUserID();
-      }
+            SendForwarderData();
+            // PrintUserID();
+        }
 
-      SendCardHostCommand();
+        SendCardHostCommand();
 
-      GetForwarderInfoTask();
-      // PrintUserID();
+        GetForwarderInfoTask();
+        // PrintUserID();
 
-      DayNoonTimerTask();
-      // PrintUserID();
+        DayNoonTimerTask();
+        // PrintUserID();
 
-      DEBUG("CForwarderMonitor::Run()---end\n");
-      sleep(1);
-      i ++;
-   }
+        DEBUG("CForwarderMonitor::Run()---end\n");
+        sleep(1);
+        i ++;
+    }
 }
 
 void CForwarderMonitor::SendA1()
@@ -329,7 +341,6 @@ void CForwarderMonitor::GetValveUserID()
    DEBUG("CForwarderMonitor::GetValveUserID()\n");
    const uint8 ValveCommand[] = {VALVE_CTRL_USERID_FLAG, VALVE_CTRL_USERID_FLAG, 0x01};
    SendValveCtrlOneByOne(ValveCommand, sizeof(ValveCommand));
-   SyncCachedValveList();
 }
 
 void CForwarderMonitor::DayNoonTimerTask()
@@ -1030,24 +1041,13 @@ bool CForwarderMonitor::GetStatus(StatusE& Status)
    return true;
 }
 
-void CForwarderMonitor::SyncCachedValveList() {
-   m_ValveListLock.Lock();
-   m_ValveList.clear();
-   for (ForwarderMapT::iterator forwarderIter = m_DraftForwarderMap.begin(); forwarderIter != m_DraftForwarderMap.end(); forwarderIter++) {
-       for (ValveListT::iterator valveIter = forwarderIter->second.ValveList.begin(); valveIter != forwarderIter->second.ValveList.end(); valveIter++) {
-           m_ValveList.push_back(valveIter->second);
-       }
-   }
-   m_ValveListLock.UnLock();
-}
-
-bool CForwarderMonitor::GetValveList(vector<ValveElemT>& valves) {
-   if (m_ValveListLock.TryLock()) {
-       valves = m_ValveList;
-       m_ValveListLock.UnLock();
-       return true;
-   }
-   return false;
+bool CForwarderMonitor::GetUserList(vector<user_t>& users) {
+    if (users_lock.TryLock()) {
+        users = this->users;
+        users_lock.UnLock();
+        return true;
+    }
+    return false;
 }
 
 void CForwarderMonitor::SetForwarderInfo()
@@ -1098,6 +1098,30 @@ void CForwarderMonitor::GetForwarderInfoTask()
    m_ForwarderLock.UnLock();
 }
 
+void CForwarderMonitor::SaveForwarderMacUserIDTask() {
+    DEBUG("CForwarderMonitor::SaveForwarderMacUserIDTask()----m_IsNewUserIDFound=%d\n", m_IsNewUserIDFound);
+    LOGDB * db = dbopen("users", DB_NEW, sizeof(user_t));
+    if (db == NULL) return;
+    users_lock.Lock();
+    users.clear();
+    for (ForwarderMapT::iterator forwarderIter = m_DraftForwarderMap.begin(); forwarderIter != m_DraftForwarderMap.end(); forwarderIter++) {
+        for (ValveListT::iterator valveIter = forwarderIter->second.ValveList.begin(); valveIter != forwarderIter->second.ValveList.end(); valveIter++) {
+            if (0 == memcmp(INVALID_USERID, valveIter->second.ValveData.ValveTemperature.UserID, sizeof(valveIter->second.ValveData.ValveTemperature.UserID))) {
+                continue;
+            }
+            user_t user;
+            memcpy(user.uid, valveIter->second.ValveData.ValveTemperature.UserID, USERID_LEN);
+            user.fid = forwarderIter->first;
+            user.vid = valveIter->first;
+            dbput(db, &user, sizeof(user_t));
+            users.push_back(user);
+        }
+    }
+    users_lock.UnLock();
+    dbclose(db);
+}
+
+/*
 void CForwarderMonitor::SaveForwarderMacUserIDTask()
 {
    DEBUG("CForwarderMonitor::SaveForwarderMacUserIDTask()----m_IsNewUserIDFound=%d\n", m_IsNewUserIDFound);
@@ -1140,6 +1164,7 @@ void CForwarderMonitor::SaveForwarderMacUserIDTask()
    fclose(pMacUserIDFile);
    m_IsNewUserIDFound = false;
 }
+*/
 
 void CForwarderMonitor::ConfigValve(uint8* pConfigStr, uint32 ConfigStrLen, ValveCtrlTypeE ValveCtrl, uint8& ValveConfigOKCount)
 {
@@ -1173,49 +1198,35 @@ void CForwarderMonitor::ConfigValve(uint8* pConfigStr, uint32 ConfigStrLen, Valv
    m_ForwarderLock.UnLock();
 }
 
-
-void CForwarderMonitor::PrintUserID()//just for test
-{
-   for(ForwarderMapT::iterator ForwarderIter = m_DraftForwarderMap.begin(); ForwarderIter != m_DraftForwarderMap.end(); ForwarderIter++)
-   {
-      for(ValveListT::iterator ValveIter = ForwarderIter->second.ValveList.begin(); ValveIter != ForwarderIter->second.ValveList.end(); ValveIter++)
-      {
-         DEBUG("CForwarderMonitor::PrintUserID()-----ForwarderID(0x%8X) ValveID(%04X) IsActive=%d, IsDataMissing=%d, UserID\n", ForwarderIter->first, ValveIter->first, ValveIter->second.IsActive, ValveIter->second.IsDataMissing);
-         PrintData(ValveIter->second.ValveData.ValveTemperature.UserID, sizeof(ValveIter->second.ValveData.ValveTemperature.UserID));
-      }
-   }
-}
-
 void CForwarderMonitor::QueryUser(uint8 uid[USERID_LEN], uint8 *data, uint16 len) {
     uint8 * cmd = (uint8 *)cbuffer_write(m_CardCmdBuf);
     if (cmd == NULL) {
         DEBUG("No enough memory for quering user\n");
         return;
     }
-    for (ForwarderMapT::iterator forwarderIter = m_DraftForwarderMap.begin(); forwarderIter != m_DraftForwarderMap.end(); forwarderIter++) {
-        for (ValveListT::iterator valveIter = forwarderIter->second.ValveList.begin(); valveIter != forwarderIter->second.ValveList.end(); valveIter++) {
-            if (memcmp(valveIter->second.ValveData.ValveTemperature.UserID, uid, USERID_LEN) == 0) {
-                bzero(cmd, 1024);
-                *(uint32 *)cmd = forwarderIter->first; cmd += sizeof(uint32);
-                *(uint16 *)cmd = valveIter->first; cmd += sizeof(uint16);
-                uint16 * cmdlen = (uint16 *)cmd; cmd += sizeof(uint16);
-                cmd[0] = VALVE_CTRL_FLAG;
-                cmd[1] = VALVE_CTRL_RANDAM;
-                if (len < 0xFF) {
-                    cmd[2] = (1 + len) & 0xFF; // command + data
-                    cmd[3] = VALVE_CTRL_QUERY_USER;
-                    memcpy(cmd + 4, data, len);
-                    * cmdlen = 4 + len;
-                } else {
-                    cmd[2] = 0xFF;
-                    cmd[3] = ((1 + len) >> 8) & 0xFF; // high byte for 'command + data'
-                    cmd[4] = (1 + len) & 0xFF; // low byte for 'command + data'
-                    cmd[5] = VALVE_CTRL_QUERY_USER;
-                    memcpy(cmd + 6, data, len);
-                    * cmdlen = 6 + len;
-                }
-                cbuffer_write_done(m_CardCmdBuf);
+
+    for (vector<user_t>::iterator userIter = users.begin(); userIter != users.end(); userIter ++) {
+        if (memcmp(userIter->uid, uid, USERID_LEN) == 0) {
+            bzero(cmd, 1024);
+            *(uint32 *)cmd = userIter->fid; cmd += sizeof(uint32);
+            *(uint16 *)cmd = userIter->vid; cmd += sizeof(uint16);
+            uint16 * cmdlen = (uint16 *)cmd; cmd += sizeof(uint16);
+            cmd[0] = VALVE_CTRL_FLAG;
+            cmd[1] = VALVE_CTRL_RANDAM;
+            if (len < 0xFF) {
+                cmd[2] = (1 + len) & 0xFF; // command + data
+                cmd[3] = VALVE_CTRL_QUERY_USER;
+                memcpy(cmd + 4, data, len);
+                * cmdlen = 4 + len;
+            } else {
+                cmd[2] = 0xFF;
+                cmd[3] = ((1 + len) >> 8) & 0xFF; // high byte for 'command + data'
+                cmd[4] = (1 + len) & 0xFF; // low byte for 'command + data'
+                cmd[5] = VALVE_CTRL_QUERY_USER;
+                memcpy(cmd + 6, data, len);
+                * cmdlen = 6 + len;
             }
+            cbuffer_write_done(m_CardCmdBuf);
         }
     }
 }
@@ -1226,33 +1237,32 @@ void CForwarderMonitor::Prepaid(uint8 uid[USERID_LEN], uint8 *data, uint16 len) 
         DEBUG("No enough memory for prepaid\n");
         return;
     }
-    for (ForwarderMapT::iterator forwarderIter = m_DraftForwarderMap.begin(); forwarderIter != m_DraftForwarderMap.end(); forwarderIter++) {
-        for (ValveListT::iterator valveIter = forwarderIter->second.ValveList.begin(); valveIter != forwarderIter->second.ValveList.end(); valveIter++) {
-            if (memcmp(valveIter->second.ValveData.ValveTemperature.UserID, uid, USERID_LEN) == 0) {
-                bzero(cmd, 1024);
-                *(uint32 *)cmd = forwarderIter->first; cmd += sizeof(uint32);
-                *(uint16 *)cmd = valveIter->first; cmd += sizeof(uint16);
-                uint16 * cmdlen = (uint16 *)cmd; cmd += sizeof(uint16);
-                cmd[0] = VALVE_CTRL_FLAG;
-                cmd[1] = VALVE_CTRL_RANDAM;
-                DEBUG("Prepaid command, sent to valve: ");
-                if (len < 0xFF) {
-                    cmd[2] = (1 + len) & 0xFF; // command + data
-                    cmd[3] = VALVE_CTRL_PREPAID;
-                    memcpy(cmd + 4, data, len);
-                    * cmdlen = 4 + len;
-                    hexdump(cmd, (4 + len));
-                } else {
-                    cmd[2] = 0xFF;
-                    cmd[3] = ((1 + len) >> 8) & 0xFF; // high byte for 'command + data'
-                    cmd[4] = (1 + len) & 0xFF; // low byte for 'command + data'
-                    cmd[5] = VALVE_CTRL_PREPAID;
-                    memcpy(cmd + 6, data, len);
-                    * cmdlen = 6 + len;
-                    hexdump(cmd, (6 + len));
-                }
-                cbuffer_write_done(m_CardCmdBuf);
+
+    for (vector<user_t>::iterator userIter = users.begin(); userIter != users.end(); userIter ++) {
+        if (memcmp(userIter->uid, uid, USERID_LEN) == 0) {
+            bzero(cmd, 1024);
+            *(uint32 *)cmd = userIter->fid; cmd += sizeof(uint32);
+            *(uint16 *)cmd = userIter->vid; cmd += sizeof(uint16);
+            uint16 * cmdlen = (uint16 *)cmd; cmd += sizeof(uint16);
+            cmd[0] = VALVE_CTRL_FLAG;
+            cmd[1] = VALVE_CTRL_RANDAM;
+            DEBUG("Prepaid command, sent to valve: ");
+            if (len < 0xFF) {
+                cmd[2] = (1 + len) & 0xFF; // command + data
+                cmd[3] = VALVE_CTRL_PREPAID;
+                memcpy(cmd + 4, data, len);
+                * cmdlen = 4 + len;
+                hexdump(cmd, (4 + len));
+            } else {
+                cmd[2] = 0xFF;
+                cmd[3] = ((1 + len) >> 8) & 0xFF; // high byte for 'command + data'
+                cmd[4] = (1 + len) & 0xFF; // low byte for 'command + data'
+                cmd[5] = VALVE_CTRL_PREPAID;
+                memcpy(cmd + 6, data, len);
+                * cmdlen = 6 + len;
+                hexdump(cmd, (6 + len));
             }
+            cbuffer_write_done(m_CardCmdBuf);
         }
     }
 }

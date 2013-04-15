@@ -207,10 +207,10 @@ void CCardHost::ParseAndExecute(uint8 *cmd, uint16 length) {
 }
 
 void CCardHost::HandleQueryUser(uint8 * buf, uint16 len) {
-    vector<ValveElemT> valves;
+    vector<user_t> users;
     int retry = 3;
     do {
-        if (CForwarderMonitor::GetInstance()->GetValveList(valves))
+        if (CForwarderMonitor::GetInstance()->GetUserList(users))
             break;
         retry --;
     } while (retry > 0);
@@ -220,29 +220,30 @@ void CCardHost::HandleQueryUser(uint8 * buf, uint16 len) {
         return;
     }
 
-    for(vector<ValveElemT>::iterator valveIter = valves.begin(); valveIter != valves.end(); valveIter++) {
-        uint8 * user = valveIter->ValveData.ValveTemperature.UserID;
-        DEBUG("User ID(Active? %s): %02x %02x %02x %02x %02x %02x %02x %02x\n", valveIter->IsActive? "true": "false", user[0], user[1], user[2], user[3], user[4], user[5], user[6], user[7]);
-        if (memcmp(valveIter->ValveData.ValveTemperature.UserID, buf, USERID_LEN) == 0 && valveIter->IsActive) {
+    for (vector<user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+        uint8 * user = iter->uid;
+        DEBUG("User ID: %02x %02x %02x %02x %02x %02x %02x %02x\n", user[0], user[1], user[2], user[3], user[4], user[5], user[6], user[7]);
+        if (memcmp(iter->uid, buf, USERID_LEN) == 0) {
             DEBUG("Found user: %02x %02x %02x %02x %02x %02x %02x %02x\n", user[0], user[1], user[2], user[3], user[4], user[5], user[6], user[7]);
             if (len == USERID_LEN) {
                 // just user id, no more data to send
                 AckQueryUser(buf, 0);
             } else {
                 // send the command to valve
-                CForwarderMonitor::GetInstance()->QueryUser(valveIter->ValveData.ValveTemperature.UserID, buf + USERID_LEN, len - USERID_LEN);
+                CForwarderMonitor::GetInstance()->QueryUser(iter->uid, buf + USERID_LEN, len - USERID_LEN);
             }
             return;
         }
     }
+
     AckQueryUser(NULL, 0);
 }
 
 void CCardHost::HandlePrepaid(uint8 * buf, uint16 len) {
-    vector<ValveElemT> valves;
+    vector<user_t> users;
     int retry = 3;
     do {
-        if (CForwarderMonitor::GetInstance()->GetValveList(valves))
+        if (CForwarderMonitor::GetInstance()->GetUserList(users))
             break;
         retry --;
     } while (retry > 0);
@@ -252,13 +253,13 @@ void CCardHost::HandlePrepaid(uint8 * buf, uint16 len) {
         return;
     }
 
-    for(vector<ValveElemT>::iterator valveIter = valves.begin(); valveIter != valves.end(); valveIter++) {
-        uint8 * user = valveIter->ValveData.ValveTemperature.UserID;
-        DEBUG("User ID(Active? %s): %02x %02x %02x %02x %02x %02x %02x %02x\n", valveIter->IsActive? "true": "false", user[0], user[1], user[2], user[3], user[4], user[5], user[6], user[7]);
-        if (memcmp(valveIter->ValveData.ValveTemperature.UserID, buf, USERID_LEN) == 0 && valveIter->IsActive) {
+    for (vector<user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+        uint8 * user = iter->uid;
+        DEBUG("User ID: %02x %02x %02x %02x %02x %02x %02x %02x\n", user[0], user[1], user[2], user[3], user[4], user[5], user[6], user[7]);
+        if (memcmp(iter->uid, buf, USERID_LEN) == 0) {
             DEBUG("Found user: %02x %02x %02x %02x %02x %02x %02x %02x\n", user[0], user[1], user[2], user[3], user[4], user[5], user[6], user[7]);
             // send the command to valve
-            CForwarderMonitor::GetInstance()->Prepaid(valveIter->ValveData.ValveTemperature.UserID, buf + USERID_LEN, len - USERID_LEN);
+            CForwarderMonitor::GetInstance()->Prepaid(iter->uid, buf + USERID_LEN, len - USERID_LEN);
             return;
         }
     }
