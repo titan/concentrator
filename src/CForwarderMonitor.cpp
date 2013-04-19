@@ -124,18 +124,22 @@ uint32 CForwarderMonitor::Run()
             GetValveUserID();
 
             // PrintUserID();
-            if (m_IsNewUserIDFound)
-                SaveForwarderMacUserIDTask();
         }
+        if (m_IsNewUserIDFound)
+            SaveForwarderMacUserIDTask();
         if( m_RepeatTimer.Done() ) {
             m_ForwarderLock.Lock();
 
+            GetPunctualData();
+
+            /*
             GetValveTemperature();
             // PrintUserID();
             GetValveTime();
             // PrintUserID();
             GetValveRunningTime();
             // PrintUserID();
+            */
 
             m_ForwarderLock.UnLock();
 
@@ -801,13 +805,68 @@ bool CForwarderMonitor::ParseData(const uint8* pReceiveData, uint32 ReceiveDataL
                      }
                      return true;
                   }
+            case VALVE_CTRL_GET_PUNCTUAL_DATA: {
+                const uint8 * data = pReceiveData + A3_VALVE_VALUE_POS;
+                //uint8 len = pReceiveData[A3_VALVE_CTRL_POS + VALVE_CTRL_LEN_OFFSET];
+                uint8 ptr = 0;
+
+                // transcation date
+                uint16 year = ((data[ptr] & 0xF0) >> 4) * 10 + (data[ptr] & 0x0F); ptr ++;
+                year = year * 100 + ((data[ptr] & 0xF0) >> 4) * 10 + (data[ptr] & 0x0F); ptr ++;
+                uint8 month = ((data[ptr] & 0xF0) >> 4) * 10 + (data[ptr] & 0x0F); ptr ++;
+                uint8 day = ((data[ptr] & 0xF0) >> 4) * 10 + (data[ptr] & 0x0F); ptr ++;
+                uint8 hour = ((data[ptr] & 0xF0) >> 4) * 10 + (data[ptr] & 0x0F); ptr ++;
+                uint32 utc = DateTime2TimeStamp(year, month, day, hour, 0, 0);
+                // UpdateItem(ForwarderID, ValveID, (uint8*)&utc, sizeof(uint32), ITEM_TEMPERATURE_DATETIME);
+
+
+                // temperatures
+                UpdateItem(ForwarderID, ValveID, data + ptr, FORWARDER_TEMPERATURE_LEN, ITEM_TEMPERATURE_INDOOR_TEMPERATURE); ptr += FORWARDER_TEMPERATURE_LEN;
+                UpdateItem(ForwarderID, ValveID, data + ptr, FORWARDER_TEMPERATURE_LEN, ITEM_TEMPERATURE_SET_TEMPERATURE); ptr += FORWARDER_TEMPERATURE_LEN;
+
+                // device running time
+                UpdateItem(ForwarderID, ValveID, data + ptr, 1, ITEM_TEMPERATURE_VALVE_RUNNING_TIME); ptr ++;
+
+                ptr += 2; // skip device status
+                const uint8 * uid = data; ptr += USERID_LEN;
+                // todo: match uid and valve id
+                for (vector<user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+                    if (memcmp(uid, iter->uid, USERID_LEN) == 0) {
+                        if (ValveID != iter->vid) {
+                            UpdateItem(ForwarderID, ValveID, uid, USERID_LEN, ITEM_TEMPERATURE_USER_ID);
+                            m_IsNewUserIDFound = true;
+                        }
+                    }
+                }
+
+                // device time
+                year = ((data[ptr] & 0xF0) >> 4) * 10 + (data[ptr] & 0x0F); ptr ++;
+                year = year * 100 + ((data[ptr] & 0xF0) >> 4) * 10 + (data[ptr] & 0x0F); ptr ++;
+                month = ((data[ptr] & 0xF0) >> 4) * 10 + (data[ptr] & 0x0F); ptr ++;
+                day = ((data[ptr] & 0xF0) >> 4) * 10 + (data[ptr] & 0x0F); ptr ++;
+                hour = ((data[ptr] & 0xF0) >> 4) * 10 + (data[ptr] & 0x0F); ptr ++;
+                uint8 minute = ((data[ptr] & 0xF0) >> 4) * 10 + (data[ptr] & 0x0F); ptr ++;
+                uint8 second = ((data[ptr] & 0xF0) >> 4) * 10 + (data[ptr] & 0x0F); ptr ++;
+                utc = DateTime2TimeStamp(year, month, day, hour, minute, second);
+                UpdateItem(ForwarderID, ValveID, (uint8*)&utc, sizeof(uint32), ITEM_TEMPERATURE_DATETIME);
+
+                // charge data pointer
+                m_DraftForwarderMap[ForwarderID].ValveList[ValveID].ValveRecord.LastChargeIndex = data[ptr] - 1; ptr ++;
+                // consume data pointer
+                m_DraftForwarderMap[ForwarderID].ValveList[ValveID].ValveRecord.LastConsumeIndex = data[ptr] * 256 + data[ptr + 1] - 1; ptr += 2;
+                // temperature data pointer
+                m_DraftForwarderMap[ForwarderID].ValveList[ValveID].ValveRecord.LastTemperatureIndex = data[ptr] * 256 + pReceiveData[ptr + 1] - 1; ptr += 2;
+                // missing device status pointer
+
+                return true;
+            }
             case VALVE_CTRL_QUERY_USER:
                 // it's query user command response
-                CCardHost::GetInstance()->AckQueryUser((uint8 *)pReceiveData + A3_VALVE_VALUE_POS, pReceiveData[A3_VALVE_CTRL_POS+VALVE_CTRL_LEN_OFFSET]);
+                CCardHost::GetInstance()->AckQueryUser((uint8 *)pReceiveData + A3_VALVE_VALUE_POS, pReceiveData[A3_VALVE_CTRL_POS + VALVE_CTRL_LEN_OFFSET]);
                 return true;
             case VALVE_CTRL_PREPAID:
                 // it's query user command response
-                CCardHost::GetInstance()->AckPrepaid((uint8 *)pReceiveData + A3_VALVE_VALUE_POS, pReceiveData[A3_VALVE_CTRL_POS+VALVE_CTRL_LEN_OFFSET]);
+                CCardHost::GetInstance()->AckPrepaid((uint8 *)pReceiveData + A3_VALVE_VALUE_POS, pReceiveData[A3_VALVE_CTRL_POS + VALVE_CTRL_LEN_OFFSET]);
                 return true;
             }
          }
@@ -1119,6 +1178,7 @@ void CForwarderMonitor::SaveForwarderMacUserIDTask() {
     }
     users_lock.UnLock();
     dbclose(db);
+    m_IsNewUserIDFound = false;
 }
 
 /*
@@ -1297,4 +1357,14 @@ void CForwarderMonitor::SendCardHostCommand() {
         return;
     }
     cbuffer_read_done(m_CardCmdBuf);
+}
+
+void CForwarderMonitor::GetPunctualData() {
+    if( false == m_ForwardInfoDataReady ) {
+        SendA1();
+    }
+
+    ClearValveRecord();
+    const uint8 ValveCommand[] = {VALVE_CTRL_FLAG, VALVE_CTRL_RANDAM, 0x01/*Len*/, VALVE_CTRL_GET_PUNCTUAL_DATA};
+    SendValveCtrlOneByOne(ValveCommand, sizeof(ValveCommand));
 }

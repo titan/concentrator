@@ -149,6 +149,7 @@ enum ValveCtrlTypeE
    VALVE_CTRL_CONFIG=0x0A,
    VALVE_CTRL_GET_RUNNING_TIME_INFO=0x08,
    VALVE_CTRL_SWITCH_VALVE=0x0E,
+   VALVE_CTRL_GET_PUNCTUAL_DATA=0x17,
    VALVE_CTRL_QUERY_USER=0x18,
    VALVE_CTRL_PREPAID=0x19,
    VALVE_CTRL_MAX//never delete this
@@ -250,6 +251,7 @@ class CForwarderMonitor:public IThread
     void GetValveTemperature();
     void GetValveRunningTime();
     void GetValveUserID();
+    void GetPunctualData();
     void SendCardHostCommand();
   private:
     uint8 SendValveCtrlOneByOne(const uint8* pValveCtrl, const uint32 ValveCtrlLen);//return how many valves succeed
