@@ -9,13 +9,8 @@
 #include"CLock.h"
 #include"sysdefs.h"
 #include "cbuffer.h"
+#include "IValveMonitor.h"
 using namespace std;
-enum ForwarderTypeE
-{
-   FORWARDER_TYPE_HEAT,
-   FORWARDER_TYPE_TEMPERATURE,
-   FORWARDER_TYPE_MAX//never delete this
-};
 
 const uint8 FORWARDER_COMMAND_ID_LEN = sizeof(uint8);
 const uint8 FORWARDER_ID_LEN = sizeof(uint32);
@@ -36,11 +31,9 @@ const uint8 A3_VALVE_ID_POS = FORWARDER_ID_POS+FORWARDER_ID_LEN;
 const uint8 A3_VALVE_CTRL_POS = A3_VALVE_ID_POS+VALVE_ID_LEN;
 const uint8 A3_VALVE_VALUE_POS = A3_VALVE_CTRL_POS+VALVE_CTRL_LEN;
 
-
-
 /*************************************valve data***************************/
 const uint8 MACADDRESS_LEN = 4;
-const uint8 USERID_LEN = 8;
+//const uint8 USERID_LEN = 8;
 const uint8 FORWARDER_DATETIME_LEN = 4;
 const uint32 VALVE_SET_HEAT_TIME_LEN = 6*3;
 const uint32 VALVE_CONFIG_LEN = 17;
@@ -151,7 +144,7 @@ enum ValveCtrlTypeE
    VALVE_CTRL_SWITCH_VALVE=0x0E,
    VALVE_CTRL_GET_PUNCTUAL_DATA=0x17,
    VALVE_CTRL_QUERY_USER=0x18,
-   VALVE_CTRL_PREPAID=0x19,
+   VALVE_CTRL_RECHARGE=0x19,
    VALVE_CTRL_MAX//never delete this
 };
 const uint32 MAX_A1_RESPONSE_LEN = 1024;
@@ -174,22 +167,17 @@ struct ForwarderInfoT
 };
 typedef vector<ForwarderInfoT> ForwarderInfoListT;
 
-typedef struct {
-    uint8 uid[USERID_LEN];
-    uint32 fid;
-    uint16 vid;
-} user_t;
-
-class CForwarderMonitor:public IThread
+class CForwarderMonitor:public IThread, public IValveMonitor
 {
   public:
     bool Init(uint32 nStartTime, uint32 nInterval);
     void SetCom(CSerialComm* pCom);
-    void SetForwarderType(ForwarderTypeE ForwarderType){m_ForwarderType = ForwarderType;};
+    void SetValveDataType(ValveDataType type){ valveDataType = type;};
+    ValveDataType GetValveDataType(){return valveDataType;};
     static CForwarderMonitor* GetInstance();
   private:
     static CForwarderMonitor* m_Instance;
-    CForwarderMonitor():m_ForwarderType(FORWARDER_TYPE_TEMPERATURE)
+    CForwarderMonitor():valveDataType(VALVE_DATA_TYPE_TEMPERATURE)
                         , m_DayNoonTimer(DAY_TYPE)
                         // , m_DayNoonTimer(HOUR_TYPE)//just for test
                         //, m_DayNoonTimer(MINUTE_TYPE)//just for test
@@ -198,7 +186,7 @@ class CForwarderMonitor:public IThread
                         , m_CardCmdBuf(cbuffer_create(10, 1024)) {}
     ~CForwarderMonitor() { cbuffer_free(m_CardCmdBuf); }
     static CLock m_ForwarderLock;
-    ForwarderTypeE m_ForwarderType;
+    ValveDataType valveDataType;
 
   private:
     virtual uint32 Run();
@@ -207,9 +195,8 @@ class CForwarderMonitor:public IThread
     CRepeatTimer m_RepeatTimer;
 
   public:
-    ForwarderTypeE GetForwarderType(){return m_ForwarderType;}
     bool AddForwareder(uint32 ForwarderID);
-    bool GetStatus(StatusE& Status);
+    Status GetStatus();
 
   //dayly noon task
   private:
@@ -242,7 +229,7 @@ class CForwarderMonitor:public IThread
     bool GetUserList(vector<user_t>& users);
 
   public:
-    void ConfigValve(uint8* pConfigStr, uint32 ConfigStrLen, ValveCtrlTypeE ValveCtrl, uint8& ValveConfigOKCount);
+    uint16 ConfigValve(ValveCtrlType ValveCtrl, uint8* pConfigStr, uint16 ConfigStrLen);
 
     //update valve values in Forwarder thread
   private:
@@ -264,8 +251,8 @@ class CForwarderMonitor:public IThread
 
   public:
     void SendForwarderData();//update fix time data to Portal thread called by the Portal thread
-    void QueryUser(uint8 uid[USERID_LEN], uint8 * data, uint16 len);
-    void Prepaid(uint8 uid[USERID_LEN], uint8 * data, uint16 len);
+    void QueryUser(userid_t uid, uint8 * data, uint16 len);
+    void Recharge(userid_t uid, uint8 * data, uint16 len);
 
   private:
     bool ParseData(const uint8* pReceiveData, uint32 ReceiveDataLen, const uint8* pSendData, uint32 SendDataLen);

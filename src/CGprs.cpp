@@ -13,9 +13,15 @@ using namespace std;
 #include"libs_emsys_odm.h"
 
 #ifdef DEBUG_GPRS
-#define DEBUG printf
+#define DEBUG(...) do {printf("%s::%s----", __FILE__, __func__);printf(__VA_ARGS__);} while(false)
+#ifndef hexdump
+#define hexdump(data, len) do {for (uint32 i = 0; i < (uint32)len; i ++) { printf("%02x ", *(uint8 *)(data + i));} printf("\n");} while(0)
+#endif
 #else
 #define DEBUG(...)
+#ifndef hexdump
+#define hexdump(data, len)
+#endif
 #endif
 
 #include"Utils.h"
@@ -225,7 +231,7 @@ bool CGprs::Connect(const char * IP, const uint32 Port)
     WaitString("OK", RX_TIMEOUT);
 
     if (Command("AT+CIPMODE=1\r\n") != COMM_OK) {
-        DEBUG("CGprs::Connect()----Set TT mode error\n");
+        DEBUG("Set TT mode error\n");
         return false;
     }
 
@@ -249,11 +255,12 @@ bool CGprs::Connect(const char * IP, const uint32 Port)
     }
 
     if (i == 3) {
-        DEBUG("CGprs::Connect()----Error\n");
+        DEBUG("Error\n");
         return false;
     }
 
     m_IsConnected = true;
+    mode = WORK_MODE_TT;
     return true;
 }
 
@@ -353,17 +360,17 @@ ECommError CGprs::HttpGet(const char * url, uint8 * buf, size_t * size) {
     uint8 tmpbuf[TMP_BUF_REAL_LEN] = {0};
     uint32 len = TMP_BUF_LEN;
     if (false == m_IsConnected) {
-        DEBUG("CGprs::HttpGet()-----Disconnected\n");
+        DEBUG("Disconnected\n");
         return COMM_FAIL;
     }
     if (this->mode != WORK_MODE_HTTP) {
-        DEBUG("CGprs::HttpGet()----- it's tt mode, switch to http mode\n");
+        DEBUG("it's tt mode, switch to http mode\n");
         if (!SwitchMode(WORK_MODE_HTTP)) {
-            DEBUG("CGprs::HttpGet()-----Switch work mode fail\n");
+            DEBUG("Switch work mode fail\n");
             return COMM_FAIL;
         }
     } else {
-        DEBUG("CGprs::HttpGet()----- it's http mode\n");
+        DEBUG("it's http mode\n");
     }
 
     if (Command("AT+HTTPPARA=\"CID\",1\r\n", RX_TIMEOUT) != COMM_OK) return COMM_FAIL;
@@ -383,12 +390,12 @@ ECommError CGprs::HttpGet(const char * url, uint8 * buf, size_t * size) {
     * l = 0;
     l ++;
     if (strcmp(s, "200") != 0) {
-        DEBUG("CGprs::HttpGet()---- download failed, http status is %s\n", s);
+        DEBUG("download failed, http status is %s\n", s);
         return COMM_FAIL;
     }
     len = strtol(l, NULL, 10);
     if ((size_t) len > * size) {
-        DEBUG("CGprs::HttpGet()---- download failed, data length %d > buffer length %d\n", len, * size);
+        DEBUG("download failed, data length %d > buffer length %d\n", len, * size);
         return COMM_FAIL;
     }
     * size = len;
@@ -403,17 +410,17 @@ ECommError CGprs::HttpGet(const char * url, uint8 * buf, size_t * size) {
 ECommError CGprs::SendData(uint8* pBuffer, uint32& BufferLen, int32 TimeOut)
 {
     if (false == m_IsConnected) {
-       DEBUG("CGprs::SendData()-----Disconnected\n");
+       DEBUG("Disconnected\n");
        return COMM_FAIL;
     }
     if (this->mode != WORK_MODE_TT) {
         if (!SwitchMode(WORK_MODE_TT)) {
-            DEBUG("CGprs::SendData()-----Switch work mode fail\n");
+            DEBUG("Switch work mode fail\n");
             return COMM_FAIL;
         }
     }
     if (false == m_IsConnected) {
-       DEBUG("CGprs::SendData()-----Disconnected\n");
+       DEBUG("Disconnected\n");
        return COMM_FAIL;
     }
     return WriteBuf(pBuffer, BufferLen, TimeOut);
@@ -421,63 +428,62 @@ ECommError CGprs::SendData(uint8* pBuffer, uint32& BufferLen, int32 TimeOut)
 
 ECommError CGprs::SendData(uint8* pBuffer, uint32& BufferLen, int32 SendTimeOut, uint8* pAckBuffer, uint32& AckBufferLen, int32 RecTimeOut)
 {
-   DEBUG("CGprs::SendData()----SendData\n");
-   PrintData(pBuffer, BufferLen);
+   DEBUG("SendData: ");
+   hexdump(pBuffer, BufferLen);
    ECommError Ret = SendData(pBuffer, BufferLen, SendTimeOut);
    if(COMM_OK != Ret)
    {
       return Ret;
    }
 
-   DEBUG("CGprs::SendData()----ReceData\n");
    Ret = ReceiveData(pAckBuffer, AckBufferLen, RecTimeOut);
-   PrintData(pAckBuffer, AckBufferLen);
+   DEBUG("ReceData: ");
+   hexdump(pAckBuffer, AckBufferLen);
 
    return Ret;
 }
 
 ECommError CGprs::ReceiveData(uint8* pBuffer, uint32& BufferLen, int32 TimeOut)
 {
-    DEBUG("CGprs::ReceiveData()----BufferLen=%d\n", BufferLen);
+    DEBUG("BufferLen=%d\n", BufferLen);
     if (false == m_IsConnected) {
-       DEBUG("CGprs::ReceiveData()-----Disconnected\n");
+       DEBUG("Disconnected\n");
        return COMM_FAIL;
     }
     if (this->mode != WORK_MODE_TT) {
         if (!SwitchMode(WORK_MODE_TT)) {
-            DEBUG("CGprs::ReceiveData()-----Switch work mode fail\n");
+            DEBUG("Switch work mode fail\n");
             return COMM_FAIL;
         }
     }
     if (false == m_IsConnected) {
-       DEBUG("CGprs::ReceiveData()-----Disconnected\n");
+       DEBUG("Disconnected\n");
        return COMM_FAIL;
     }
     ECommError Ret = ReadBuf(pBuffer, BufferLen, TimeOut);
-    DEBUG("CGprs::ReceiveData()----BufferLen=%d, Ret=%d\n", BufferLen, Ret);
+    DEBUG("BufferLen=%d, Ret=%d\n", BufferLen, Ret);
     return Ret;
 }
 
 ECommError CGprs::ReceiveData(uint8* pBuffer, uint32& BufferLen, const uint8* pBeginFlag, uint32 BeginFlagLen, uint32 BufferLenPos, int32 TimeOut)
 {
-    DEBUG("CGprs::ReceiveData()\n");
     if(false == m_IsConnected) {
-        DEBUG("CGprs::ReceiveData()----NOT connect\n");
+        DEBUG("NOT connect\n");
         return COMM_FAIL;
     }
     if (this->mode != WORK_MODE_TT) {
         if (!SwitchMode(WORK_MODE_TT)) {
-            DEBUG("CGprs::ReceiveData()-----Switch work mode fail\n");
+            DEBUG("Switch work mode fail\n");
             return COMM_FAIL;
         }
     }
     if (false == m_IsConnected) {
-        DEBUG("CGprs::ReceiveData()----NOT connect\n");
+        DEBUG("NOT connect\n");
         return COMM_FAIL;
     }
 
     if ((NULL==pBuffer) && (BufferLen<BufferLenPos + GPRS_PACKET_LEN_LEN)) {
-        DEBUG("CGprs::ReceiveData()----parameter error\n");
+        DEBUG("parameter error\n");
         return COMM_FAIL;
     }
     //flush read Buffer
@@ -500,7 +506,7 @@ ECommError CGprs::ReceiveData(uint8* pBuffer, uint32& BufferLen, const uint8* pB
         }
 
         ECommError Ret = ReadBuf(ReadBuffer+nTotalReadBytes, nReadBytes, TimeOut);
-        DEBUG("CGprs::ReceiveData()--Retry %d-Result = %d, readbytes=%d-nTotalReadBytes=%d\n", i, Ret, nReadBytes, nTotalReadBytes);
+        DEBUG("Retry %d, Result: %d, readbytes: %d, nTotalReadBytes: %d\n", i, Ret, nReadBytes, nTotalReadBytes);
         if (COMM_OK != Ret) {
             return Ret;
         }
@@ -522,14 +528,14 @@ ECommError CGprs::ReceiveData(uint8* pBuffer, uint32& BufferLen, const uint8* pB
                 continue;
             }
             BeginFlagIndex = Index;
-            DEBUG("CGprs::ReadBuffer()---Find BeginFlag  BeginFlagIndex=%d\n", BeginFlagIndex);
+            DEBUG("Find BeginFlag  BeginFlagIndex=%d\n", BeginFlagIndex);
         }
         //get the packet len
         if ((-1 != BeginFlagIndex) && (false == IsBufferLenFound )) {
             memcpy( &PacketLen, ReadBuffer+BufferLenPos, sizeof(PacketLen) );
             PacketLen += 4;//the packet data should add CRC and header data
             if ((PacketLen<(BufferLenPos+GPRS_PACKET_LEN_LEN)) && (PacketLen>MAX_GPRS_PACKET_LEN)) {
-                DEBUG("CGprs::ReceiveData()----PacketLen=%u should be in [%u,%u]\n", PacketLen, (BufferLenPos+GPRS_PACKET_LEN_LEN), MAX_GPRS_PACKET_LEN);
+                DEBUG("PacketLen=%u should be in [%u,%u]\n", PacketLen, (BufferLenPos+GPRS_PACKET_LEN_LEN), MAX_GPRS_PACKET_LEN);
                 return COMM_FAIL;
             }
             IsBufferLenFound = true;
@@ -537,14 +543,14 @@ ECommError CGprs::ReceiveData(uint8* pBuffer, uint32& BufferLen, const uint8* pB
         }
     }
     if ((i >= MAX_WRITEREAD_COUNT) || (PacketLen != nTotalReadBytes)) {
-        DEBUG("CGprs::ReceiveData()---PacketLen(%u):nTotalReadBytes(%d) Can't read valid data\n", PacketLen, nTotalReadBytes);
+        DEBUG("PacketLen(%u):nTotalReadBytes(%d) Can't read valid data\n", PacketLen, nTotalReadBytes);
         return COMM_NODATA;
     }
-    DEBUG("CGprs::ReceiveData()---PacketLen=%u, nTotalReadBytes=%d\n", PacketLen, nTotalReadBytes);
+    DEBUG("PacketLen=%u, nTotalReadBytes=%d\n", PacketLen, nTotalReadBytes);
 
     //copy buffer
     if (PacketLen > BufferLen) {
-        DEBUG("CGprs::ReceiveData()---Buffer NOT enough, %d bytes needed, memory size=%d\n", PacketLen, BufferLen);
+        DEBUG("Buffer NOT enough, %d bytes needed, memory size=%d\n", PacketLen, BufferLen);
         return COMM_MEMORY_NOT_ENOUGH;
     }
     memcpy(pBuffer, ReadBuffer+BeginFlagIndex, PacketLen);
@@ -557,7 +563,7 @@ bool CGprs::GetSignalIntesity(uint8& nSignalIntesity)
 {
     if (false == m_IsConnected) {
         nSignalIntesity = 0;
-        DEBUG("CGprs::GetSignalIntesity()----NOT connect\n");
+        DEBUG("NOT connect\n");
         return true;
     }
     uint8 atbuf[LINE_REAL_LEN] = {0};
@@ -567,7 +573,7 @@ bool CGprs::GetSignalIntesity(uint8& nSignalIntesity)
     if (mode == WORK_MODE_TT) {
         sleep(1);
         if (Command("+++", RX_TIMEOUT) != COMM_OK) {
-            DEBUG("CGprs::GetSignalIntesity()----Cannot leave TT mode\n");
+            DEBUG("Cannot leave TT mode\n");
             return false;
         }
         goBackTT = true;
@@ -590,7 +596,7 @@ bool CGprs::GetSignalIntesity(uint8& nSignalIntesity)
     * signend = 0;
     int signal = strtol(sign, NULL, 10);
     nSignalIntesity = signal;
-    DEBUG("CGprs::GetSignalIntesity()----%s\n", sign);
+    DEBUG("singal: %s\n", sign);
 
     if (goBackTT) {
         if (Command("ATO\r\n", RX_TIMEOUT, "CONNECT") != COMM_OK) {

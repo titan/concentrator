@@ -9,7 +9,7 @@
 LOGDB * dbopen(const char * file, DBFLAG flag, size_t rlen) {
     char buf[1024];
     LOGDB * db = NULL;
-    db = malloc(sizeof(LOGDB));
+    db = (LOGDB *) malloc(sizeof(LOGDB));
     if (db != NULL) {
         bzero(db, sizeof(LOGDB));
         bzero(buf, 1024);

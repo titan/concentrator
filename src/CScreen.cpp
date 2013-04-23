@@ -9,6 +9,7 @@
 #include"CHeatMonitor.h"
 #include"CForwarderMonitor.h"
 #include"CPortal.h"
+#include "IValveMonitorFactory.h"
 
 #ifdef DEBUG_SCREEN
 #define DEBUG printf
@@ -345,10 +346,11 @@ void CScreen::DrawMachineStatus()
    MaxLen = MaxLen>sizeof(GPRSChar)?MaxLen:sizeof(GPRSChar);
 
    //Line 1:Forwarder status
-   static StatusE ForwarderStatus = STATUS_CHECKING;
+   static Status ForwarderStatus = STATUS_CHECKING;
    if(false == m_IsFirstLineDataReady)
    {
-      m_IsFirstLineDataReady = CForwarderMonitor::GetInstance()->GetStatus(ForwarderStatus);
+      ForwarderStatus = IValveMonitorFactory::GetInstance()->GetStatus();
+      m_IsFirstLineDataReady = true;
       if(m_IsFirstLineDataReady)
       {
          m_IsFirstLineDrawn = false;
@@ -401,7 +403,7 @@ void CScreen::DrawMachineStatus()
    }
 
    //Line 2:General heat status
-   static StatusE GeneralHeatStatus = STATUS_CHECKING;
+   static Status GeneralHeatStatus = STATUS_CHECKING;
    if(false == m_IsSecondLineDataReady)
    {
       m_IsSecondLineDataReady = CHeatMonitor::GetInstance()->GetStatus(GeneralHeatStatus);
@@ -458,7 +460,7 @@ void CScreen::DrawMachineStatus()
 
    //Line 3:GPRS
    DEBUG("CScreen::DrawMachineStatus()----print GPRS\n");
-   static StatusE GPRSStatus = STATUS_CHECKING;
+   static Status GPRSStatus = STATUS_CHECKING;
    if(false == m_IsThirdLineDataReady)
    {
       m_IsThirdLineDataReady = CPortal::GetInstance()->GetGPRSStatus(GPRSStatus);
@@ -523,7 +525,7 @@ void CScreen::DrawMachineStatus()
 void CScreen::DrawGPRSStatus()
 {
    DEBUG("CScreen::DrawGPRSStatus()\n");
-   static StatusE GPRSStatus = STATUS_ERROR;
+   static Status GPRSStatus = STATUS_ERROR;
    if(false == m_IsFirstLineDataReady)
    {
       m_IsFirstLineDataReady = CPortal::GetInstance()->GetGPRSStatus(GPRSStatus);
@@ -664,7 +666,7 @@ void CScreen::DrawGeneralHeatINFO()
 {
    DEBUG("CScreen::DrawGeneralHeatINFO()\n");
    static HeatNodeInfoListT HeatNodeInfoList;
-   //static StatusE HeatStatus = STATUS_ERROR;
+   //static Status HeatStatus = STATUS_ERROR;
    if(false == m_IsFirstLineDataReady)
    {
       m_IsFirstLineDataReady = CHeatMonitor::GetInstance()->GetHeatNodeInfoList(HeatNodeInfoList);

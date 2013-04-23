@@ -41,12 +41,23 @@ enum ErrorCodeE
    ERROR_COMM,
    ERROR_COUNT//never delete this
 };
-enum StatusE
-{
+enum Status {
    STATUS_OK,
    STATUS_CHECKING,
    STATUS_ERROR,
    STATUS_OFFLINE,
    STATUS_MAX
 };
+
+#define USERID_LEN 8
+
+typedef struct {
+    uint8 x[USERID_LEN];
+} userid_t;
+
+typedef struct {
+    userid_t uid;
+    uint32 fid;
+    uint32 vmac;
+} user_t;
 #endif

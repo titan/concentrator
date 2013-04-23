@@ -1,13 +1,13 @@
 #include "CCardHost.h"
 #include "Utils.h"
-#include "CForwarderMonitor.h"
+#include "IValveMonitorFactory.h"
 
 #include "libs_emsys_odm.h"
 
 #ifdef DEBUG_CARDHOST
 #define DEBUG(...) do {printf("%s::%s----", __FILE__, __func__);printf(__VA_ARGS__);} while(false)
 #ifndef hexdump
-#define hexdump(data, len) do {for (uint32 i = 0; i < (uint32)len; i ++) { printf("%02x ", data[i]);} printf("\n");} while(0)
+#define hexdump(data, len) do {for (uint32 i = 0; i < (uint32)len; i ++) { printf("%02x ", *(uint8 *)(data + i));} printf("\n");} while(0)
 #endif
 #else
 #define DEBUG(...)
@@ -19,7 +19,7 @@
 #define PKTLEN 512
 
 #define CMD_QUERY    0x01
-#define CMD_PREPAID  0x02
+#define CMD_RECHARGE  0x02
 #define CMD_GETTIME  0x05
 
 /*
@@ -37,7 +37,7 @@ uint8 sample[] = {
     // query user
     //0x55, 0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x1F, 0x73
 
-    // prepaid
+    // recharge
     //0x55, 0x5F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x02, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x20, 0x09, 0x11, 0x15, 0x20, 0x10, 0x03, 0x15, 0x00, 0x31, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x32, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x31, 0x38, 0x39, 0x30, 0x30, 0x30, 0x33, 0x47, 0xAF, 0x46, 0x58, 0x17, 0x54
 };
 */
@@ -52,7 +52,7 @@ CCardHost * CCardHost::GetInstance()
 }
 
 CCardHost::CCardHost() {
-    cmdbuf = cbuffer_create(10, 512);
+    cmdbuf = cbuffer_create(10, PKTLEN);
 }
 
 CCardHost::~CCardHost() {
@@ -123,8 +123,11 @@ uint32 CCardHost::Run() {
                 }
                 wrote += w;
                 if (wrote == wlen) {
+                    DEBUG("Write %d bytes:", wlen);
+                    hexdump(buf, wlen);
                     cbuffer_read_done(cmdbuf);
                     wrote = 0;
+                    sleep(1);
                 }
             }
         } //else ParseAndExecute(sample, sizeof(sample)); // only for test
@@ -189,10 +192,10 @@ void CCardHost::ParseAndExecute(uint8 *cmd, uint16 length) {
         hexdump(cmd, length);
         HandleQueryUser(data, crc - data);
         break;
-    case CMD_PREPAID:
-        DEBUG("Prepaid command\n");
+    case CMD_RECHARGE:
+        DEBUG("Recharge command\n");
         hexdump(cmd, length);
-        HandlePrepaid(data, crc - data);
+        HandleRecharge(data, crc - data);
         break;
     case CMD_GETTIME:
         DEBUG("Get time command\n");
@@ -209,61 +212,69 @@ void CCardHost::ParseAndExecute(uint8 *cmd, uint16 length) {
 void CCardHost::HandleQueryUser(uint8 * buf, uint16 len) {
     vector<user_t> users;
     int retry = 3;
+    userid_t uid;
+    bzero(uid.x, sizeof(userid_t));
     do {
-        if (CForwarderMonitor::GetInstance()->GetUserList(users))
+        if (IValveMonitorFactory::GetInstance()->GetUserList(users))
             break;
         retry --;
     } while (retry > 0);
     if (retry == 0) {
         DEBUG("Cannot get valve list\n");
-        AckQueryUser(NULL, 0);
+        AckQueryUser(uid, NULL, 0);
         return;
     }
 
     for (vector<user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
-        uint8 * user = iter->uid;
+#ifdef DEBUG_CARDHOST
+        uint8 * user = iter->uid.x;
+#endif
         DEBUG("User ID: %02x %02x %02x %02x %02x %02x %02x %02x\n", user[0], user[1], user[2], user[3], user[4], user[5], user[6], user[7]);
-        if (memcmp(iter->uid, buf, USERID_LEN) == 0) {
+        if (memcmp(iter->uid.x, buf, USERID_LEN) == 0) {
             DEBUG("Found user: %02x %02x %02x %02x %02x %02x %02x %02x\n", user[0], user[1], user[2], user[3], user[4], user[5], user[6], user[7]);
             if (len == USERID_LEN) {
                 // just user id, no more data to send
-                AckQueryUser(buf, 0);
+                AckQueryUser(uid, buf, 0);
             } else {
                 // send the command to valve
-                CForwarderMonitor::GetInstance()->QueryUser(iter->uid, buf + USERID_LEN, len - USERID_LEN);
+                IValveMonitorFactory::GetInstance()->QueryUser(iter->uid, buf + USERID_LEN, len - USERID_LEN);
             }
             return;
         }
     }
 
-    AckQueryUser(NULL, 0);
+    AckQueryUser(uid, NULL, 0);
 }
 
-void CCardHost::HandlePrepaid(uint8 * buf, uint16 len) {
+void CCardHost::HandleRecharge(uint8 * buf, uint16 len) {
     vector<user_t> users;
     int retry = 3;
+    userid_t uid;
+    bzero(uid.x, sizeof(userid_t));
     do {
-        if (CForwarderMonitor::GetInstance()->GetUserList(users))
+        if (IValveMonitorFactory::GetInstance()->GetUserList(users))
             break;
         retry --;
     } while (retry > 0);
     if (retry == 0) {
         DEBUG("Cannot get valve list\n");
-        AckPrepaid(NULL, 0);
+        AckRecharge(uid, NULL, 0);
         return;
     }
 
     for (vector<user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
-        uint8 * user = iter->uid;
+#ifdef DEBUG_CARDHOST
+        uint8 * user = iter->uid.x;
+#endif
         DEBUG("User ID: %02x %02x %02x %02x %02x %02x %02x %02x\n", user[0], user[1], user[2], user[3], user[4], user[5], user[6], user[7]);
-        if (memcmp(iter->uid, buf, USERID_LEN) == 0) {
+        if (memcmp(iter->uid.x, buf, USERID_LEN) == 0) {
             DEBUG("Found user: %02x %02x %02x %02x %02x %02x %02x %02x\n", user[0], user[1], user[2], user[3], user[4], user[5], user[6], user[7]);
             // send the command to valve
-            CForwarderMonitor::GetInstance()->Prepaid(iter->uid, buf + USERID_LEN, len - USERID_LEN);
+            IValveMonitorFactory::GetInstance()->Recharge(iter->uid, buf + USERID_LEN, len - USERID_LEN);
             return;
         }
     }
-    AckPrepaid(NULL, 0);
+    AckRecharge(uid, NULL, 0);
 }
 
 void CCardHost::HandleGetTime(uint8 * data, uint16 len) {
@@ -276,7 +287,7 @@ void CCardHost::HandleGetTime(uint8 * data, uint16 len) {
     }
 }
 
-void CCardHost::AckQueryUser(uint8 * data, uint16 len) {
+void CCardHost::AckQueryUser(userid_t uid, uint8 * data, uint16 len) {
     uint32 ptr = 0;
     uint16 crc = 0, cmdlen = 0;
     uint8 * buf = (uint8 *)cbuffer_write(cmdbuf);
@@ -301,15 +312,14 @@ void CCardHost::AckQueryUser(uint8 * data, uint16 len) {
     buf[ptr] = 0x00; ptr ++;
     if (data == NULL && len == 0) {
         buf[ptr] = 0x81; ptr ++;
+        memcpy(buf + ptr, uid.x, sizeof(userid_t)); ptr += sizeof(userid_t);
     } else {
         buf[ptr] = 0x01; ptr ++;
-        for (uint16 i = 0; i < len; i ++) {
-            buf[ptr + i] = data[i];
-        }
-        ptr += len;
+        memcpy(buf + ptr, uid.x, sizeof(userid_t)); ptr += sizeof(userid_t);
+        memcpy(buf + ptr, data, len); ptr += len;
     }
     // set cmd length
-    cmdlen = 1 + len + 2; // status + data + crc
+    cmdlen = 1 + sizeof(userid_t) + len + 2; // status + uid + data + crc
     if (cmdlen < 255) {
         buf[1] = cmdlen & 0xFF;
     } else {
@@ -325,12 +335,12 @@ void CCardHost::AckQueryUser(uint8 * data, uint16 len) {
     hexdump(buf, ptr);
 }
 
-void CCardHost::AckPrepaid(uint8 * data, uint16 len) {
+void CCardHost::AckRecharge(userid_t uid, uint8 * data, uint16 len) {
     uint32 ptr = 0;
     uint16 crc = 0, cmdlen = 0;
     uint8 * buf = (uint8 *)cbuffer_write(cmdbuf);
     if (buf == NULL) {
-        DEBUG("No enough memory to ack prepaid command\n");
+        DEBUG("No enough memory to ack recharge command\n");
         return;
     }
     buf[ptr] = 0xAA;
@@ -350,15 +360,14 @@ void CCardHost::AckPrepaid(uint8 * data, uint16 len) {
     buf[ptr] = 0x00; ptr ++;
     if (len == 0) {
         buf[ptr] = 0x82; ptr ++;
+        memcpy(buf + ptr, uid.x, sizeof(userid_t)); ptr += sizeof(userid_t);
     } else {
         buf[ptr] = 0x02; ptr ++;
-        for (uint16 i = 0; i < len; i ++) {
-            buf[ptr + i] = data[i];
-        }
-        ptr += len;
+        memcpy(buf + ptr, uid.x, sizeof(userid_t)); ptr += sizeof(userid_t);
+        memcpy(buf + ptr, data, len); ptr += len;
     }
     // set cmd length
-    cmdlen = 1 + len + 2; // status + data + crc
+    cmdlen = 1 + sizeof(userid_t) + len + 2; // status + uid + data + crc
     if (cmdlen < 255) {
         buf[1] = cmdlen & 0xFF;
     } else {
@@ -380,7 +389,7 @@ void CCardHost::AckTimeOrRemove(uint8 * data, uint16 len) {
     uint8 * buf = (uint8 *)cbuffer_write(cmdbuf);
 
     if (buf == NULL) {
-        DEBUG("No enough memory to ack prepaid command\n");
+        DEBUG("No enough memory to ack recharge command\n");
         return;
     }
 

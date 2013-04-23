@@ -278,7 +278,7 @@ void CHeatMonitor::SendHeatData()
    m_HeatLock.UnLock();
 }
 
-bool CHeatMonitor::GetStatus(StatusE& Status)
+bool CHeatMonitor::GetStatus(Status& Status)
 {
    DEBUG("CHeatMonitor::GetStatus()\n");
    bool Ret = false;

@@ -83,8 +83,8 @@ class CPortal:public IThread
       static CLock m_PortalLock;
 
    public:
-      bool GetStatus(StatusE& Status);
-      bool GetGPRSStatus(StatusE& Status);
+      bool GetStatus(Status& Status);
+      bool GetGPRSStatus(Status& Status);
       bool GetGPRSConnected(bool& IsConnected);
       bool GetGPRSSignalIntesity(uint8& nSignalIntesity);
       void InsertGeneralHeatData(uint8* pHeatData, uint32 HeatDataLen);

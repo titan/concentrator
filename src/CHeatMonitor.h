@@ -64,7 +64,7 @@ class CHeatMonitor:public IThread
   public:
     void AddGeneralHeat(uint8* pGeneralHeatMacAddress, uint32 Len);
     void SendHeatData();
-    bool GetStatus(StatusE& Status);
+    bool GetStatus(Status& Status);
     bool GetHeatNodeInfoList(HeatNodeInfoListT& HeatNodeInfoList);
 
   private:

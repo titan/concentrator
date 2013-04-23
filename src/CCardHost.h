@@ -4,13 +4,13 @@
 #include "cbuffer.h"
 #include "CLock.h"
 
-class CCardHost:public IThread {
+class CCardHost: public IThread {
 
 public:
     static CCardHost * GetInstance();
     void SetCom(int com) {this->com = com;};
-    void AckQueryUser(uint8 * data, uint16 len); // called by CForwarderMonitor
-    void AckPrepaid(uint8 * data, uint16 len); // called by CForwarderMonitor
+    void AckQueryUser(userid_t uid, uint8 * data, uint16 len); // called by IValveMonitor
+    void AckRecharge(userid_t uid, uint8 * data, uint16 len); // called by IValveMonitor
     void AckTimeOrRemove(uint8 * data, uint16 len);
 
 private:
@@ -19,7 +19,7 @@ private:
     virtual uint32 Run();
     void ParseAndExecute(uint8 * cmd, uint16 len);
     void HandleQueryUser(uint8 * buf, uint16 len);
-    void HandlePrepaid(uint8 * buf, uint16 len);
+    void HandleRecharge(uint8 * buf, uint16 len);
     void HandleGetTime(uint8 * buf, uint16 len);
 
 protected:

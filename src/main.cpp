@@ -17,6 +17,7 @@
 #include"CINI.h"
 #include"Utils.h"
 #include "CCardHost.h"
+#include "CValveMonitor.h"
 
 #ifdef DEBUG_MAIN
 #define DEBUG(...) do {printf("%s::%s----", __FILE__, __func__);printf(__VA_ARGS__);} while(false)
@@ -61,10 +62,26 @@ static void StartForwarder();
 static void StartGeneralHeat();
 static void StartPortal();
 static void StartCardHost();
+static void StartValveMonitor();
+
+bool wireless = true;
+
 int main()
 {
    SetLight(LIGHT_WARNING, false);//turn off warning light
-   StartForwarder();
+   if (access("config.ini", F_OK) == -1) {
+       wireless = true;
+       StartForwarder();
+   } else {
+       CINI ini("config.ini");
+       if (ini.GetValueBool("DEFAULT", "WIRELESS", true)) {
+           wireless = true;
+           StartForwarder();
+       } else {
+           wireless = false;
+           StartValveMonitor();
+       }
+   }
    StartGeneralHeat();
    StartPortal();
    StartCardHost();
@@ -127,7 +144,7 @@ void StartForwarder()
    DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
    pForwarderCom->SetParity( KeyValue.c_str() );
 
-   CForwarderMonitor::GetInstance()->SetForwarderType(FORWARDER_TYPE_TEMPERATURE);
+   CForwarderMonitor::GetInstance()->SetValveDataType(VALVE_DATA_TYPE_TEMPERATURE);
    CForwarderMonitor::GetInstance()->SetCom(pForwarderCom);
    for(uint32 i = 0; i < MAX_FORWARDER_COUNT; i++)
    {
@@ -157,6 +174,7 @@ void StartForwarder()
 
    CForwarderMonitor::GetInstance()->Start();
 }
+
 
 void StartGeneralHeat()
 {
@@ -261,7 +279,12 @@ void StartPortal()
    CPortal::GetInstance()->Start();
 }
 
+#ifdef SECKEY
+#undef SECKEY
 #define SECKEY "HOST"
+#else
+#define SECKEY "HOST"
+#endif
 void StartCardHost() {
     if (access("cardhost_cfg.ini", F_OK) == -1) { DEBUG("Missing cardhost_cfg.ini\n"); return;}
     CINI ini("cardhost_cfg.ini");
@@ -277,4 +300,33 @@ void StartCardHost() {
     DEBUG("Initilize card host servcie with %s(%s)\n", name.c_str(), cfg.c_str());
     CCardHost::GetInstance()->SetCom(com);
     CCardHost::GetInstance()->Start();
+}
+
+#ifdef SECKEY
+#undef SECKEY
+#define SECKEY "VALVE"
+#else
+#define SECKEY "VALVE"
+#endif
+void StartValveMonitor() {
+    if (access("valve_cfg.ini", F_OK) == -1) { DEBUG("Missing valve_cfg.ini\n"); return;}
+    CINI ini("valve_cfg.ini");
+    string name = ini.GetValueString(SECKEY, "DEVICE", "/dev/ttyS5");
+    TrimInvalidChar(name);
+    string cfg = ini.GetValueString(SECKEY, "DEV_CONFIG", "2400,8,1,N");
+    int com = OpenCom((char *)name.c_str(), (char *)cfg.c_str(), O_RDWR | O_NOCTTY);
+    if (com == -1) {
+        DEBUG("Initilize %s with %s failed!\n", name.c_str(), cfg.c_str());
+        return;
+    }
+    DEBUG("Initilize valve monitor servcie with %s(%s)\n", name.c_str(), cfg.c_str());
+
+    CValveMonitor::GetInstance()->SetCom(com);
+    CValveMonitor::GetInstance()->SetValveDataType(VALVE_DATA_TYPE_TEMPERATURE);
+
+    int startTime = ini.GetValueInt(SECKEY, "START", 12);
+    int interval = ini.GetValueInt(SECKEY, "INTERVAL", 30);
+
+    CValveMonitor::GetInstance()->Init(startTime, interval);
+    CValveMonitor::GetInstance()->Start();
 }
