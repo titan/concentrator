@@ -39,12 +39,12 @@ typedef struct {
     uint32 mac;
     userid_t uid;
     uint8 type;
-    uint8 heatAddr[7];
+    uint8 addr[7];
     uint8 inTemp[3];
     uint8 outTemp[3];
     uint8 totalFlow[5];
     uint8 totalHeat[5];
-    uint8 totalRunningTime[3];
+    uint8 workTime[3];
     uint32 timestamp;
 } __attribute__ ((packed, aligned(1))) valve_heat_t;
 
@@ -80,6 +80,8 @@ private:
     void GetTimeData();
     void ParseTimeData(uint32 vmac, uint8 * data, uint16 len);
     void SendValveData();
+    void GetHeatData();
+    void ParseHeatData(uint32 vmac, uint8 * data, uint16 len);
 
     static CValveMonitor * instance;
     int com;

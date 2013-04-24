@@ -129,24 +129,6 @@ enum CommandTypeE
    COMMAND_A3=0xA3,
    COMMAND_MAX//never delete this
 };
-enum ValveCtrlTypeE
-{
-   VALVE_CTRL_NULL=0x00,
-   VALVE_CTRL_SET_TIME=0x01,
-   VALVE_CTRL_GET_TIME=0x02,
-   VALVE_CTRL_GET_VALVE_RECORD=0x03,
-   VALVE_CTRL_GET_CHARGE_DATA=0x04,
-   VALVE_CTRL_GET_CONSUME_DATA=0x05,
-   VALVE_CTRL_GET_TEMPERATURE=0x06,
-   VALVE_CTRL_SET_HEAT_TIME=0x07,
-   VALVE_CTRL_CONFIG=0x0A,
-   VALVE_CTRL_GET_RUNNING_TIME_INFO=0x08,
-   VALVE_CTRL_SWITCH_VALVE=0x0E,
-   VALVE_CTRL_GET_PUNCTUAL_DATA=0x17,
-   VALVE_CTRL_QUERY_USER=0x18,
-   VALVE_CTRL_RECHARGE=0x19,
-   VALVE_CTRL_MAX//never delete this
-};
 const uint32 MAX_A1_RESPONSE_LEN = 1024;
 typedef map<uint16, ValveElemT> ValveListT;//uint16:valve address
 struct ForwarderElementT
@@ -240,6 +222,7 @@ class CForwarderMonitor:public IThread, public IValveMonitor
     void GetValveUserID();
     void GetPunctualData();
     void SendCardHostCommand();
+    void GetHeatData();
   private:
     uint8 SendValveCtrlOneByOne(const uint8* pValveCtrl, const uint32 ValveCtrlLen);//return how many valves succeed
     void SendA1();
@@ -257,7 +240,8 @@ class CForwarderMonitor:public IThread, public IValveMonitor
   private:
     bool ParseData(const uint8* pReceiveData, uint32 ReceiveDataLen, const uint8* pSendData, uint32 SendDataLen);
     bool ParseA1Ack(const uint8* pReceiveData, uint32 ReceiveDataLen, uint32 SendForwarderID);
-    void UpdateItem(uint32 ForwarderID, uint16 ValveID, const uint8* pData, uint32 DataLen, ValveTemperatureTypeE ValveTemperatureType);
+    void UpdateTemperatureItem(uint32 ForwarderID, uint16 ValveID, const uint8* pData, uint32 DataLen, ValveTemperatureTypeE ValveTemperatureType);
+    void UpdateHeatItem(uint32 fid, uint16 vid, const uint8 * data, uint32 len, ValveHeatTypeE type);
 
   protected:
     CSerialComm* m_pCommController;

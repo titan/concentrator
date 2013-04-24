@@ -229,6 +229,9 @@ void CValveMonitor::ParseAck(uint8 * ack, uint16 len) {
     case VALVE_GET_TIME_DATA:
         ParseTimeData(mac, data, dlen);
         break;
+    case VALVE_GET_HEAT_DATA:
+        ParseHeatData(mac, data, dlen);
+        break;
     case VALVE_GET_PUNCTUAL_DATA:
         ParsePunctualData(mac, data, dlen);
         break;
@@ -327,22 +330,24 @@ void CValveMonitor::ParsePunctualData(uint32 vmac, uint8 * data, uint16 len) {
         records[vmac].status = data[ptr] - 1; ptr ++;
     }
 
-    if (valveTemperatures.count(vmac) == 0) {
-        valve_temperature_t tmp;
-        tmp.mac = vmac;
-        tmp.uid = uid;
-        tmp.indoorTemp = avgTemp;
-        tmp.setTemp = avgSetTemp;
-        tmp.openTime = openTime;
-        tmp.timestamp = utc;
-        valveTemperatures[vmac] = tmp;
-    } else {
-        valveTemperatures[vmac].mac = vmac;
-        valveTemperatures[vmac].uid = uid;
-        valveTemperatures[vmac].indoorTemp = avgTemp;
-        valveTemperatures[vmac].setTemp = avgSetTemp;
-        valveTemperatures[vmac].openTime = openTime;
-        valveTemperatures[vmac].timestamp = utc;
+    if (valveDataType == VALVE_DATA_TYPE_TEMPERATURE) {
+        if (valveTemperatures.count(vmac) == 0) {
+            valve_temperature_t tmp;
+            tmp.mac = vmac;
+            tmp.uid = uid;
+            tmp.indoorTemp = avgTemp;
+            tmp.setTemp = avgSetTemp;
+            tmp.openTime = openTime;
+            tmp.timestamp = utc;
+            valveTemperatures[vmac] = tmp;
+        } else {
+            valveTemperatures[vmac].mac = vmac;
+            valveTemperatures[vmac].uid = uid;
+            valveTemperatures[vmac].indoorTemp = avgTemp;
+            valveTemperatures[vmac].setTemp = avgSetTemp;
+            valveTemperatures[vmac].openTime = openTime;
+            valveTemperatures[vmac].timestamp = utc;
+        }
     }
 }
 
@@ -592,12 +597,132 @@ void CValveMonitor::ParseTimeData(uint32 vmac, uint8 * data, uint16 len) {
 void CValveMonitor::SendValveData() {
     uint8 buf[PKTLEN];
     uint16 ptr = 0;
-    for (map<uint32, valve_temperature_t>::iterator iter = valveTemperatures.begin(); iter != valveTemperatures.end(); iter ++) {
-        bzero(buf, PKTLEN);
-        ptr = 0;
-        buf[ptr] = VALVE_PACKET_FLAG; ptr ++;
-        buf[ptr] = 1 + 1 + sizeof(valve_temperature_t); ptr ++;
-        memcpy(buf + ptr, &iter->second, sizeof(valve_temperature_t)); ptr += sizeof(valve_temperature_t);
-        CPortal::GetInstance()->InsertForwarderData(buf, ptr);
+    if (valveDataType == VALVE_DATA_TYPE_TEMPERATURE) {
+        for (map<uint32, valve_temperature_t>::iterator iter = valveTemperatures.begin(); iter != valveTemperatures.end(); iter ++) {
+            bzero(buf, PKTLEN);
+            ptr = 0;
+            buf[ptr] = VALVE_PACKET_FLAG; ptr ++;
+            buf[ptr] = 1 + 1 + sizeof(valve_temperature_t); ptr ++;
+            memcpy(buf + ptr, &iter->second, sizeof(valve_temperature_t)); ptr += sizeof(valve_temperature_t);
+            CPortal::GetInstance()->InsertForwarderData(buf, ptr);
+        }
+    } else {
+        for (map<uint32, valve_heat_t>::iterator iter = valveHeats.begin(); iter != valveHeats.end(); iter ++) {
+            bzero(buf, PKTLEN);
+            ptr = 0;
+            buf[ptr] = VALVE_PACKET_FLAG; ptr ++;
+            buf[ptr] = 1 + 1 + sizeof(valve_heat_t); ptr ++;
+            memcpy(buf + ptr, &iter->second, sizeof(valve_heat_t)); ptr += sizeof(valve_heat_t);
+            CPortal::GetInstance()->InsertForwarderData(buf, ptr);
+        }
     }
+}
+
+void CValveMonitor::GetHeatData() {
+    for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+        txlock.Lock();
+        uint8 * buf = (uint8 *) cbuffer_write(tx);
+        if (buf != NULL) {
+            uint16 ptr = 0;
+            memcpy(buf, &iter->second.vmac, sizeof(uint32)); ptr += sizeof(uint32);
+            buf[ptr] = PORT; ptr ++;
+            buf[ptr] = RAND; ptr ++;
+            buf[ptr] = 0x11; ptr ++; // len
+            buf[ptr] = VALVE_GET_HEAT_DATA; ptr ++;
+            buf[ptr] = 0x68; ptr ++;
+            buf[ptr] = 0x20; ptr ++;
+            buf[ptr] = 0xAA; ptr ++;
+            buf[ptr] = 0xAA; ptr ++;
+            buf[ptr] = 0xAA; ptr ++;
+            buf[ptr] = 0xAA; ptr ++;
+            buf[ptr] = 0xAA; ptr ++;
+            buf[ptr] = 0xAA; ptr ++;
+            buf[ptr] = 0xAA; ptr ++;
+            buf[ptr] = 0x01; ptr ++;
+            buf[ptr] = 0x03; ptr ++;
+            buf[ptr] = 0x90; ptr ++;
+            buf[ptr] = 0x1F; ptr ++;
+            buf[ptr] = 0x0B; ptr ++;
+            buf[ptr] = 0x19; ptr ++;
+            buf[ptr] = 0x16; ptr ++;
+            cbuffer_write_done(tx);
+        }
+        txlock.UnLock();
+    }
+}
+
+void CValveMonitor::ParseHeatData(uint32 vmac, uint8 * data, uint16 len) {
+    for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+        if (iter->second.vmac == vmac) {
+            uint16 ptr = 0;
+            while (ptr < len && data[ptr] != 0x68) ptr ++; // skip preface
+            if (ptr == len) {
+                DEBUG("Invalid response from heat device\n");
+                return;
+            }
+
+            ptr ++; // skip frame start flag
+
+            uint8 type = data[ptr]; ptr ++;
+            uint8 addr[7];
+            memcpy(addr, data + ptr, 7); ptr += 7;
+            uint8 code = data[ptr]; ptr ++;
+            uint8 dlen = data[ptr]; ptr ++;
+            uint16 identifier;
+            memcpy(&identifier, data + ptr, 2); ptr += 2;
+            uint8 sn = data[ptr]; ptr ++;
+            uint8 dayHeat[5], heat[5], heatPower[5], flow[5], totalFlow[5];
+            memcpy(dayHeat, data + ptr, 5); ptr += 5;
+            memcpy(heat, data + ptr, 5); ptr += 5;
+            memcpy(heatPower, data + ptr, 5); ptr += 5;
+            memcpy(flow, data + ptr, 5); ptr += 5;
+            memcpy(totalFlow, data + ptr, 5); ptr += 5;
+            uint8 inTemp[3], outTemp[3], workTime[3];
+            memcpy(inTemp, data + ptr, 3); ptr += 3;
+            memcpy(outTemp, data + ptr, 3); ptr += 3;
+            memcpy(workTime, data + ptr, 3); ptr += 3;
+
+            // date
+            uint16 year = ((data[ptr] & 0xF0) >> 4) * 10 + (data[ptr] & 0x0F); ptr ++;
+            year = year * 100 + ((data[ptr] & 0xF0) >> 4) * 10 + (data[ptr] & 0x0F); ptr ++;
+            uint8 month = ((data[ptr] & 0xF0) >> 4) * 10 + (data[ptr] & 0x0F); ptr ++;
+            uint8 day = ((data[ptr] & 0xF0) >> 4) * 10 + (data[ptr] & 0x0F); ptr ++;
+            uint8 hour = ((data[ptr] & 0xF0) >> 4) * 10 + (data[ptr] & 0x0F); ptr ++;
+            uint8 minute = ((data[ptr] & 0xF0) >> 4) * 10 + (data[ptr] & 0x0F); ptr ++;
+            uint8 second = ((data[ptr] & 0xF0) >> 4) * 10 + (data[ptr] & 0x0F); ptr ++;
+            uint32 utc = DateTime2TimeStamp(year, month, day, hour, minute, second);
+
+            // device status
+            uint16 status;
+            memcpy(&status, data + ptr, 2); ptr += 2;
+
+            if (valveHeats.count(vmac) == 0) {
+                valve_heat_t tmp;
+                tmp.mac = vmac;
+                tmp.uid = iter->first;
+                tmp.type = type;
+                memcpy(tmp.addr, addr, 7);
+                memcpy(tmp.inTemp, inTemp, 3);
+                memcpy(tmp.outTemp, outTemp, 3);
+                memcpy(tmp.totalFlow, totalFlow, 5);
+                memcpy(tmp.totalHeat, heat, 5);
+                memcpy(tmp.workTime, workTime, 3);
+                tmp.timestamp = utc;
+                valveHeats[vmac] = tmp;
+            } else {
+                valveHeats[vmac].mac = vmac;
+                valveHeats[vmac].uid = iter->first;
+                valveHeats[vmac].type = type;
+                memcpy(valveHeats[vmac].addr, addr, 7);
+                memcpy(valveHeats[vmac].inTemp, inTemp, 3);
+                memcpy(valveHeats[vmac].outTemp, outTemp, 3);
+                memcpy(valveHeats[vmac].totalFlow, totalFlow, 5);
+                memcpy(valveHeats[vmac].totalHeat, heat, 5);
+                memcpy(valveHeats[vmac].workTime, workTime, 3);
+                valveHeats[vmac].timestamp = utc;
+            }
+            return;
+        }
+    }
+    DEBUG("No valve mac(%02x %02x %02x %02x) found\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF);
 }
