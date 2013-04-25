@@ -9,11 +9,6 @@ typedef struct {
     int pfd; // pointer file
 } LOGQUEUE;
 
-typedef struct {
-    off_t offset;
-    size_t length;
-} LQIDX;
-
 LOGQUEUE * lqopen(const char * name);
 void lqclose(LOGQUEUE * q);
 int lqempty(LOGQUEUE * q);

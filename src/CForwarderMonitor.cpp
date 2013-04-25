@@ -772,7 +772,7 @@ bool CForwarderMonitor::ParseData(const uint8* pReceiveData, uint32 ReceiveDataL
                     Pos += sizeof(m_DraftForwarderMap[ForwarderID].ValveList[ValveID].ValveData.ValveHeat.MacAddress);
                 }
                 memcpy(ChargePacketData+Pos, pReceiveData+A3_VALVE_VALUE_POS, FORWARDER_CHARGE_PACKET_LEN-Pos);
-                CPortal::GetInstance()->InsertForwarderChargeData(ChargePacketData, sizeof(ChargePacketData));
+                CPortal::GetInstance()->InsertChargeData(ChargePacketData, sizeof(ChargePacketData));
             }
             return true;
         }
@@ -842,7 +842,7 @@ bool CForwarderMonitor::ParseData(const uint8* pReceiveData, uint32 ReceiveDataL
                 DateTimeStr[3] = pReceiveData[A3_VALVE_VALUE_POS+CONSUME_DATA_DATETIME_OFFSET+3];//dd
                 uint32 DateTime = DateTime2TimeStamp(DateTimeStr, sizeof(DateTimeStr));
                 memcpy(ConsumePacketData+Pos, &DateTime, sizeof(DateTime));
-                CPortal::GetInstance()->InsertForwarderConsumeData(ConsumePacketData, sizeof(ConsumePacketData));
+                CPortal::GetInstance()->InsertConsumeData(ConsumePacketData, sizeof(ConsumePacketData));
             }
             return true;
         }
@@ -1207,7 +1207,7 @@ void CForwarderMonitor::SendForwarderData()
             memcpy(ForwarderData+2, ValveIter->second.ValveData.ValveTemperature.MacAddress, ForwarderPacketLen);
             DEBUG("ForwarderID=0x%08x, ValveID=0x%04x\n", ForwarderIter->first, ValveIter->first);
             hexdump(ForwarderData, sizeof(ForwarderData));
-            CPortal::GetInstance()->InsertForwarderData(ForwarderData, sizeof(ForwarderData));
+            CPortal::GetInstance()->InsertValveData(ForwarderData, sizeof(ForwarderData));
          }
       }
       m_ForwarderLock.UnLock();
@@ -1232,7 +1232,7 @@ void CForwarderMonitor::SendForwarderData()
                continue;
             }
             memcpy(ForwarderData+2, ValveIter->second.ValveData.ValveHeat.MacAddress, ForwarderPacketLen);
-            CPortal::GetInstance()->InsertForwarderData(ForwarderData, sizeof(ForwarderData));
+            CPortal::GetInstance()->InsertValveData(ForwarderData, sizeof(ForwarderData));
          }
       }
       m_ForwarderLock.UnLock();

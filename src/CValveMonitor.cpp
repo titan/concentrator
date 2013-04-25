@@ -380,7 +380,7 @@ void CValveMonitor::ParseRechargeData(uint32 vmac, uint8 * data, uint16 len) {
             memcpy(buf + ptr, iter->first.x, sizeof(userid_t)); ptr += sizeof(userid_t);
             * (uint32 *)(buf + ptr) = vmac; ptr += sizeof(uint32);
             memcpy(buf + ptr, data, len); ptr += len;
-            CPortal::GetInstance()->InsertForwarderChargeData(buf, ptr);
+            CPortal::GetInstance()->InsertChargeData(buf, ptr);
             return;
         }
     }
@@ -425,7 +425,7 @@ void CValveMonitor::ParseConsumeData(uint32 vmac, uint8 * data, uint16 len) {
             uint32 timestamp = DateTime2TimeStamp(tmp, 7);
             memcpy(buf + ptr, &timestamp, sizeof(uint32)); ptr += sizeof(uint32);
 
-            CPortal::GetInstance()->InsertForwarderConsumeData(buf, ptr);
+            CPortal::GetInstance()->InsertConsumeData(buf, ptr);
             return;
         }
     }
@@ -604,7 +604,7 @@ void CValveMonitor::SendValveData() {
             buf[ptr] = VALVE_PACKET_FLAG; ptr ++;
             buf[ptr] = 1 + 1 + sizeof(valve_temperature_t); ptr ++;
             memcpy(buf + ptr, &iter->second, sizeof(valve_temperature_t)); ptr += sizeof(valve_temperature_t);
-            CPortal::GetInstance()->InsertForwarderData(buf, ptr);
+            CPortal::GetInstance()->InsertValveData(buf, ptr);
         }
     } else {
         for (map<uint32, valve_heat_t>::iterator iter = valveHeats.begin(); iter != valveHeats.end(); iter ++) {
@@ -613,7 +613,7 @@ void CValveMonitor::SendValveData() {
             buf[ptr] = VALVE_PACKET_FLAG; ptr ++;
             buf[ptr] = 1 + 1 + sizeof(valve_heat_t); ptr ++;
             memcpy(buf + ptr, &iter->second, sizeof(valve_heat_t)); ptr += sizeof(valve_heat_t);
-            CPortal::GetInstance()->InsertForwarderData(buf, ptr);
+            CPortal::GetInstance()->InsertValveData(buf, ptr);
         }
     }
 }

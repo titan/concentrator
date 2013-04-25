@@ -6,6 +6,11 @@
 #include <unistd.h>
 #include "logqueue.h"
 
+typedef struct {
+    off_t offset;
+    size_t length;
+} LQIDX;
+
 LOGQUEUE * lqopen(const char * name) {
     char df[1024], idf[1204], pf[1024];
     LOGQUEUE * q = (LOGQUEUE *) malloc(sizeof(LOGQUEUE));

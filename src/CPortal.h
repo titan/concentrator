@@ -8,6 +8,7 @@
 #include"CHeatMonitor.h"
 #include"CGprs.h"
 #include"CTimer.h"
+#include "logqueue.h"
 using namespace std;
 
 enum FunctionCodeE
@@ -53,21 +54,8 @@ struct PacketDataT
 };
 typedef map<uint16, PacketDataT> PacketMapT;
 typedef list<PacketDataT> PacketListT;
-/*******************General heat**************************************/
-struct GeneralHeatPacketT
-{
-   uint8 HeatData[GENERAL_HEAT_DATA_PACKET_LEN];
-};
-typedef list<GeneralHeatPacketT> GeneralHeatPacketListT;
-/*********************************************************/
 /*******************Forwarder**************************************/
 const uint32 MAX_FORWARDER_DATA_LEN = FORWARDER_TYPE_HEAT_DATA_LEN>FORWARDER_TYPE_TEMPERATURE_DATA_LEN? FORWARDER_TYPE_HEAT_DATA_LEN:FORWARDER_TYPE_TEMPERATURE_DATA_LEN;
-struct ForwarderPacketT
-{
-   uint32 ForwarderDataLen;
-   uint8  ForwarderData[MAX_FORWARDER_DATA_LEN];
-};
-typedef list<ForwarderPacketT> ForwarderPacketListT;
 /******************************************************************/
 
 class CPortal:public IThread
@@ -80,6 +68,12 @@ class CPortal:public IThread
    private:
       static CPortal* m_Instance;
       CPortal();
+      ~CPortal() {
+          lqclose(heatQueue);
+          lqclose(valveQueue);
+          lqclose(chargeQueue);
+          lqclose(consumeQueue);
+      }
       static CLock m_PortalLock;
 
    public:
@@ -87,27 +81,32 @@ class CPortal:public IThread
       bool GetGPRSStatus(Status& Status);
       bool GetGPRSConnected(bool& IsConnected);
       bool GetGPRSSignalIntesity(uint8& nSignalIntesity);
-      void InsertGeneralHeatData(uint8* pHeatData, uint32 HeatDataLen);
-      void InsertForwarderData(uint8* pForwarderData, uint32 ForwarderDataLen);
+      void InsertGeneralHeatData(uint8 * data, uint32 len);
+      void InsertValveData(uint8 * data, uint32 len);
+      void InsertChargeData(uint8 * data, uint32 len);
+      void InsertConsumeData(uint8 * data, uint32 len);
 
    private:
       void GetGPRSInfoTask();
       void CheckNewVersion();
-   private:
+
       uint8 m_nSignalIntesity;
-   private:
       bool m_GetGPRSInforTaskActive;
       bool m_IsGPRSInfoReady;
       CTimer m_GPRSInfoTimer;
 
-      //General heat data
-   private:
       void SendGeneralHeatData();
-      GeneralHeatPacketListT m_HeatPacketList;
-      //Forward data
-   private:
-      void SendForwarderData();
-      ForwarderPacketListT m_ForwarderPacketList;
+      void SendValveData();
+      void SendChargeData();
+      void SendConsumeData();
+      LOGQUEUE * heatQueue;
+      LOGQUEUE * valveQueue;
+      LOGQUEUE * chargeQueue;
+      LOGQUEUE * consumeQueue;
+      CLock heatQueueLock;
+      CLock valveQueueLock;
+      CLock chargeQueueLock;
+      CLock consumeQueueLock;
 
    public:
       bool CopyLogData();
@@ -117,11 +116,6 @@ class CPortal:public IThread
    private:
       CLock m_SentLogLock;
       FILE* m_SentLog;
-   private:
-      void WriteNotSentData(const uint8* pData, uint32 DataLen);
-      void ReSendNotSentData();
-   private:
-      PacketListT m_NotSentPacketList;
 
    private:
       uint16 m_SerialIndex;
@@ -146,28 +140,6 @@ class CPortal:public IThread
       void HeartBeat();
    private:
       CRepeatTimer m_HeartBeatTimer;
-
-   public:
-      void InsertForwarderChargeData(uint8* pChargePacket, uint32 ChargePacketLen);
-   private:
-      void SendForwarderChargeData();
-   private:
-      struct ChargePacketT
-      {
-         uint8 ChargePacket[FORWARDER_CHARGE_PACKET_LEN];
-      };
-      list<ChargePacketT> m_ChargePacketList;
-
-   public:
-      void InsertForwarderConsumeData(uint8* pConsumePacket, uint32 ConsumePacketLen);
-   private:
-      void SendForwarderConsumeData();
-   private:
-      struct ConsumePacketT
-      {
-         uint8 ConsumePacket[FORWARDER_CONSUME_PACKET_LEN];
-      };
-      list<ConsumePacketT> m_ConsumePacketList;
 
    private:
       virtual uint32 Run();
