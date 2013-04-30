@@ -46,6 +46,13 @@ const uint8 VALVE_CTRL_RANDAM = 0xFB;
 const uint8 VALVE_CTRL_LEN_OFFSET = 2;
 const uint8 VALVE_CTRL_COMMAND_OFFSET = 3;
 /*************************************Utils function******************************************************/
+
+void fuserseq(void * key, size_t klen, void * data, size_t dlen, void * params, size_t plen) {
+    vector<user_t> * users = (vector<user_t> *) params;
+    user_t * user = (user_t *) data;
+    (* users).push_back(* user);
+}
+
 static bool IsFixTimeCommand(const uint8* pValveCtrl, const uint32 ValveCtrlLen)
 {
    if( (NULL == pValveCtrl) || (0 == ValveCtrlLen) )
@@ -101,18 +108,7 @@ void CForwarderMonitor::SetCom(CSerialComm* pCom)
 uint32 CForwarderMonitor::Run()
 {
     uint32 i = 0;
-    LOGDB * db = dbopen((char *)"users", DB_RDONLY, sizeof(user_t));
-    if (db != NULL) {
-        user_t user;
-        size_t r;
-        do {
-            r = dbseq(db, &user, R_NEXT);
-            if (r > 0) {
-                users.push_back(user);
-            }
-        } while (r > 0);
-        dbclose(db);
-    }
+    LoadUsers();
     while(1) {
         DEBUG("begin\n");
         ResetForwarderData();
@@ -126,7 +122,7 @@ uint32 CForwarderMonitor::Run()
             // PrintUserID();
         }
         if (m_IsNewUserIDFound)
-            SaveForwarderMacUserIDTask();
+            SaveUsers();
         if( m_RepeatTimer.Done() ) {
             m_ForwarderLock.Lock();
 
@@ -1322,75 +1318,6 @@ void CForwarderMonitor::GetForwarderInfoTask()
    m_ForwarderLock.UnLock();
 }
 
-void CForwarderMonitor::SaveForwarderMacUserIDTask() {
-    DEBUG("m_IsNewUserIDFound=%d\n", m_IsNewUserIDFound);
-    LOGDB * db = dbopen("users", DB_NEW, sizeof(user_t));
-    if (db == NULL) return;
-    users_lock.Lock();
-    users.clear();
-    for (ForwarderMapT::iterator forwarderIter = m_DraftForwarderMap.begin(); forwarderIter != m_DraftForwarderMap.end(); forwarderIter++) {
-        for (ValveListT::iterator valveIter = forwarderIter->second.ValveList.begin(); valveIter != forwarderIter->second.ValveList.end(); valveIter++) {
-            if (0 == memcmp(INVALID_USERID, valveIter->second.ValveData.ValveTemperature.UserID, sizeof(valveIter->second.ValveData.ValveTemperature.UserID))) {
-                continue;
-            }
-            user_t user;
-            memcpy(user.uid.x, valveIter->second.ValveData.ValveTemperature.UserID, USERID_LEN);
-            user.fid = forwarderIter->first;
-            user.vmac = valveIter->first;
-            dbput(db, &user, sizeof(user_t));
-            users.push_back(user);
-        }
-    }
-    users_lock.UnLock();
-    dbclose(db);
-    m_IsNewUserIDFound = false;
-}
-
-/*
-void CForwarderMonitor::SaveForwarderMacUserIDTask()
-{
-   DEBUG("m_IsNewUserIDFound=%d\n", m_IsNewUserIDFound);
-   if(false == m_IsNewUserIDFound)
-   {
-      return;
-   }
-
-   const char* MAC_USERID_FILE_NAME = "Mac_UserID.txt";
-   FILE* pMacUserIDFile = fopen(MAC_USERID_FILE_NAME, "w+");
-   if(NULL == pMacUserIDFile)
-   {
-      return;
-   }
-   for(ForwarderMapT::iterator ForwarderIter = m_DraftForwarderMap.begin(); ForwarderIter != m_DraftForwarderMap.end(); ForwarderIter++)
-   {
-      for(ValveListT::iterator ValveIter = ForwarderIter->second.ValveList.begin(); ValveIter != ForwarderIter->second.ValveList.end(); ValveIter++)
-      {
-         if( 0 == memcmp(INVALID_USERID, ValveIter->second.ValveData.ValveTemperature.UserID, sizeof(ValveIter->second.ValveData.ValveTemperature.UserID) ) )
-         {
-            continue;
-         }
-         char Temp[256] = {0};
-         strcpy(Temp, "0x");
-         uint32 i = 0;
-         for( ;i < MACADDRESS_LEN; i++)
-         {
-            sprintf(Temp+strlen(Temp), "%02X", ValveIter->second.ValveData.ValveTemperature.MacAddress[i]);
-         }
-         sprintf(Temp+strlen(Temp), ":0x");
-         for( i=0 ;i < USERID_LEN; i++)
-         {
-            sprintf(Temp+strlen(Temp), "%02X", ValveIter->second.ValveData.ValveTemperature.UserID[i]);
-         }
-         Temp[strlen(Temp)] = '\r';
-         Temp[strlen(Temp)] = '\n';
-         fputs(Temp, pMacUserIDFile);
-      }
-   }
-   fclose(pMacUserIDFile);
-   m_IsNewUserIDFound = false;
-}
-*/
-
 uint16 CForwarderMonitor::ConfigValve(ValveCtrlType ValveCtrl, uint8* pConfigStr, uint16 ConfigStrLen)
 {
    uint16 ValveConfigOKCount = 0;
@@ -1561,4 +1488,37 @@ void CForwarderMonitor::GetHeatData() {
     }
     const uint8 cmd[] = {VALVE_CTRL_FLAG, VALVE_CTRL_RANDAM, 0x011/*Len*/, VALVE_GET_HEAT_DATA, 0x68, 0x20, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0x01, 0x03, 0x90, 0x1F, 0x0B, 0x19, 0x16};
     SendValveCtrlOneByOne(cmd, sizeof(cmd));
+}
+
+void CForwarderMonitor::LoadUsers() {
+    LOGDB * db = dbopen((char *)"data/users", DB_RDONLY, genuserkey);
+    if (db != NULL) {
+        dbseq(db, fuserseq, &users, sizeof(users));
+        dbclose(db);
+    }
+}
+
+void CForwarderMonitor::SaveUsers() {
+    LOGDB * db = dbopen((char *)"data/users", DB_NEW, genuserkey);
+    if (db != NULL) {
+        users_lock.Lock();
+        users.clear();
+        for (ForwarderMapT::iterator forwarderIter = m_DraftForwarderMap.begin(); forwarderIter != m_DraftForwarderMap.end(); forwarderIter++) {
+            for (ValveListT::iterator valveIter = forwarderIter->second.ValveList.begin(); valveIter != forwarderIter->second.ValveList.end(); valveIter++) {
+                if (0 == memcmp(INVALID_USERID, valveIter->second.ValveData.ValveTemperature.UserID, sizeof(valveIter->second.ValveData.ValveTemperature.UserID))) {
+                    continue;
+                }
+                user_t user;
+                memcpy(user.uid.x, valveIter->second.ValveData.ValveTemperature.UserID, USERID_LEN);
+                user.fid = forwarderIter->first;
+                user.vmac = (user.fid & 0xFFFF0000) | valveIter->first;
+                dbput(db, user.uid.x, USERID_LEN, &user, sizeof(user_t));
+                users.push_back(user);
+            }
+        }
+        users_lock.UnLock();
+
+        dbclose(db);
+        m_IsNewUserIDFound = false;
+    }
 }

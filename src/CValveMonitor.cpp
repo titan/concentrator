@@ -23,6 +23,13 @@
 
 #define VALVE_PACKET_FLAG 0xF1
 
+void vuserseq(void * key, size_t klen, void * data, size_t dlen, void * params, size_t plen) {
+    map<userid_t, user_t, uidcmp> * users = (map<userid_t, user_t, uidcmp> *) params;
+    userid_t * uid = (userid_t *) key;
+    user_t * user = (user_t *) data;
+    (* users)[* uid] = * user;
+}
+
 CValveMonitor * CValveMonitor::instance = NULL;
 CValveMonitor * CValveMonitor::GetInstance() {
     if (instance == NULL) {
@@ -44,25 +51,18 @@ bool CValveMonitor::Init(uint32 startTime, uint32 interval) {
 }
 
 void CValveMonitor::LoadUsers() {
-    LOGDB * db = dbopen((char *)"users", DB_RDONLY, sizeof(user_t));
+    LOGDB * db = dbopen((char *)"data/users", DB_RDONLY, genuserkey);
     if (db != NULL) {
-        user_t user;
-        size_t r;
-        do {
-            r = dbseq(db, &user, R_NEXT);
-            if (r > 0) {
-                users[user.uid] = user;
-            }
-        } while (r > 0);
+        dbseq(db, vuserseq, &users, sizeof(users));
         dbclose(db);
     }
 }
 
 void CValveMonitor::SaveUsers() {
-    LOGDB * db = dbopen((char *)"users", DB_NEW, sizeof(user_t));
+    LOGDB * db = dbopen((char *)"data/users", DB_NEW, genuserkey);
     if (db != NULL) {
         for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
-            dbput(db, &iter->second, sizeof(user_t));
+            dbput(db, (void *)&iter->first, sizeof(userid_t), &iter->second, sizeof(user_t));
         }
         dbclose(db);
         syncUsers = false;

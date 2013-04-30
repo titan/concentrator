@@ -195,8 +195,6 @@ class CForwarderMonitor:public IThread, public IValveMonitor
     CTimer m_ForwardInfoTimeOut;
 
   private:
-    void SaveForwarderMacUserIDTask();
-  private:
     bool m_IsNewUserIDFound;
 
   public:
@@ -223,6 +221,8 @@ class CForwarderMonitor:public IThread, public IValveMonitor
     void GetPunctualData();
     void SendCardHostCommand();
     void GetHeatData();
+    void LoadUsers();
+    void SaveUsers();
   private:
     uint8 SendValveCtrlOneByOne(const uint8* pValveCtrl, const uint32 ValveCtrlLen);//return how many valves succeed
     void SendA1();

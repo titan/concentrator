@@ -3,6 +3,7 @@
 #if __OS__ == WINDOWS
 #include<windows.h>
 #endif
+#include<stdlib.h>
 
 // #define CHINA_MOBILE
 #define CHINA_UNION
@@ -60,4 +61,16 @@ typedef struct {
     uint32 fid;
     uint32 vmac;
 } user_t;
+
+inline size_t genuserkey(void * key, size_t len) {
+    size_t i = 0;
+	size_t seed = 131; // 31 131 1313 13131 131313 etc..
+	size_t hash = 0;
+
+    for (; i < len; i ++) {
+		hash = hash * seed + ((unsigned char *) key)[i];
+	}
+
+	return hash;
+}
 #endif

@@ -4,31 +4,32 @@
 extern "C" {
 #endif
 
+#include "sbtree.h"
+
 typedef enum {
     DB_NEW,
     DB_APPEND,
     DB_RDONLY
 } DBFLAG;
 
-typedef enum {
-    R_FIRST,
-    R_LAST,
-    R_NEXT,
-    R_PREV
-} SEQFLAG;
+typedef sbtidx_t (* genkeyfun)(void * key, size_t len);
+typedef void (* dbseqfun)(void * key, size_t klen, void * data, size_t dlen, void * params, size_t plen);
 
 typedef struct {
     int dfd;
-    int gfd;
+    int ifd;
+    int pfd;
     off_t bof; // begin of file
-    size_t rlen;
+    sbtree_t * root;
+    genkeyfun genkey;
     DBFLAG flag;
 } LOGDB;
 
-LOGDB * dbopen(const char * file, DBFLAG flag, size_t rlen);
+LOGDB * dbopen(const char * file, DBFLAG flag, genkeyfun genkey);
 void dbclose(LOGDB * db);
-int dbput(LOGDB * db, void * data, size_t len);
-int dbseq(LOGDB * db, void * data, SEQFLAG flag);
+int dbget(LOGDB * db, void * key, size_t klen, void * data, size_t * dlen);
+int dbput(LOGDB * db, void * key, size_t klen, void * data, size_t dlen);
+int dbseq(LOGDB * db, dbseqfun seqfun, void * params, size_t len);
 
 #ifdef __cplusplus
 }
