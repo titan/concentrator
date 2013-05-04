@@ -73,4 +73,26 @@ inline size_t genuserkey(void * key, size_t len) {
 
 	return hash;
 }
+
+typedef struct {
+    uint8 recharge;
+    uint8 sentRecharge;
+    uint16 consume;
+    uint16 sentConsume;
+    uint16 temperature;
+    uint16 sentTemperature;
+    uint8 status;
+    uint8 sentStatus;
+} record_t;
+
+inline size_t genrecordkey(void * key, size_t len) {
+    size_t r = 0, i;
+    if (len < sizeof(size_t)) {
+        for (i = 0; i < len; i ++) {
+            r = (r << 8) + ((unsigned char *) key)[i];
+        }
+        return r;
+    }
+    return * (size_t *) key;
+}
 #endif

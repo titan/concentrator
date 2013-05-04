@@ -17,13 +17,6 @@ struct uidcmp {
 };
 
 typedef struct {
-    uint8 recharge;
-    uint16 consume;
-    uint16 temperature;
-    uint8 status;
-} record_t;
-
-typedef struct {
     uint32 mac;
     userid_t uid;
     uint16 indoorTemp;
@@ -65,6 +58,8 @@ private:
     ~CValveMonitor();
     void LoadUsers();
     void SaveUsers();
+    void LoadRecords();
+    void SaveRecords();
     virtual uint32 Run();
     void Broadcast();
     bool GetUserList(vector<user_t>& user);
@@ -82,6 +77,8 @@ private:
     void SendValveData();
     void GetHeatData();
     void ParseHeatData(uint32 vmac, uint8 * data, uint16 len);
+    bool SendCommand(uint8 * data, uint16 len);
+    bool WaitCmdAck(uint8 * data, uint16 * len);
 
     static CValveMonitor * instance;
     int com;
@@ -94,6 +91,6 @@ private:
     map<uint32, valve_temperature_t> valveTemperatures; // vmac -> ...
     map<uint32, valve_heat_t> valveHeats; // vmac -> ...
     ValveDataType valveDataType;
-    bool syncUsers;
+    bool syncUsers, syncRecords;
 };
 #endif

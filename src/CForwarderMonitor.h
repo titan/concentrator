@@ -107,19 +107,21 @@ union ValveDataT
 };
 
 //ValveRecordDataT
+/*
 struct ValveRecordDataT
 {
    uint32 LastChargeIndex;
    uint32 LastConsumeIndex;
    uint32 LastTemperatureIndex;
 };
+*/
 
 struct ValveElemT
 {
    bool IsActive;
    bool IsDataMissing;
    ValveDataT ValveData;
-   ValveRecordDataT ValveRecord;
+//   ValveRecordDataT ValveRecord;
 };
 
 enum CommandTypeE
@@ -159,13 +161,7 @@ class CForwarderMonitor:public IThread, public IValveMonitor
     static CForwarderMonitor* GetInstance();
   private:
     static CForwarderMonitor* m_Instance;
-    CForwarderMonitor():valveDataType(VALVE_DATA_TYPE_TEMPERATURE)
-                        , m_DayNoonTimer(DAY_TYPE)
-                        // , m_DayNoonTimer(HOUR_TYPE)//just for test
-                        //, m_DayNoonTimer(MINUTE_TYPE)//just for test
-                        , m_ForwardInfoDataReady(false)
-                        , m_IsNewUserIDFound(false)
-                        , m_CardCmdBuf(cbuffer_create(10, 1024)) {}
+    CForwarderMonitor();
     ~CForwarderMonitor() { cbuffer_free(m_CardCmdBuf); }
     static CLock m_ForwarderLock;
     ValveDataType valveDataType;
@@ -182,7 +178,7 @@ class CForwarderMonitor:public IThread, public IValveMonitor
 
   //dayly noon task
   private:
-    void ClearValveRecord();
+    //void ClearValveRecord();
     void DayNoonTimerTask();
   private:
     CFixTimer m_DayNoonTimer;
@@ -214,15 +210,17 @@ class CForwarderMonitor:public IThread, public IValveMonitor
     //update valve values in Forwarder thread
   private:
     void ResetForwarderData();//must firstly be called
-    void GetValveTime();
-    void GetValveTemperature();
-    void GetValveRunningTime();
+    //void GetValveTime();
+    //void GetValveTemperature();
+    //void GetValveRunningTime();
     void GetValveUserID();
     void GetPunctualData();
     void SendCardHostCommand();
     void GetHeatData();
     void LoadUsers();
     void SaveUsers();
+    void LoadRecords();
+    void SaveRecords();
   private:
     uint8 SendValveCtrlOneByOne(const uint8* pValveCtrl, const uint32 ValveCtrlLen);//return how many valves succeed
     void SendA1();
@@ -249,5 +247,7 @@ class CForwarderMonitor:public IThread, public IValveMonitor
     cbuffer_t m_CardCmdBuf;
     vector<user_t> users;
     CLock users_lock;
+    map<uint32, record_t> records; // vmac -> record
+    bool syncRecords;
 };
 #endif
