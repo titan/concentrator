@@ -79,6 +79,9 @@ private:
     void ParseHeatData(uint32 vmac, uint8 * data, uint16 len);
     bool SendCommand(uint8 * data, uint16 len);
     bool WaitCmdAck(uint8 * data, uint16 * len);
+    void GetValveTime(uint32 vmac);
+    void ParseValveTime(uint32 vmac, uint8 * data, uint16 len);
+    void SetValveTime(uint32 vmac, tm * time);
 
     static CValveMonitor * instance;
     int com;

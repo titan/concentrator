@@ -86,6 +86,8 @@ class CPortal:public IThread
       void InsertChargeData(uint8 * data, uint32 len);
       void InsertConsumeData(uint8 * data, uint32 len);
 
+      bool timeReady;
+
    private:
       void GetGPRSInfoTask();
       void CheckNewVersion();

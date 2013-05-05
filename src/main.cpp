@@ -144,7 +144,12 @@ void StartForwarder()
    DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
    pForwarderCom->SetParity( KeyValue.c_str() );
 
-   CForwarderMonitor::GetInstance()->SetValveDataType(VALVE_DATA_TYPE_TEMPERATURE);
+   string type = ForwardINI.GetValueString(SectionStr, "VALVETYPE", "temperature");
+   if (type == "heat") {
+       CForwarderMonitor::GetInstance()->SetValveDataType(VALVE_DATA_TYPE_HEAT);
+   } else {
+       CForwarderMonitor::GetInstance()->SetValveDataType(VALVE_DATA_TYPE_TEMPERATURE);
+   }
    CForwarderMonitor::GetInstance()->SetCom(pForwarderCom);
    for(uint32 i = 0; i < MAX_FORWARDER_COUNT; i++)
    {
@@ -320,9 +325,14 @@ void StartValveMonitor() {
         return;
     }
     DEBUG("Initilize valve monitor servcie with %s(%s)\n", name.c_str(), cfg.c_str());
-
     CValveMonitor::GetInstance()->SetCom(com);
-    CValveMonitor::GetInstance()->SetValveDataType(VALVE_DATA_TYPE_TEMPERATURE);
+
+    string type = ini.GetValueString(SECKEY, "VALVETYPE", "temperature");
+    if (type == "heat") {
+        CValveMonitor::GetInstance()->SetValveDataType(VALVE_DATA_TYPE_HEAT);
+   } else {
+        CValveMonitor::GetInstance()->SetValveDataType(VALVE_DATA_TYPE_TEMPERATURE);
+    }
 
     int startTime = ini.GetValueInt(SECKEY, "START", 12);
     int interval = ini.GetValueInt(SECKEY, "INTERVAL", 30);

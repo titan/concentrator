@@ -210,7 +210,8 @@ class CForwarderMonitor:public IThread, public IValveMonitor
     //update valve values in Forwarder thread
   private:
     void ResetForwarderData();//must firstly be called
-    //void GetValveTime();
+    void GetValveTime();
+    void SetValveTime(uint32 fid, uint16 vid, tm * time);
     //void GetValveTemperature();
     //void GetValveRunningTime();
     void GetValveUserID();

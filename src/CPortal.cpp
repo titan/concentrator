@@ -165,7 +165,8 @@ CPortal* CPortal::GetInstance()
 }
 
 
-CPortal::CPortal(): m_GetGPRSInforTaskActive(false)
+CPortal::CPortal(): timeReady(false)
+                    , m_GetGPRSInforTaskActive(false)
                     , m_IsGPRSInfoReady(false)
                     , m_SentLog(NULL)
                     , m_SerialIndex(0)
@@ -499,6 +500,7 @@ bool CPortal::ParseData(uint8* pData, uint32 DataLen)
          if( 0 == SetDateTime(DateTime, 0) )
          {
             DEBUG("adjust time OK\n");
+            timeReady = true;
          }
       }
    }
@@ -524,8 +526,10 @@ bool CPortal::ParseHeartBeatAck(uint8* pData, uint32 DataLen)
    if( 0 != SetDateTime(DateTime, 0) )
    {
       DEBUG("Set DateTime=%04d-%02d-%02d %02d:%02d:%02d\n", DateTime[0], DateTime[1], DateTime[2], DateTime[3], DateTime[4], DateTime[5]);
+      timeReady = false;
       return false;
    }
+   timeReady = true;
    return true;
 }
 

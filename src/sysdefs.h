@@ -5,6 +5,8 @@
 #endif
 #include<stdlib.h>
 
+#define DEC2BCD(value) (((value) / 10) << 4 | ((value) % 10))
+
 // #define CHINA_MOBILE
 #define CHINA_UNION
 typedef signed char    		int8;

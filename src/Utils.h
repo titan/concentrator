@@ -11,6 +11,7 @@
 #define CFG_USART_LIB 1
 #endif
 #include"libs_emsys_odm.h"
+#include<time.h>
 const uint8 DATETIME_LEN = 7;
 void PrintData( const uint8* pData, const uint32 DataLen );
 void Revert(uint8* pData, uint32 DataLen);
@@ -26,6 +27,7 @@ uint32 DateTime2TimeStamp(uint32 Year, uint32 Month, uint32 Day, uint32 Hour, ui
 bool TimeStamp2TimeStr(uint32 UTCTime, uint32* pDateTime, uint32 DateTimeLen);
 const char* GetLocalTimeStr();
 bool GetLocalTimeStamp(uint32& UTCTime);
+bool GetLocalTime(tm & t);
 enum LightE
 {
    LIGHT_FORWARD=PB16,

@@ -1,6 +1,5 @@
 #include<stdio.h>
 #include<assert.h>
-#include<time.h>
 #include<stdarg.h>
 #include"CLock.h"
 #include"Utils.h"
@@ -423,7 +422,7 @@ const char* GetLocalTimeStr()
    if(ERROR_OK != GetDateTime(TimeData, 1))//RTC
    {
       DEBUG("GetLocalTimeStr()----Can't read time from RTC\n");
-      return false;
+      return NULL;
    }
    sprintf(DateTimeStr, "%04d-%02d-%02d %02d:%02d:%02d", TimeData[0], TimeData[1], TimeData[2], TimeData[3], TimeData[4], TimeData[5]);
    return DateTimeStr;
@@ -453,6 +452,22 @@ bool GetLocalTimeStamp(uint32& UTCTime)
    UTCTime = (uint32)CurrentTime;
 
    return true;
+}
+
+bool GetLocalTime(tm & t) {
+    uint32 buf[DATETIME_LEN] = {0};
+    if (ERROR_OK != GetDateTime(buf, 1)) {//RTC
+        DEBUG("Can't read time from RTC\n");
+        return false;
+    }
+    t.tm_year = buf[0] - 1900;
+    t.tm_mon = buf[1] - 1;
+    t.tm_mday = buf[2];
+    t.tm_hour = buf[3];
+    t.tm_min = buf[4];
+    t.tm_sec = buf[5];
+    t.tm_wday = buf[6];
+    return true;
 }
 
 void FlashLight(LightE Light)
