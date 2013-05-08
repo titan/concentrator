@@ -136,48 +136,37 @@ uint32 CForwarderMonitor::Run()
 
         if (i % 60 == 0 || users.size() == 0) {
             SendA1();
-            // PrintUserID();
-
             GetValveUserID();
-
-            // PrintUserID();
-
-            if (valveDataType == VALVE_DATA_TYPE_HEAT) {
-                GetHeatData();
-            }
         }
         if( m_RepeatTimer.Done() ) {
             if (m_IsNewUserIDFound)
                 SaveUsers();
-            if (syncRecords)
-                SaveRecords();
             m_ForwarderLock.Lock();
 
-            GetPunctualData();
-
-            /*
-            GetValveTemperature();
-            // PrintUserID();
+            if (valveDataType == VALVE_DATA_TYPE_HEAT) {
+                GetHeatData();
+                if (GetValveRecord() > 0) {
+                    //GetValveRunningTime();
+                    //GetValveTemperature();
+                    if (BatchGetRecordsData() > 0 && syncRecords) {
+                        SaveRecords();
+                    }
+                }
+            } else {
+                GetPunctualData();
+            }
             GetValveTime();
-            // PrintUserID();
-            GetValveRunningTime();
-            // PrintUserID();
-            */
 
             m_ForwarderLock.UnLock();
 
-
             SendForwarderData();
-            // PrintUserID();
         }
 
         SendCardHostCommand();
 
         GetForwarderInfoTask();
-        // PrintUserID();
 
         DayNoonTimerTask();
-        // PrintUserID();
 
         sleep(1);
         i ++;
@@ -186,6 +175,7 @@ uint32 CForwarderMonitor::Run()
 
 void CForwarderMonitor::SendA1()
 {
+   DEBUG("\n");
    for(ForwarderMapT::iterator ForwarderIter = m_DraftForwarderMap.begin(); ForwarderIter != m_DraftForwarderMap.end(); ForwarderIter++ )
    {
       uint8 QueryCommand[MAX_PACKET_LEN] = {0};//query
@@ -213,13 +203,12 @@ void CForwarderMonitor::SendA1()
 
 bool CForwarderMonitor::SendA2(const uint8* pValveCtrl, const uint32 ValveCtrlLen, uint32 ForwarderID, uint16 ValveID)
 {
+   DEBUG("\n");
    if(NULL == pValveCtrl || 0 == ValveCtrlLen)
    {
       assert(0);
       return false;
    }
-
-   DEBUG("CForwarderMonitor::SendA2()\n");
 
    uint8 A2Command[MAX_PACKET_LEN] = {0};//query
    //send read command to each forwarder
@@ -244,13 +233,12 @@ bool CForwarderMonitor::SendA2(const uint8* pValveCtrl, const uint32 ValveCtrlLe
 
 bool CForwarderMonitor::SendA3(const uint8* pValveCtrl, const uint32 ValveCtrlLen, uint32 ForwarderID, uint16 ValveID)
 {
+   DEBUG("\n");
    if(NULL == pValveCtrl || 0 == ValveCtrlLen)
    {
       assert(0);
       return false;
    }
-
-   DEBUG("CForwarderMonitor::SendA3()\n");
 
    uint8 A3Command[MAX_PACKET_LEN] = {0};//query
    A3Command[FORWARDER_COMMAND_ID_POS] = COMMAND_A3;
@@ -271,14 +259,12 @@ bool CForwarderMonitor::SendA3(const uint8* pValveCtrl, const uint32 ValveCtrlLe
 
 bool CForwarderMonitor::SendA2A3(const uint8* pValveCtrl, const uint32 ValveCtrlLen, uint32 ForwarderID, uint16 ValveID)
 {
+   DEBUG("\n");
    for(uint32 i = 0; i < MAX_A2_A3_RETRY_COUNT; i++)
    {
       if( SendA2(pValveCtrl, ValveCtrlLen, ForwarderID, ValveID) )
       {
-         uint32 left = sleep(FORWARDER_INTERVAL);
-         if (left > 0) {
-             DEBUG("Sleep is interrupted by a signal handler, %d seconds left\n", left);
-         }
+         sleep(3);
          if( SendA3(pValveCtrl, ValveCtrlLen, ForwarderID, ValveID) )
          {
             DEBUG("ForwarderID(0x%8X) ValveID(%04X) OK\n", ForwarderID, ValveID);
@@ -292,6 +278,7 @@ bool CForwarderMonitor::SendA2A3(const uint8* pValveCtrl, const uint32 ValveCtrl
 
 void CForwarderMonitor::ResetForwarderData()//must firstly be called in each loop
 {
+    //DEBUG("\n");
    for(ForwarderMapT::iterator ForwarderIter = m_DraftForwarderMap.begin(); ForwarderIter != m_DraftForwarderMap.end(); ForwarderIter++)
    {
       for(ValveListT::iterator ValveIter = ForwarderIter->second.ValveList.begin(); ValveIter != ForwarderIter->second.ValveList.end(); ValveIter++)
@@ -302,13 +289,17 @@ void CForwarderMonitor::ResetForwarderData()//must firstly be called in each loo
    }
 }
 
-void CForwarderMonitor::GetValveTime()
-{
-   const uint8 ValveCommand[] = {VALVE_CTRL_FLAG, VALVE_CTRL_RANDAM, 0x01/*Len*/, VALVE_GET_TIME};
-   SendValveCtrlOneByOne(ValveCommand, sizeof(ValveCommand));
+void CForwarderMonitor::GetValveTime() {
+    DEBUG("\n");
+    if (false == m_ForwardInfoDataReady) {
+        SendA1();
+    }
+    const uint8 ValveCommand[] = {VALVE_CTRL_FLAG, VALVE_CTRL_RANDAM, 0x01/*Len*/, VALVE_GET_TIME};
+    SendValveCtrlOneByOne(ValveCommand, sizeof(ValveCommand));
 }
 
 void CForwarderMonitor::SetValveTime(uint32 fid, uint16 vid, tm * time) {
+    DEBUG("\n");
     uint8 buf[] = {VALVE_CTRL_FLAG, VALVE_CTRL_RANDAM, 0x09/*Len*/, VALVE_SET_TIME, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
     uint8 ptr = 4;
     uint16 century = ((time->tm_year + 1900) / 100);
@@ -327,56 +318,50 @@ void CForwarderMonitor::SetValveTime(uint32 fid, uint16 vid, tm * time) {
     }
 }
 
-/*
-void CForwarderMonitor::GetValveTemperature()
-{
-   //get Valve Record
-   if( false == m_ForwardInfoDataReady )
-   {
-      SendA1();
-   }
-
-   ClearValveRecord();
-   const uint8 ValveCommand[] = {VALVE_CTRL_FLAG, VALVE_CTRL_RANDAM, 0x01//Len//, VALVE_GET_VALVE_RECORD};
-   SendValveCtrlOneByOne(ValveCommand, sizeof(ValveCommand));
-
-   for(ForwarderMapT::iterator ForwarderIter = m_DraftForwarderMap.begin(); ForwarderIter != m_DraftForwarderMap.end(); ForwarderIter++ )
-   {
-      for(ValveListT::iterator ValveIter = ForwarderIter->second.ValveList.begin(); ValveIter != ForwarderIter->second.ValveList.end(); ValveIter++)
-      {
-         if( false == ValveIter->second.IsActive )
-         {
-            DEBUG("ForwarderID=0x%08X, ValveID=0x%04X NOT active\n", ForwarderIter->first, ValveIter->first);
-            continue;
-         }
-
-         if( ValveIter->second.IsDataMissing )
-         {
-            DEBUG("ForwarderID=0x%08X, ValveID=0x%04X Data missing\n", ForwarderIter->first, ValveIter->first);
-            continue;
-         }
-
-         if(-1 == (int32)ValveIter->second.ValveRecord.LastTemperatureIndex)
-         {
-            ValveIter->second.IsDataMissing = true;
-            DEBUG("ForwarderID=0x%08X, ValveID=0x%04X LastTemperatureIndex=-1\n", ForwarderIter->first, ValveIter->first);
-            continue;
-         }
-
-         const uint32 VALVE_CTRL_GET_TEMPERATURE_RECORD_INDEX_POS = 4;
-         uint8 GetValveConsumeDataCommand[] = {VALVE_CTRL_FLAG, VALVE_CTRL_RANDAM, 0x03, VALVE_GET_TEMPERATURE, 0xFF, 0xFF//a invalid index//};
-         GetValveConsumeDataCommand[VALVE_CTRL_GET_TEMPERATURE_RECORD_INDEX_POS] = ValveIter->second.ValveRecord.LastTemperatureIndex/256;
-         GetValveConsumeDataCommand[VALVE_CTRL_GET_TEMPERATURE_RECORD_INDEX_POS+1] = ValveIter->second.ValveRecord.LastTemperatureIndex%256;
-
-         if( false == SendA2A3(GetValveConsumeDataCommand, sizeof(GetValveConsumeDataCommand), ForwarderIter->first, ValveIter->first) )
-         {
-            DEBUG("fail--ForwarderID=0x%08X, ValveID=0x%04X\n", ForwarderIter->first, ValveIter->first);
-            ValveIter->second.IsDataMissing = true;
-         }
-      }
-   }
+uint8 CForwarderMonitor::GetValveRecord() {
+    DEBUG("\n");
+    if (false == m_ForwardInfoDataReady) {
+        SendA1();
+    }
+    const uint8 ValveCommand[] = {VALVE_CTRL_FLAG, VALVE_CTRL_RANDAM, 0x01/*Len*/, VALVE_GET_VALVE_RECORD};
+    return SendValveCtrlOneByOne(ValveCommand, sizeof(ValveCommand));
 }
 
+void CForwarderMonitor::GetValveTemperature() {
+    DEBUG("\n");
+    if (false == m_ForwardInfoDataReady ) {
+        SendA1();
+    }
+
+    for (ForwarderMapT::iterator ForwarderIter = m_DraftForwarderMap.begin(); ForwarderIter != m_DraftForwarderMap.end(); ForwarderIter++ ) {
+        for (ValveListT::iterator ValveIter = ForwarderIter->second.ValveList.begin(); ValveIter != ForwarderIter->second.ValveList.end(); ValveIter++) {
+            if (false == ValveIter->second.IsActive) {
+                DEBUG("ForwarderID=0x%08X, ValveID=0x%04X NOT active\n", ForwarderIter->first, ValveIter->first);
+                continue;
+            }
+
+            if (ValveIter->second.IsDataMissing) {
+                DEBUG("ForwarderID=0x%08X, ValveID=0x%04X Data missing\n", ForwarderIter->first, ValveIter->first);
+                continue;
+            }
+
+            /*
+              if(-1 == (int32)ValveIter->second.ValveRecord.LastTemperatureIndex)
+              {
+              ValveIter->second.IsDataMissing = true;
+              DEBUG("ForwarderID=0x%08X, ValveID=0x%04X LastTemperatureIndex=-1\n", ForwarderIter->first, ValveIter->first);
+              continue;
+              }
+            */
+
+            if (BatchGetTemperatureRecords(ForwarderIter->first, ValveIter->first) == 0) {
+                ValveIter->second.IsDataMissing = true;
+            }
+        }
+    }
+}
+
+/*
 void CForwarderMonitor::GetValveRunningTime()
 {
    DEBUG("CForwarderMonitor::GetValveRunningTime()\n");
@@ -387,7 +372,7 @@ void CForwarderMonitor::GetValveRunningTime()
 
 void CForwarderMonitor::GetValveUserID()
 {
-   DEBUG("CForwarderMonitor::GetValveUserID()\n");
+   DEBUG("\n");
    const uint8 ValveCommand[] = {VALVE_CTRL_USERID_FLAG, VALVE_CTRL_USERID_FLAG, 0x01};
    SendValveCtrlOneByOne(ValveCommand, sizeof(ValveCommand));
 }
@@ -396,7 +381,7 @@ void CForwarderMonitor::DayNoonTimerTask()
 {
    if( m_DayNoonTimer.Done() )
    {
-      DEBUG("CForwarderMonitor::DayNoonTimerTask()\n");
+      DEBUG("\n");
       m_ForwarderLock.Lock();
 
       //get Valve Record
@@ -426,24 +411,18 @@ void CForwarderMonitor::DayNoonTimerTask()
                continue;
             }
 
-            uint32 vmac = (ForwarderIter->first & 0xFFFF0000) | ValveIter->first;
+            uint32 vmac = ((ForwarderIter->first & 0xFFFF) << 16) | ValveIter->first;
             record_t rec = records[vmac];
 
-            //Get consume data
-            if (rec.sentConsume != rec.consume & 0x7FFF) {
-               const uint32 VALVE_CTRL_GET_CONSUME_RECORD_INDEX_POS = 4;
-               uint8 GetValveConsumeDataCommand[] = {VALVE_CTRL_FLAG, VALVE_CTRL_RANDAM, 0x03, VALVE_GET_CONSUME_DATA, 0xFF, 0xFF/*a invalid index*/};
-               GetValveConsumeDataCommand[VALVE_CTRL_GET_CONSUME_RECORD_INDEX_POS] = ((rec.sentConsume + 1) % 2400) /256;
-               GetValveConsumeDataCommand[VALVE_CTRL_GET_CONSUME_RECORD_INDEX_POS+1] = ((rec.sentConsume + 1) % 2400) % 256;
-               SendA2A3(GetValveConsumeDataCommand, sizeof(GetValveConsumeDataCommand), ForwarderIter->first, ValveIter->first);
-            }
+            // Get consume data
+            BatchGetConsumeRecords(ForwarderIter->first, ValveIter->first);
 
-            //Get charge data
-            if (rec.sentRecharge != rec.recharge & 0x7F) {
-               const uint32 VALVE_CTRL_GET_CHARGE_RECORD_INDEX_POS = 4;
-               uint8 GetValveChargeDataCommand[] = {VALVE_CTRL_FLAG, VALVE_CTRL_RANDAM, 0x02, VALVE_GET_RECHARGE_DATA, 0xFF/*a invalid index*/};
-               GetValveChargeDataCommand[VALVE_CTRL_GET_CHARGE_RECORD_INDEX_POS] = (rec.sentConsume + 1) % 20;
-               SendA2A3(GetValveChargeDataCommand, sizeof(GetValveChargeDataCommand), ForwarderIter->first, ValveIter->first);
+            // Get charge data
+            BatchGetRechargeRecords(ForwarderIter->first, ValveIter->first);
+
+            if (valveDataType == VALVE_DATA_TYPE_TEMPERATURE) {
+                // Get temperature data
+                BatchGetTemperatureRecords(ForwarderIter->first, ValveIter->first);
             }
          }
       }
@@ -470,6 +449,7 @@ void CForwarderMonitor::ClearValveRecord()
 
 bool CForwarderMonitor::SendCommand(uint8* pCommand, uint32 CommandLen)
 {
+   DEBUG("\n");
    if(NULL == m_pCommController)
    {
       DEBUG("COMM is NULL\n");
@@ -486,10 +466,9 @@ bool CForwarderMonitor::SendCommand(uint8* pCommand, uint32 CommandLen)
    SendCommand[Pos] = GenerateXorParity(SendCommand, Pos);
    Pos++;
 
-
-   for(uint8 i=0; i<MAX_RETRY_COUNT;i++)
+   for(uint8 i=0; i<1; i++)
    {
-      DEBUG("Send Command--Try %d\n", i);
+      DEBUG("Send Command ");
       hexdump(SendCommand, Pos);
       FlashLight(LIGHT_FORWARD);
       if( COMM_OK != m_pCommController->WriteBuf(SendCommand, Pos, FORWARDER_TIMEOUT) )
@@ -526,6 +505,7 @@ bool CForwarderMonitor::SendCommand(uint8* pCommand, uint32 CommandLen)
 
 bool CForwarderMonitor::AddForwareder(uint32 ForwarderID)
 {
+   DEBUG("\n");
    if( m_DraftForwarderMap.end() != m_DraftForwarderMap.find(ForwarderID) )
    {
       return false;
@@ -539,6 +519,7 @@ bool CForwarderMonitor::AddForwareder(uint32 ForwarderID)
 
 bool CForwarderMonitor::ParseA1Ack(const uint8* pReceiveData, uint32 ReceiveDataLen, uint32 SendForwarderID)
 {
+   DEBUG("\n");
    if( NULL == pReceiveData || ReceiveDataLen <= 0 )
    {
       return false;
@@ -551,7 +532,7 @@ bool CForwarderMonitor::ParseA1Ack(const uint8* pReceiveData, uint32 ReceiveData
    uint8 CompositeValveCount = pReceiveData[Pos];
    Pos += VALVE_COUNT_LEN;
 
-   DEBUG("CompositeValveCount=0x%02x\n", SendForwarderID, CompositeValveCount);
+   DEBUG("SendForwarderID=0x%08x, CompositeValveCount=0x%02x\n", SendForwarderID, CompositeValveCount);
    for(uint8 CompositeValveIndex = 0; (CompositeValveIndex<CompositeValveCount) && (Pos<ReceiveDataLen); CompositeValveIndex++)
    {
       uint16 ValveID = 0;
@@ -649,6 +630,7 @@ bool CForwarderMonitor::ParseA1Ack(const uint8* pReceiveData, uint32 ReceiveData
 }
 
 bool CForwarderMonitor::ParseData(const uint8* pReceiveData, uint32 ReceiveDataLen, const uint8* pSendData, uint32 SendDataLen) {
+    DEBUG("\n");
     if (NULL == pReceiveData || ReceiveDataLen <= 0 || NULL == pSendData || SendDataLen <= 0) {
         return false;
     }
@@ -700,6 +682,8 @@ bool CForwarderMonitor::ParseData(const uint8* pReceiveData, uint32 ReceiveDataL
                 DEBUG("get UserID--ForwarderID=0x%08X, ValveID=0x%04X, Len NOT match\n", ForwarderID, ValveID);
                 return false;
             }
+            DEBUG("Got UserID: ");
+            hexdump(pReceiveData+A3_VALVE_CTRL_POS + 3, USERID_LEN);
             if (valveDataType == VALVE_DATA_TYPE_TEMPERATURE) {
                 UpdateTemperatureItem(ForwarderID, ValveID, pReceiveData+A3_VALVE_CTRL_POS+3, USERID_LEN, ITEM_TEMPERATURE_USER_ID);
             } else {
@@ -745,6 +729,11 @@ bool CForwarderMonitor::ParseData(const uint8* pReceiveData, uint32 ReceiveDataL
         }
         case VALVE_GET_TEMPERATURE: {
             if (valveDataType == VALVE_DATA_TYPE_TEMPERATURE) {
+                uint32 vmac = ((ForwarderID & 0xFFFF) << 16) | ValveID;
+                records[vmac].sentTemperature ++;
+                records[vmac].sentTemperature %= 6000;
+                syncRecords = true;
+
                 const uint32 INDOOR_TEMPERATURE_OFFSET = 5;
                 UpdateTemperatureItem(ForwarderID, ValveID, pReceiveData+INDOOR_TEMPERATURE_OFFSET+A3_VALVE_VALUE_POS, FORWARDER_TEMPERATURE_LEN, ITEM_TEMPERATURE_INDOOR_TEMPERATURE);
                 UpdateTemperatureItem(ForwarderID, ValveID, pReceiveData+INDOOR_TEMPERATURE_OFFSET+A3_VALVE_VALUE_POS+FORWARDER_TEMPERATURE_LEN, FORWARDER_TEMPERATURE_LEN, ITEM_TEMPERATURE_SET_TEMPERATURE);
@@ -770,21 +759,50 @@ bool CForwarderMonitor::ParseData(const uint8* pReceiveData, uint32 ReceiveDataL
         case VALVE_CONFIG:
             DEBUG("OK--VALVE_CTRL_CONFIG\n");
             return true;
-            /*
         case VALVE_GET_VALVE_RECORD: {
             DEBUG("OK--VALVE_CTRL_GET_VALVE_RECORD\n");
-            //charge data
+            uint32 vmac = ((ForwarderID & 0xFFFF) << 16) | ValveID;
+
+            /*
             const uint8 CHARGE_RECORD_INDEX_POS = 0;
-            m_DraftForwarderMap[ForwarderID].ValveList[ValveID].ValveRecord.LastChargeIndex = pReceiveData[A3_VALVE_VALUE_POS+CHARGE_RECORD_INDEX_POS]-1;
-            //consume data
             const uint8 CONSUME_RECORD_INDEX_POS = 1;
-            m_DraftForwarderMap[ForwarderID].ValveList[ValveID].ValveRecord.LastConsumeIndex = pReceiveData[A3_VALVE_VALUE_POS+CONSUME_RECORD_INDEX_POS]*256 + pReceiveData[A3_VALVE_VALUE_POS+CONSUME_RECORD_INDEX_POS+1] - 1;
-            //Temperature data
             const uint8 TEMPERATURE_RECORD_INDEX_POS = 3;
-            m_DraftForwarderMap[ForwarderID].ValveList[ValveID].ValveRecord.LastTemperatureIndex = pReceiveData[A3_VALVE_VALUE_POS+TEMPERATURE_RECORD_INDEX_POS]*256 + pReceiveData[A3_VALVE_VALUE_POS+TEMPERATURE_RECORD_INDEX_POS+1] - 1;
+            const uint8 STATUS_RECORD_INDEX_POS = 5;
+            */
+
+            const uint8 * data = pReceiveData + A3_VALVE_VALUE_POS;
+            uint8 ptr = 0;
+
+            if (records.count(vmac) == 0) {
+                record_t rec;
+                rec.recharge = data[ptr] - 1; ptr ++;
+                rec.sentRecharge = 0;
+                rec.consume = data[ptr] * 256 + data[ptr + 1] - 1; ptr += 2;
+                rec.sentConsume = 0;
+                rec.temperature = data[ptr] * 256 + data[ptr + 1] - 1; ptr += 2;
+                rec.sentTemperature = 0;
+                rec.status = data[ptr] - 1; ptr ++;
+                rec.sentStatus = 0;
+                records[vmac] = rec;
+                syncRecords = true;
+                DEBUG("VMAC new 0x%08X recharge: %d, sentRecharge: %d\n", vmac, rec.recharge, rec.sentRecharge);
+                DEBUG("VMAC new 0x%08X consume: %d, sentConsume: %d\n", vmac, rec.consume, rec.sentConsume);
+            } else {
+                if (records[vmac].recharge != data[ptr] - 1) {
+                    syncRecords = true;
+                }
+                records[vmac].recharge = data[ptr] - 1; ptr ++;
+                if (records[vmac].consume != data[ptr] * 256 + data[ptr + 1] - 1) {
+                    syncRecords = true;
+                }
+                records[vmac].consume = data[ptr] * 256 + data[ptr + 1] - 1; ptr += 2;
+                records[vmac].temperature = data[ptr] * 256 + data[ptr + 1] - 1; ptr += 2;
+                records[vmac].status = data[ptr] - 1; ptr ++;
+                DEBUG("VMAC 0x%08X recharge: %d, sentRecharge: %d\n", vmac, records[vmac].recharge, records[vmac].sentRecharge);
+                DEBUG("VMAC 0x%08X consume: %d, sentConsume: %d\n", vmac, records[vmac].consume, records[vmac].sentConsume);
+            }
             return true;
         }
-            */
         case VALVE_GET_RECHARGE_DATA: {
             DEBUG("OK--VALVE_CTRL_GET_CHARGE_DATA\n");
             uint8 ChargePacketDataLen = FORWARDER_CHARGE_PACKET_LEN-2;
@@ -795,10 +813,6 @@ bool CForwarderMonitor::ParseData(const uint8* pReceiveData, uint32 ReceiveDataL
             ChargePacketData[1] = ChargePacketDataLen;
             Pos++;
             ForwarderMapT::iterator ForwarderIter = m_DraftForwarderMap.find(ForwarderID);
-            uint32 vmac = (ForwarderID & 0xFFFF0000) | ValveID;
-            records[vmac].sentRecharge ++;
-            records[vmac].sentRecharge %= 20;
-            syncRecords = true;
             if ((ForwarderIter != m_DraftForwarderMap.end()) && (ForwarderIter->second.ValveList.end() != ForwarderIter->second.ValveList.find(ValveID))) {
                 if (valveDataType == VALVE_DATA_TYPE_TEMPERATURE) {
                     if (0 == memcmp(INVALID_USERID, m_DraftForwarderMap[ForwarderID].ValveList[ValveID].ValveData.ValveTemperature.UserID, sizeof(INVALID_USERID))) {
@@ -838,7 +852,14 @@ bool CForwarderMonitor::ParseData(const uint8* pReceiveData, uint32 ReceiveDataL
                     Pos += sizeof(m_DraftForwarderMap[ForwarderID].ValveList[ValveID].ValveData.ValveHeat.MacAddress);
                 }
                 memcpy(ChargePacketData+Pos, pReceiveData+A3_VALVE_VALUE_POS, FORWARDER_CHARGE_PACKET_LEN-Pos);
+                DEBUG("Insert recharge to CPortal ");
+                hexdump(ChargePacketData, sizeof(ChargePacketData));
                 CPortal::GetInstance()->InsertChargeData(ChargePacketData, sizeof(ChargePacketData));
+                uint32 vmac = ((ForwarderID & 0xFFFF) << 16) | ValveID;
+                records[vmac].sentRecharge ++;
+                records[vmac].sentRecharge %= 20;
+                syncRecords = true;
+                DEBUG("VMAC 0x%08X New sentRecharge is %d\n", vmac, records[vmac].sentRecharge);
             }
             return true;
         }
@@ -851,10 +872,6 @@ bool CForwarderMonitor::ParseData(const uint8* pReceiveData, uint32 ReceiveDataL
             Pos++;
             ConsumePacketData[1] = ConsumePacketDataLen;
             Pos++;
-            uint32 vmac = (ForwarderID & 0xFFFF0000) | ValveID;
-            records[vmac].sentConsume ++;
-            records[vmac].sentConsume %= 2400;
-            syncRecords = true;
             ForwarderMapT::iterator ForwarderIter = m_DraftForwarderMap.find(ForwarderID);
             if ((ForwarderIter != m_DraftForwarderMap.end()) && (ForwarderIter->second.ValveList.end() != ForwarderIter->second.ValveList.find(ValveID))) {
                 if (valveDataType == VALVE_DATA_TYPE_TEMPERATURE) {
@@ -895,6 +912,8 @@ bool CForwarderMonitor::ParseData(const uint8* pReceiveData, uint32 ReceiveDataL
                             , m_DraftForwarderMap[ForwarderID].ValveList[ValveID].ValveData.ValveHeat.UserID
                             , sizeof(m_DraftForwarderMap[ForwarderID].ValveList[ValveID].ValveData.ValveHeat.UserID) );
                     Pos += sizeof(m_DraftForwarderMap[ForwarderID].ValveList[ValveID].ValveData.ValveHeat.UserID);
+                    DEBUG("userid ");
+                    hexdump(m_DraftForwarderMap[ForwarderID].ValveList[ValveID].ValveData.ValveHeat.UserID, sizeof(m_DraftForwarderMap[ForwarderID].ValveList[ValveID].ValveData.ValveHeat.UserID));
                 }
 
                 const uint8 CONSUME_DATA_OFFSET = 4;
@@ -902,6 +921,8 @@ bool CForwarderMonitor::ParseData(const uint8* pReceiveData, uint32 ReceiveDataL
                 memcpy(ConsumePacketData+Pos, pReceiveData+A3_VALVE_VALUE_POS+CONSUME_DATA_OFFSET, CONSUME_DATA_LENGTH);
                 const uint8 PACKET_CONSUME_DATA_LENGTH = 24;
                 Pos += PACKET_CONSUME_DATA_LENGTH;
+                DEBUG("consume data ");
+                hexdump(pReceiveData+A3_VALVE_VALUE_POS+CONSUME_DATA_OFFSET, CONSUME_DATA_LENGTH);
 
                 const uint8 CONSUME_DATA_DATETIME_OFFSET = 0;
                 //const uint8 CONSUME_DATA_DATETIME_LENGTH = 4;
@@ -912,7 +933,17 @@ bool CForwarderMonitor::ParseData(const uint8* pReceiveData, uint32 ReceiveDataL
                 DateTimeStr[3] = pReceiveData[A3_VALVE_VALUE_POS+CONSUME_DATA_DATETIME_OFFSET+3];//dd
                 uint32 DateTime = DateTime2TimeStamp(DateTimeStr, sizeof(DateTimeStr));
                 memcpy(ConsumePacketData+Pos, &DateTime, sizeof(DateTime));
+                DEBUG("consume date ");
+                hexdump(&DateTime, sizeof(DateTime));
+                DEBUG("Insert consume to CPortal ");
+                hexdump(ConsumePacketData, sizeof(ConsumePacketData));
                 CPortal::GetInstance()->InsertConsumeData(ConsumePacketData, sizeof(ConsumePacketData));
+
+                uint32 vmac = ((ForwarderID & 0xFFFF) << 16) | ValveID;
+                records[vmac].sentConsume ++;
+                records[vmac].sentConsume %= 2400;
+                syncRecords = true;
+                DEBUG("VMAC 0x%08X New sentConsume is %d\n", vmac, records[vmac].sentConsume);
             }
             return true;
         }
@@ -1023,7 +1054,7 @@ bool CForwarderMonitor::ParseData(const uint8* pReceiveData, uint32 ReceiveDataL
                 UpdateTemperatureItem(ForwarderID, ValveID, (uint8*)&utc, sizeof(uint32), ITEM_TEMPERATURE_DATETIME);
             }
 
-            uint32 vmac = (ForwarderID & 0xFFFF0000) | ValveID;
+            uint32 vmac = ((ForwarderID & 0xFFFF) << 16) | ValveID;
 
             if (records.count(vmac) == 0) {
                 record_t rec;
@@ -1097,6 +1128,7 @@ bool CForwarderMonitor::ParseData(const uint8* pReceiveData, uint32 ReceiveDataL
 
 uint8 CForwarderMonitor::SendValveCtrlOneByOne(const uint8* pValveCtrl, const uint32 ValveCtrlLen)
 {
+   DEBUG("\n");
    if(NULL == pValveCtrl || ValveCtrlLen <= 0)
    {
       DEBUG("Parameter error\n");
@@ -1108,7 +1140,7 @@ uint8 CForwarderMonitor::SendValveCtrlOneByOne(const uint8* pValveCtrl, const ui
    {
       if( ForwarderIter->second.IsOffline )
       {
-         DEBUG("0x%8x offline\n", ForwarderIter->first);
+         DEBUG("0x%08x offline\n", ForwarderIter->first);
          continue;
       }
       for(ValveListT::iterator ValveIter = ForwarderIter->second.ValveList.begin(); ValveIter != ForwarderIter->second.ValveList.end(); ValveIter++)
@@ -1134,20 +1166,20 @@ uint8 CForwarderMonitor::SendValveCtrlOneByOne(const uint8* pValveCtrl, const ui
             DEBUG("UserID\n");
             if( memcmp(ValveIter->second.ValveData.ValveTemperature.UserID, INVALID_USERID, sizeof(INVALID_USERID)) )
             {
-               DEBUG("ForwarderID(0x%8X) ValveID(%04X) UserID already exists, no need to reget\n", ForwarderIter->first, ValveIter->first);
+               DEBUG("ForwarderID(0x%08X) ValveID(0x%04X) UserID already exists, no need to reget\n", ForwarderIter->first, ValveIter->first);
                continue;
             }
          }
 
          if( SendA2A3(pValveCtrl, ValveCtrlLen, ForwarderIter->first, ValveIter->first) )
          {
-            DEBUG("ForwarderID(0x%8X) ValveID(%04X) OK\n", ForwarderIter->first, ValveIter->first);
+            DEBUG("ForwarderID(0x%08X) ValveID(0x%04X) OK\n", ForwarderIter->first, ValveIter->first);
             ValveAckCount++;
          }else
          {
             if( IsFixTimeCommand(pValveCtrl, ValveCtrlLen) )
             {
-               DEBUG("ForwarderID(0x%8X) ValveID(%04X) Data missing\n", ForwarderIter->first, ValveIter->first);
+               DEBUG("ForwarderID(0x%08X) ValveID(0x%04X) Data missing\n", ForwarderIter->first, ValveIter->first);
                ValveIter->second.IsDataMissing = true;
             }
             if( (ValveCtrlLen == sizeof(GetUserIDCommand)) && (0 == memcmp(GetUserIDCommand, pValveCtrl, sizeof(GetUserIDCommand))) )
@@ -1164,6 +1196,7 @@ uint8 CForwarderMonitor::SendValveCtrlOneByOne(const uint8* pValveCtrl, const ui
 
 void CForwarderMonitor::UpdateTemperatureItem(uint32 ForwarderID, uint16 ValveID, const uint8* pData, uint32 DataLen, ValveTemperatureTypeE ValveTemperatureType)
 {
+   DEBUG("\n");
    if( NULL == pData || 0 >= DataLen )
    {
       return;
@@ -1222,6 +1255,7 @@ void CForwarderMonitor::UpdateTemperatureItem(uint32 ForwarderID, uint16 ValveID
 }
 
 void CForwarderMonitor::UpdateHeatItem(uint32 fid, uint16 vid, const uint8 * data, uint32 len, ValveHeatTypeE type) {
+    DEBUG("\n");
     if ( NULL == data || 0 >= len ) {
         return;
     }
@@ -1281,7 +1315,7 @@ void CForwarderMonitor::UpdateHeatItem(uint32 fid, uint16 vid, const uint8 * dat
 
 void CForwarderMonitor::SendForwarderData()
 {
-   DEBUG("CForwarderMonitor::SendForwarderData()\n");
+   DEBUG("\n");
    uint8 ForwarderPacketLen = 0;
    if(VALVE_DATA_TYPE_TEMPERATURE == valveDataType)
    {
@@ -1339,7 +1373,7 @@ void CForwarderMonitor::SendForwarderData()
 }
 
 Status CForwarderMonitor::GetStatus() {
-    DEBUG("CForwarderMonitor::GetStatus()\n");
+    DEBUG("\n");
     if (false == IsStarted()) {
         DEBUG("STATUS_ERROR\n");
         return STATUS_ERROR;
@@ -1365,6 +1399,7 @@ Status CForwarderMonitor::GetStatus() {
 }
 
 bool CForwarderMonitor::GetUserList(vector<user_t>& users) {
+    DEBUG("\n");
     if (users_lock.TryLock()) {
         users = this->users;
         users_lock.UnLock();
@@ -1375,6 +1410,7 @@ bool CForwarderMonitor::GetUserList(vector<user_t>& users) {
 
 void CForwarderMonitor::SetForwarderInfo()
 {
+   DEBUG("\n");
    m_ForwarderInfoListLock.Lock();
    m_ForwarderInfoList.clear();
    uint32 i = 0;
@@ -1393,6 +1429,7 @@ void CForwarderMonitor::SetForwarderInfo()
 
 bool CForwarderMonitor::GetForwarderInfo(ForwarderInfoListT& ForwarderInfoList)
 {
+   DEBUG("\n");
    bool Ret = false;
    if(m_ForwarderInfoListLock.TryLock())
    {
@@ -1405,6 +1442,7 @@ bool CForwarderMonitor::GetForwarderInfo(ForwarderInfoListT& ForwarderInfoList)
 
 void CForwarderMonitor::GetForwarderInfoTask()
 {
+    //DEBUG("\n");
     //DEBUG("m_ForwardInfoDataReady=%d\n", m_ForwardInfoDataReady);
    m_ForwarderLock.Lock();
    if( false == m_ForwardInfoDataReady )
@@ -1423,13 +1461,12 @@ void CForwarderMonitor::GetForwarderInfoTask()
 
 uint16 CForwarderMonitor::ConfigValve(ValveCtrlType ValveCtrl, uint8* pConfigStr, uint16 ConfigStrLen)
 {
+   DEBUG("\n");
    uint16 ValveConfigOKCount = 0;
    if( (NULL == pConfigStr) || (0 == ConfigStrLen) )
    {
       return ValveConfigOKCount;
    }
-
-   DEBUG("CForwarderMonitor::ConfigValve()\n");
    m_ForwarderLock.Lock();
    if( false == m_ForwardInfoDataReady )
    {
@@ -1456,6 +1493,7 @@ uint16 CForwarderMonitor::ConfigValve(ValveCtrlType ValveCtrl, uint8* pConfigStr
 }
 
 void CForwarderMonitor::QueryUser(userid_t uid, uint8 *data, uint16 len) {
+    DEBUG("\n");
     uint8 * cmd = (uint8 *)cbuffer_write(m_CardCmdBuf);
     if (cmd == NULL) {
         DEBUG("No enough memory for quering user\n");
@@ -1490,6 +1528,7 @@ void CForwarderMonitor::QueryUser(userid_t uid, uint8 *data, uint16 len) {
 }
 
 void CForwarderMonitor::Recharge(userid_t uid, uint8 *data, uint16 len) {
+    DEBUG("\n");
     uint8 * cmd = (uint8 *)cbuffer_write(m_CardCmdBuf);
     if (cmd == NULL) {
         DEBUG("No enough memory for recharge\n");
@@ -1527,6 +1566,7 @@ void CForwarderMonitor::Recharge(userid_t uid, uint8 *data, uint16 len) {
 }
 
 void CForwarderMonitor::SendCardHostCommand() {
+    //DEBUG("\n");
     userid_t uid;
     uint8 * data = (uint8 *) cbuffer_read(m_CardCmdBuf);
     if (data == NULL) return;
@@ -1576,6 +1616,7 @@ void CForwarderMonitor::SendCardHostCommand() {
 }
 
 void CForwarderMonitor::GetPunctualData() {
+    DEBUG("\n");
     if( false == m_ForwardInfoDataReady ) {
         SendA1();
     }
@@ -1586,15 +1627,16 @@ void CForwarderMonitor::GetPunctualData() {
 }
 
 void CForwarderMonitor::GetHeatData() {
+    DEBUG("\n");
     if( false == m_ForwardInfoDataReady ) {
         SendA1();
     }
     const uint8 cmd[] = {VALVE_CTRL_FLAG, VALVE_CTRL_RANDAM, 0x011/*Len*/, VALVE_GET_HEAT_DATA, 0x68, 0x20, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0x01, 0x03, 0x90, 0x1F, 0x0B, 0xEC, 0x16};
-    //const uint8 cmd[] = {0x11, VALVE_CTRL_RANDAM, 0x011/*Len*/, VALVE_GET_HEAT_DATA, 0x68, 0x20, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0x03, 0x03, 0x81, 0x0A, 0x04, 0xC3, 0x16};
     SendValveCtrlOneByOne(cmd, sizeof(cmd));
 }
 
 void CForwarderMonitor::LoadUsers() {
+    DEBUG("\n");
     LOGDB * db = dbopen((char *)"data/users", DB_RDONLY, genuserkey);
     if (db != NULL) {
         dbseq(db, fuserseq, &users, sizeof(users));
@@ -1603,6 +1645,7 @@ void CForwarderMonitor::LoadUsers() {
 }
 
 void CForwarderMonitor::SaveUsers() {
+    DEBUG("\n");
     LOGDB * db = dbopen((char *)"data/users", DB_NEW, genuserkey);
     if (db != NULL) {
         users_lock.Lock();
@@ -1615,7 +1658,7 @@ void CForwarderMonitor::SaveUsers() {
                 user_t user;
                 memcpy(user.uid.x, valveIter->second.ValveData.ValveTemperature.UserID, USERID_LEN);
                 user.fid = forwarderIter->first;
-                user.vmac = (user.fid & 0xFFFF0000) | valveIter->first;
+                user.vmac = ((user.fid & 0xFFFF) << 16) | valveIter->first;
                 dbput(db, user.uid.x, USERID_LEN, &user, sizeof(user_t));
                 users.push_back(user);
             }
@@ -1628,6 +1671,7 @@ void CForwarderMonitor::SaveUsers() {
 }
 
 void CForwarderMonitor::LoadRecords() {
+    DEBUG("\n");
     LOGDB * db = dbopen((char *)"data/records", DB_RDONLY, genrecordkey);
     if (db != NULL) {
         dbseq(db, frecordseq, &records, sizeof(records));
@@ -1636,6 +1680,7 @@ void CForwarderMonitor::LoadRecords() {
 }
 
 void CForwarderMonitor::SaveRecords() {
+    DEBUG("\n");
     LOGDB * db = dbopen((char *)"data/records", DB_NEW, genrecordkey);
     if (db != NULL) {
         for (map<uint32, record_t>::iterator iter = records.begin(); iter != records.end(); iter ++) {
@@ -1643,5 +1688,100 @@ void CForwarderMonitor::SaveRecords() {
         }
         dbclose(db);
         syncRecords = false;
+    }
+}
+
+uint16 CForwarderMonitor::BatchGetConsumeRecords(uint32 fid, uint16 vid) {
+    DEBUG("\n");
+    uint32 vmac = ((fid & 0xFFFF) << 16) | vid;
+    record_t * rec = &records[vmac];
+    uint8 cmd[] = {VALVE_CTRL_FLAG, VALVE_CTRL_RANDAM, 0x03, VALVE_GET_CONSUME_DATA, 0xFF, 0xFF/*a invalid index*/};
+    uint16 counter = 0;
+
+    //Get consume data
+    while (rec->sentConsume != rec->consume & 0x7FFF) {
+        cmd[4] = ((rec->sentConsume + 1) % 2400) /256;
+        cmd[5] = ((rec->sentConsume + 1) % 2400) % 256;
+        DEBUG("VMAC 0x%08X Read no.%d consume record until no.%d --ForwarderID=0x%08X, ValveID=0x%04X\n", vmac, (rec->sentConsume + 1) % 2400, rec->consume & 0x7FFF, fid, vid);
+        if (false == SendA2A3(cmd, sizeof(cmd), fid, vid)) {
+            DEBUG("No more consume record to read--ForwarderID=0x%08X, ValveID=0x%04X\n", fid, vid);
+            return counter;
+        }
+        counter ++;
+    }
+
+    return counter;
+}
+
+uint16 CForwarderMonitor::BatchGetRechargeRecords(uint32 fid, uint16 vid) {
+    DEBUG("\n");
+    uint32 vmac = ((fid & 0xFFFF) << 16) | vid;
+    record_t * rec = &records[vmac];
+    uint16 counter = 0;
+
+    //Get recharge data
+    uint8 cmd[] = {VALVE_CTRL_FLAG, VALVE_CTRL_RANDAM, 0x02, VALVE_GET_RECHARGE_DATA, 0xFF/*a invalid index*/};
+    while (rec->sentRecharge != rec->recharge & 0x7F) {
+        cmd[4] = (rec->sentRecharge + 1) % 20;
+        DEBUG("VMAC 0x%08X Read no.%d recharge record--ForwarderID=0x%08X, ValveID=0x%04X\n", vmac, (rec->sentRecharge + 1) % 20, fid, vid);
+        if (false == SendA2A3(cmd, sizeof(cmd), fid, vid)) {
+            DEBUG("No more recharge record to read--ForwarderID=0x%08X, ValveID=0x%04X\n", fid, vid);
+            return counter;
+        }
+        counter ++;
+    }
+
+    return counter;
+}
+
+uint16 CForwarderMonitor::BatchGetTemperatureRecords(uint32 fid, uint16 vid) {
+    DEBUG("\n");
+    uint32 vmac = ((fid & 0xFFFF) << 16) | vid;
+    record_t * rec = &records[vmac];
+    uint16 counter = 0;
+
+    //Get temperature data
+    uint8 cmd[] = {VALVE_CTRL_FLAG, VALVE_CTRL_RANDAM, 0x03, VALVE_GET_TEMPERATURE, 0xFF, 0xFF/*a invalid index*/};
+    while (rec->sentTemperature != rec->temperature & 0x7FFF) {
+        cmd[4] = (rec->sentTemperature + 1) % 6000;
+        DEBUG("Read no.%d temperature record--ForwarderID=0x%08X, ValveID=0x%04X\n", (rec->sentTemperature + 1) % 6000, fid, vid);
+        if (false == SendA2A3(cmd, sizeof(cmd), fid, vid)) {
+            DEBUG("No more temperature record to read--ForwarderID=0x%08X, ValveID=0x%04X\n", fid, vid);
+            return counter;
+        }
+        counter ++;
+    }
+
+    return counter;
+}
+
+uint32 CForwarderMonitor::BatchGetRecordsData() {
+    DEBUG("\n");
+    uint16 counter = 0;
+    for (ForwarderMapT::iterator ForwarderIter = m_DraftForwarderMap.begin(); ForwarderIter != m_DraftForwarderMap.end(); ForwarderIter++ ) {
+        if (ForwarderIter->second.IsOffline) {
+            DEBUG("0x%8x offline\n", ForwarderIter->first);
+            continue;
+        }
+        for (ValveListT::iterator ValveIter = ForwarderIter->second.ValveList.begin(); ValveIter != ForwarderIter->second.ValveList.end(); ValveIter++) {
+            if (false == ValveIter->second.IsActive) {
+                DEBUG("ForwarderID(0x%8X) ValveID(%04X) offline\n", ForwarderIter->first, ValveIter->first);
+                continue;
+            }
+
+            uint32 vmac = ((ForwarderIter->first & 0xFFFF) << 16) | ValveIter->first;
+            record_t rec = records[vmac];
+
+            // Get consume data
+            counter += BatchGetConsumeRecords(ForwarderIter->first, ValveIter->first);
+
+            // Get charge data
+            counter += BatchGetRechargeRecords(ForwarderIter->first, ValveIter->first);
+
+            if (valveDataType == VALVE_DATA_TYPE_TEMPERATURE) {
+                // Get temperature data
+                counter += BatchGetTemperatureRecords(ForwarderIter->first, ValveIter->first);
+            }
+        }
     }
 }

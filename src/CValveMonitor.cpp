@@ -404,60 +404,63 @@ void CValveMonitor::GetRechargeData() {
     uint16 ptr = 0;
     const uint8 payload = 10;
     for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
-        record_t rec = records[iter->second.vmac];
-        if (rec.sentRecharge == rec.recharge & 0x7F) continue; // no more record to read
-        uint8 recharge = rec.recharge;
-        if (rec.recharge > 0x7F) recharge = rec.recharge & 0x7F;
-        if (recharge < rec.sentRecharge) recharge += 20;
-        uint8 delta = recharge - rec.sentRecharge;
-        for (uint8 i = 0, j = delta / payload; i < j; i ++) {
-            ptr = 0;
-            memcpy(buf, &iter->second.vmac, sizeof(uint32)); ptr += sizeof(uint32);
-            buf[ptr] = PORT; ptr ++;
-            buf[ptr] = RAND; ptr ++;
-            buf[ptr] = 0x03; ptr ++; // len
-            buf[ptr] = VALVE_GET_RECHARGE_DATA; ptr ++;
-            buf[ptr] = rec.sentRecharge + i * payload + 1; ptr ++; // offset
-            buf[ptr] = payload; ptr ++; // limit
-            if (SendCommand(buf, ptr)) {
-                if (WaitCmdAck(buf, &ptr)) {
-                    rec.sentRecharge += payload;
-                    rec.sentRecharge %= 20;
-                    ParseAck(buf, ptr);
+        record_t * rec = &records[iter->second.vmac];
+        while (rec->sentRecharge != rec->recharge & 0x7F) {
+            uint8 recharge = rec->recharge;
+            if (rec->recharge > 0x7F) recharge = rec->recharge & 0x7F;
+            if (recharge < rec->sentRecharge) recharge += 20;
+            uint8 delta = recharge - rec->sentRecharge;
+            for (uint8 i = 0, j = delta / payload; i < j; i ++) {
+                ptr = 0;
+                memcpy(buf, &iter->second.vmac, sizeof(uint32)); ptr += sizeof(uint32);
+                buf[ptr] = PORT; ptr ++;
+                buf[ptr] = RAND; ptr ++;
+                buf[ptr] = 0x03; ptr ++; // len
+                buf[ptr] = VALVE_GET_RECHARGE_DATA; ptr ++;
+                buf[ptr] = rec->sentRecharge + i * payload + 1; ptr ++; // offset
+                buf[ptr] = payload; ptr ++; // limit
+                if (SendCommand(buf, ptr)) {
+                    if (WaitCmdAck(buf, &ptr)) {
+                        rec->sentRecharge += payload;
+                        rec->sentRecharge %= 20;
+                        ParseAck(buf, ptr);
+                    } else {
+                        DEBUG("Wait recharge cmd ack from %d to %d failed\n", rec->sentRecharge + i * payload + 1, rec->sentRecharge + i * payload + 1 + payload);
+                        goto NEXT;
+                    }
                 } else {
-                    DEBUG("Wait recharge cmd ack from %d to %d failed\n", rec.sentRecharge + i * payload + 1, rec.sentRecharge + i * payload + 1 + payload);
-                    return;
+                    DEBUG("Send cmd to get recharge data from %d to %d failed\n", rec->sentRecharge + i * payload + 1, rec->sentRecharge + i * payload + 1 + payload);
+                    goto NEXT;
                 }
-            } else {
-                DEBUG("Send cmd to get recharge data from %d to %d failed\n", rec.sentRecharge + i * payload + 1, rec.sentRecharge + i * payload + 1 + payload);
-                return;
             }
-        }
-        if (delta % payload != 0) {
-            ptr = 0;
-            memcpy(buf, &iter->second.vmac, sizeof(uint32)); ptr += sizeof(uint32);
-            buf[ptr] = PORT; ptr ++;
-            buf[ptr] = RAND; ptr ++;
-            buf[ptr] = 0x03; ptr ++; // len
-            buf[ptr] = VALVE_GET_RECHARGE_DATA; ptr ++;
-            buf[ptr] = rec.sentRecharge + (delta / payload) * payload + 1; ptr ++; // offset
-            buf[ptr] = delta % payload; ptr ++; // limit
+            if (delta % payload != 0) {
+                ptr = 0;
+                memcpy(buf, &iter->second.vmac, sizeof(uint32)); ptr += sizeof(uint32);
+                buf[ptr] = PORT; ptr ++;
+                buf[ptr] = RAND; ptr ++;
+                buf[ptr] = 0x03; ptr ++; // len
+                buf[ptr] = VALVE_GET_RECHARGE_DATA; ptr ++;
+                buf[ptr] = rec->sentRecharge + (delta / payload) * payload + 1; ptr ++; // offset
+                buf[ptr] = delta % payload; ptr ++; // limit
 
-            if (SendCommand(buf, ptr)) {
-                if (WaitCmdAck(buf, &ptr)) {
-                    rec.sentRecharge += delta % payload;
-                    rec.sentRecharge %= 20;
-                    ParseAck(buf, ptr);
+                if (SendCommand(buf, ptr)) {
+                    if (WaitCmdAck(buf, &ptr)) {
+                        rec->sentRecharge += delta % payload;
+                        rec->sentRecharge %= 20;
+                        ParseAck(buf, ptr);
+                    } else {
+                        DEBUG("Wait recharge cmd ack from %d to %d failed\n", rec->sentRecharge + (delta / payload) * payload + 1, rec->sentRecharge + (delta / payload) * payload + 1 + delta % payload);
+                        goto NEXT;
+                    }
                 } else {
-                    DEBUG("Wait recharge cmd ack from %d to %d failed\n", rec.sentRecharge + (delta / payload) * payload + 1, rec.sentRecharge + (delta / payload) * payload + 1 + delta % payload);
-                    return;
+                    DEBUG("Send cmd to get recharge data from %d to %d failed\n", rec->sentRecharge + (delta / payload) * payload + 1, rec->sentRecharge + (delta / payload) * payload + 1 + delta % payload);
+                    goto NEXT;
                 }
-            } else {
-                DEBUG("Send cmd to get recharge data from %d to %d failed\n", rec.sentRecharge + (delta / payload) * payload + 1, rec.sentRecharge + (delta / payload) * payload + 1 + delta % payload);
-                return;
             }
+            syncRecords = true;
         }
-        syncRecords = true;
+    NEXT:
+        continue; // just make compiler happy
     }
 }
 
@@ -486,61 +489,64 @@ void CValveMonitor::GetConsumeData() {
     uint16 ptr = 0;
     const uint8 payload = 32;
     for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
-        record_t rec = records[iter->second.vmac];
-        if (rec.sentConsume == rec.consume & 0x7FFF) continue; // no more record to read
-        uint16 consume = rec.consume;
-        if (rec.consume > 0x7FFF) consume = rec.consume & 0x7FFF;
-        if (consume < rec.sentConsume) consume += 2400;
-        uint8 delta = consume - rec.sentRecharge;
-        for (uint8 i = 0, j = delta / payload; i < j; i ++) {
-            ptr = 0;
-            memcpy(buf, &iter->second.vmac, sizeof(uint32)); ptr += sizeof(uint32);
-            buf[ptr] = PORT; ptr ++;
-            buf[ptr] = RAND; ptr ++;
-            buf[ptr] = 0x04; ptr ++; // len
-            buf[ptr] = VALVE_GET_CONSUME_DATA; ptr ++;
-            buf[ptr] = (rec.sentConsume + i * payload + 1) / 256; ptr ++;
-            buf[ptr] = (rec.sentConsume + i * payload + 1) % 256; ptr ++;
-            buf[ptr] = payload; ptr ++;
-            if (SendCommand(buf, ptr)) {
-                if (WaitCmdAck(buf, &ptr)) {
-                    rec.sentConsume += payload;
-                    rec.sentConsume %= 2400;
-                    ParseAck(buf, ptr);
+        record_t * rec = &records[iter->second.vmac];
+        while (rec->sentConsume != rec->consume & 0x7FFF) {
+            uint16 consume = rec->consume;
+            if (rec->consume > 0x7FFF) consume = rec->consume & 0x7FFF;
+            if (consume < rec->sentConsume) consume += 2400;
+            uint8 delta = consume - rec->sentRecharge;
+            for (uint8 i = 0, j = delta / payload; i < j; i ++) {
+                ptr = 0;
+                memcpy(buf, &iter->second.vmac, sizeof(uint32)); ptr += sizeof(uint32);
+                buf[ptr] = PORT; ptr ++;
+                buf[ptr] = RAND; ptr ++;
+                buf[ptr] = 0x04; ptr ++; // len
+                buf[ptr] = VALVE_GET_CONSUME_DATA; ptr ++;
+                buf[ptr] = (rec->sentConsume + i * payload + 1) / 256; ptr ++;
+                buf[ptr] = (rec->sentConsume + i * payload + 1) % 256; ptr ++;
+                buf[ptr] = payload; ptr ++;
+                if (SendCommand(buf, ptr)) {
+                    if (WaitCmdAck(buf, &ptr)) {
+                        rec->sentConsume += payload;
+                        rec->sentConsume %= 2400;
+                        ParseAck(buf, ptr);
+                    } else {
+                        DEBUG("Wait consume cmd ack from %d to %d failed\n", rec->sentConsume + i * payload + 1, rec->sentConsume + i * payload + 1 + payload);
+                        goto NEXT;
+                    }
                 } else {
-                    DEBUG("Wait consume cmd ack from %d to %d failed\n", rec.sentConsume + i * payload + 1, rec.sentConsume + i * payload + 1 + payload);
-                    return;
+                    DEBUG("Send cmd to get consume data from %d to %d failed\n", rec->sentConsume + i * payload + 1, rec->sentConsume + i * payload + 1 + payload);
+                    goto NEXT;
                 }
-            } else {
-                DEBUG("Send cmd to get consume data from %d to %d failed\n", rec.sentConsume + i * payload + 1, rec.sentConsume + i * payload + 1 + payload);
-                return;
             }
-        }
-        if (delta % payload != 0) {
-            ptr = 0;
-            memcpy(buf, &iter->second.vmac, sizeof(uint32)); ptr += sizeof(uint32);
-            buf[ptr] = PORT; ptr ++;
-            buf[ptr] = RAND; ptr ++;
-            buf[ptr] = 0x04; ptr ++; // len
-            buf[ptr] = VALVE_GET_CONSUME_DATA; ptr ++;
-            buf[ptr] = (rec.sentConsume + (delta / payload) * payload + 1) / 256; ptr ++;
-            buf[ptr] = (rec.sentConsume + (delta / payload) * payload + 1) % 256; ptr ++;
-            buf[ptr] = delta % payload; ptr ++;
-            if (SendCommand(buf, ptr)) {
-                if (WaitCmdAck(buf, &ptr)) {
-                    rec.sentConsume += delta % payload;
-                    rec.sentConsume %= 2400;
-                    ParseAck(buf, ptr);
+            if (delta % payload != 0) {
+                ptr = 0;
+                memcpy(buf, &iter->second.vmac, sizeof(uint32)); ptr += sizeof(uint32);
+                buf[ptr] = PORT; ptr ++;
+                buf[ptr] = RAND; ptr ++;
+                buf[ptr] = 0x04; ptr ++; // len
+                buf[ptr] = VALVE_GET_CONSUME_DATA; ptr ++;
+                buf[ptr] = (rec->sentConsume + (delta / payload) * payload + 1) / 256; ptr ++;
+                buf[ptr] = (rec->sentConsume + (delta / payload) * payload + 1) % 256; ptr ++;
+                buf[ptr] = delta % payload; ptr ++;
+                if (SendCommand(buf, ptr)) {
+                    if (WaitCmdAck(buf, &ptr)) {
+                        rec->sentConsume += delta % payload;
+                        rec->sentConsume %= 2400;
+                        ParseAck(buf, ptr);
+                    } else {
+                        DEBUG("Wait consume cmd ack from %d to %d failed\n", rec->sentConsume + (delta / payload) * payload + 1, rec->sentConsume + (delta / payload) * payload + 1 + delta % payload);
+                        goto NEXT;
+                    }
                 } else {
-                    DEBUG("Wait consume cmd ack from %d to %d failed\n", rec.sentConsume + (delta / payload) * payload + 1, rec.sentConsume + (delta / payload) * payload + 1 + delta % payload);
-                    return;
+                    DEBUG("Send cmd to get consume data from %d to %d failed\n", rec->sentConsume + (delta / payload) * payload + 1, rec->sentConsume + (delta / payload) * payload + 1 + delta % payload);
+                    goto NEXT;
                 }
-            } else {
-                DEBUG("Send cmd to get consume data from %d to %d failed\n", rec.sentConsume + (delta / payload) * payload + 1, rec.sentConsume + (delta / payload) * payload + 1 + delta % payload);
-                return;
             }
+            syncRecords = true;
         }
-        syncRecords = true;
+    NEXT:
+        continue; // just make compiler happy
     }
 }
 

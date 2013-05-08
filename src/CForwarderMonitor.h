@@ -212,16 +212,21 @@ class CForwarderMonitor:public IThread, public IValveMonitor
     void ResetForwarderData();//must firstly be called
     void GetValveTime();
     void SetValveTime(uint32 fid, uint16 vid, tm * time);
-    //void GetValveTemperature();
+    uint8 GetValveRecord(); // used only in HEAT mode
+    void GetValveTemperature(); // used only in HEAT mode
     //void GetValveRunningTime();
     void GetValveUserID();
-    void GetPunctualData();
+    void GetPunctualData(); // used only in TEMPERATURE mode
     void SendCardHostCommand();
     void GetHeatData();
     void LoadUsers();
     void SaveUsers();
     void LoadRecords();
     void SaveRecords();
+    uint16 BatchGetConsumeRecords(uint32 fid, uint16 vid);
+    uint16 BatchGetRechargeRecords(uint32 fid, uint16 vid);
+    uint16 BatchGetTemperatureRecords(uint32 fid, uint16 vid);
+    uint32 BatchGetRecordsData();
   private:
     uint8 SendValveCtrlOneByOne(const uint8* pValveCtrl, const uint32 ValveCtrlLen);//return how many valves succeed
     void SendA1();

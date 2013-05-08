@@ -8,7 +8,7 @@ RM = rm
 CC = $(BASE)arm-none-linux-gnueabi-gcc
 STRIP = $(BASE)arm-none-linux-gnueabi-strip
 CPPFLAGS += -Wall -g -O2 -lpthread -lstdc++ -fomit-frame-pointer
-PREDEFINES = -DLINUX -D__OS__=LINUX -DNDEBUG -DDEBUG_VALVE -DDEBUG_FORWARDER
+PREDEFINES = -DLINUX -D__OS__=LINUX -DNDEBUG -DDEBUG_VALVE -DDEBUG_FORWARDER -DDEBUG_MAIN
 CFLAGS += -Wextra $(CPPFLAGS) $(PREDEFINES)
 LDFLAGS =  -L../lib/libs_emsys_odm -l EMZY_ARM_ODM
 INCLUDE = -I.
