@@ -104,6 +104,7 @@ uint32 CValveMonitor::Run() {
             last = time(NULL);
         } else {
             if (punctualTimer.Done()) {
+                SyncValveTime();
                 GetPunctualData();
                 GetTimeData();
                 if (valveDataType == VALVE_DATA_TYPE_HEAT) {
@@ -128,7 +129,7 @@ uint32 CValveMonitor::Run() {
         if (cbuffer_read(tx) != NULL && rc == wc)
             FD_SET(com, &wfds);
 
-        tv.tv_sec = 5;
+        tv.tv_sec = 1;
         tv.tv_usec = 0;
         retval = select(com + 1, &rfds, &wfds, NULL, &tv);
         if (retval) {
@@ -143,8 +144,10 @@ uint32 CValveMonitor::Run() {
 
                 if (r == -1 || r == 0) {
                     if (retry > 3) {
+                        if (rc != wc)
+                            DEBUG("Read timeout, retry: %d, rc: %d, wc: %d\n", retry, rc, wc);
                         retry = 0;
-                        rc ++;
+                        rc = wc;
                     } else {
                         retry ++;
                     }
@@ -194,8 +197,10 @@ uint32 CValveMonitor::Run() {
             }
         } else {
             if (retry > 3) {
+                if (rc != wc)
+                    DEBUG("Read timeout, retry: %d, rc: %d, wc: %d\n", retry, rc, wc);
                 retry = 0;
-                rc ++;
+                rc = wc;
             } else {
                 retry ++;
             }
@@ -622,9 +627,16 @@ void CValveMonitor::ParseQueryUser(uint32 vmac, uint8 * data, uint16 len) {
 }
 
 void CValveMonitor::Recharge(userid_t uid, uint8 * data, uint16 len) {
-
+    DEBUG("Recharge user id ");
+    hexdump(uid.x, sizeof(userid_t));
+    DEBUG("Recharge data ");
+    hexdump(data, len);
     for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+        DEBUG("Iter user id ");
+        hexdump(iter->first.x, sizeof(userid_t));
         if (memcmp(iter->first.x, uid.x, sizeof(userid_t)) == 0) {
+            DEBUG("Found user id ");
+            hexdump(iter->first.x, sizeof(userid_t));
             txlock.Lock();
             uint8 * buf = (uint8 *)cbuffer_write(tx);
             if (buf == NULL) {
@@ -655,12 +667,22 @@ void CValveMonitor::Recharge(userid_t uid, uint8 * data, uint16 len) {
 }
 
 void CValveMonitor::ParseRecharge(uint32 vmac, uint8 * data, uint16 len) {
+    DEBUG("Want Valve MAC: ");
+    //hexdump(&vmac, sizeof(uint32));
+    DEBUG("%02x %02x %02x %02x\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF);
     for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+        DEBUG("Iter Valve MAC: ");
+        //hexdump(&iter->second.vmac, sizeof(uint32));
+        DEBUG("%02x %02x %02x %02x\n", iter->second.vmac & 0xFF, (iter->second.vmac >> 8) & 0xFF, (iter->second.vmac >> 16) & 0xFF, (iter->second.vmac >> 24) & 0xFF);
         if (iter->second.vmac == vmac) {
+            DEBUG("Found Valve MAC: ");
+            //hexdump(&iter->second.vmac, sizeof(uint32));
+            DEBUG("%02x %02x %02x %02x\n", iter->second.vmac & 0xFF, (iter->second.vmac >> 8) & 0xFF, (iter->second.vmac >> 16) & 0xFF, (iter->second.vmac >> 24) & 0xFF);
             CCardHost::GetInstance()->AckRecharge(iter->first, data, len);
             return;
         }
     }
+    DEBUG("No valve mac(%02x %02x %02x %02x) found\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF);
 }
 
 uint16 CValveMonitor::ConfigValve(ValveCtrlType cmd, uint8 * data, uint16 len) {
@@ -993,6 +1015,7 @@ void CValveMonitor::SaveRecords() {
 }
 
 void CValveMonitor::GetValveTime(uint32 vmac) {
+    DEBUG("Get time of valve (%02x %02x %02x %02x)\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF);
     txlock.Lock();
     uint8 * buf = (uint8 *) cbuffer_write(tx);
     if (buf != NULL) {
@@ -1008,6 +1031,8 @@ void CValveMonitor::GetValveTime(uint32 vmac) {
 }
 
 void CValveMonitor::ParseValveTime(uint32 vmac, uint8 * data, uint16 len) {
+    DEBUG("Valve(%02x %02x %02x %02x) ", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF);
+    hexdump(data, len);
     uint8 ptr = 0;
     uint16 year = ((data[ptr] & 0xF0) >> 4) * 10 + (data[ptr] & 0x0F); ptr ++;
     year = year * 100 + ((data[ptr] & 0xF0) >> 4) * 10 + (data[ptr] & 0x0F); ptr ++;
@@ -1019,15 +1044,18 @@ void CValveMonitor::ParseValveTime(uint32 vmac, uint8 * data, uint16 len) {
     uint32 utc = DateTime2TimeStamp(year, month, day, hour, minute, second);
     uint32 now = 0;
     if (GetLocalTimeStamp(now)) {
+        now += 8*60*60; // convert to be Beijing Time
+        DEBUG("Time now: %d, valve: %d, cportal time ready? %s\n", now, utc, CPortal::GetInstance()->timeReady? "true": "false");
         if (CPortal::GetInstance()->timeReady && (now - utc > 60 || utc - now > 60)) {
             tm t;
-            if (GetLocalTime(t))
+            if (GetLocalTime(t, now))
                 SetValveTime(vmac, &t);
         }
     }
 }
 
 void CValveMonitor::SetValveTime(uint32 vmac, tm * time) {
+    DEBUG("Sync valve(%02x %02x %02x %02x) time to %d-%d-%d %d:%d:%d %d\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF, time->tm_year + 1900, time->tm_mon + 1, time->tm_mday, time->tm_hour, time->tm_min, time->tm_sec, time->tm_wday);
     txlock.Lock();
     uint8 * buf = (uint8 *) cbuffer_write(tx);
     if (buf != NULL) {
@@ -1050,4 +1078,10 @@ void CValveMonitor::SetValveTime(uint32 vmac, tm * time) {
         cbuffer_write_done(tx);
     }
     txlock.UnLock();
+}
+
+void CValveMonitor::SyncValveTime() {
+    for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+        GetValveTime(iter->second.vmac);
+    }
 }

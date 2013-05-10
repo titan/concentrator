@@ -454,19 +454,16 @@ bool GetLocalTimeStamp(uint32& UTCTime)
    return true;
 }
 
-bool GetLocalTime(tm & t) {
-    uint32 buf[DATETIME_LEN] = {0};
-    if (ERROR_OK != GetDateTime(buf, 1)) {//RTC
-        DEBUG("Can't read time from RTC\n");
-        return false;
-    }
-    t.tm_year = buf[0] - 1900;
-    t.tm_mon = buf[1] - 1;
-    t.tm_mday = buf[2];
-    t.tm_hour = buf[3];
-    t.tm_min = buf[4];
-    t.tm_sec = buf[5];
-    t.tm_wday = buf[6];
+bool GetLocalTime(tm & t, uint32 utc) {
+    tm_new tn;
+    gmtime_new(&tn, utc);
+    t.tm_year = tn.tm_year;
+    t.tm_mon = tn.tm_mon;
+    t.tm_mday = tn.tm_mday;
+    t.tm_hour = tn.tm_hour;
+    t.tm_min = tn.tm_min;
+    t.tm_sec = tn.tm_sec;
+    t.tm_wday = tn.tm_wday;
     return true;
 }
 

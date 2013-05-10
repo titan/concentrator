@@ -27,7 +27,7 @@ uint32 DateTime2TimeStamp(uint32 Year, uint32 Month, uint32 Day, uint32 Hour, ui
 bool TimeStamp2TimeStr(uint32 UTCTime, uint32* pDateTime, uint32 DateTimeLen);
 const char* GetLocalTimeStr();
 bool GetLocalTimeStamp(uint32& UTCTime);
-bool GetLocalTime(tm & t);
+bool GetLocalTime(tm & t, uint32 utc);
 enum LightE
 {
    LIGHT_FORWARD=PB16,

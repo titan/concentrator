@@ -330,7 +330,7 @@ void StartValveMonitor() {
     string type = ini.GetValueString(SECKEY, "VALVETYPE", "temperature");
     if (type == "heat") {
         CValveMonitor::GetInstance()->SetValveDataType(VALVE_DATA_TYPE_HEAT);
-   } else {
+    } else {
         CValveMonitor::GetInstance()->SetValveDataType(VALVE_DATA_TYPE_TEMPERATURE);
     }
 

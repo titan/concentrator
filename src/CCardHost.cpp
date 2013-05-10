@@ -66,6 +66,7 @@ uint32 CCardHost::Run() {
     uint8 cmd[PKTLEN];
     uint8 * buf = NULL;
     uint16 rlen = 0, wlen = 0;
+    uint8 noneloop = 0;
     while (true) {
 
         FD_ZERO(&rfds);
@@ -76,7 +77,7 @@ uint32 CCardHost::Run() {
             FD_SET(com, &wfds);
 
         /* Wait up to five seconds. */
-        tv.tv_sec = 5;
+        tv.tv_sec = 1;
         tv.tv_usec = 0;
 
         retval = select(com + 1, &rfds, &wfds, NULL, &tv);
@@ -130,6 +131,11 @@ uint32 CCardHost::Run() {
                     sleep(1);
                 }
             }
+            noneloop = 0;
+        } else {
+            noneloop ++;
+            if (noneloop % 16 == 15)
+                DEBUG("Nothing to read\n");
         } //else ParseAndExecute(sample, sizeof(sample)); // only for test
     }
     return 0;
@@ -214,6 +220,7 @@ void CCardHost::HandleQueryUser(uint8 * buf, uint16 len) {
     int retry = 3;
     userid_t uid;
     bzero(uid.x, sizeof(userid_t));
+    memcpy(uid.x, buf, sizeof(userid_t));
     do {
         if (IValveMonitorFactory::GetInstance()->GetUserList(users))
             break;
@@ -224,14 +231,18 @@ void CCardHost::HandleQueryUser(uint8 * buf, uint16 len) {
         AckQueryUser(uid, NULL, 0);
         return;
     }
+    DEBUG("Want USER ID: ");
+    hexdump(buf, sizeof(userid_t));
 
     for (vector<user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
 #ifdef DEBUG_CARDHOST
         uint8 * user = iter->uid.x;
 #endif
-        DEBUG("User ID: %02x %02x %02x %02x %02x %02x %02x %02x\n", user[0], user[1], user[2], user[3], user[4], user[5], user[6], user[7]);
+        DEBUG("Iter USER ID: ");
+        hexdump(user, sizeof(userid_t));
         if (memcmp(iter->uid.x, buf, USERID_LEN) == 0) {
-            DEBUG("Found user: %02x %02x %02x %02x %02x %02x %02x %02x\n", user[0], user[1], user[2], user[3], user[4], user[5], user[6], user[7]);
+            DEBUG("Found USER ID: ");
+            hexdump(user, sizeof(userid_t));
             if (len == USERID_LEN) {
                 // just user id, no more data to send
                 AckQueryUser(uid, buf, 0);
@@ -251,6 +262,7 @@ void CCardHost::HandleRecharge(uint8 * buf, uint16 len) {
     int retry = 3;
     userid_t uid;
     bzero(uid.x, sizeof(userid_t));
+    memcpy(uid.x, buf, sizeof(userid_t));
     do {
         if (IValveMonitorFactory::GetInstance()->GetUserList(users))
             break;
@@ -261,14 +273,18 @@ void CCardHost::HandleRecharge(uint8 * buf, uint16 len) {
         AckRecharge(uid, NULL, 0);
         return;
     }
+    DEBUG("Want USER ID: ");
+    hexdump(buf, sizeof(userid_t));
 
     for (vector<user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
 #ifdef DEBUG_CARDHOST
         uint8 * user = iter->uid.x;
 #endif
-        DEBUG("User ID: %02x %02x %02x %02x %02x %02x %02x %02x\n", user[0], user[1], user[2], user[3], user[4], user[5], user[6], user[7]);
+        DEBUG("Iter USER ID: ");
+        hexdump(user, sizeof(userid_t));
         if (memcmp(iter->uid.x, buf, USERID_LEN) == 0) {
-            DEBUG("Found user: %02x %02x %02x %02x %02x %02x %02x %02x\n", user[0], user[1], user[2], user[3], user[4], user[5], user[6], user[7]);
+            DEBUG("Found USER ID: ");
+            hexdump(user, sizeof(userid_t));
             // send the command to valve
             IValveMonitorFactory::GetInstance()->Recharge(iter->uid, buf + USERID_LEN, len - USERID_LEN);
             return;
@@ -281,7 +297,6 @@ void CCardHost::HandleGetTime(uint8 * data, uint16 len) {
     if (len == 0) {
         AckTimeOrRemove(NULL, 0);
     } else {
-        // todo:
         AckTimeOrRemove(NULL, 0);
         DEBUG("Fault device: %02x %02x %02x %02x %02x %02x\n", data[0], data[1], data[2], data[3], data[4], data[5]);
     }
@@ -336,6 +351,8 @@ void CCardHost::AckQueryUser(userid_t uid, uint8 * data, uint16 len) {
 }
 
 void CCardHost::AckRecharge(userid_t uid, uint8 * data, uint16 len) {
+    DEBUG("Get %d bytes: ", len);
+    hexdump(data, len);
     uint32 ptr = 0;
     uint16 crc = 0, cmdlen = 0;
     uint8 * buf = (uint8 *)cbuffer_write(cmdbuf);

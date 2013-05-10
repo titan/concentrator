@@ -718,9 +718,10 @@ bool CForwarderMonitor::ParseData(const uint8* pReceiveData, uint32 ReceiveDataL
                 UpdateTemperatureItem(ForwarderID, ValveID, (uint8*)&utc, sizeof(utc), ITEM_TEMPERATURE_DATETIME);
             uint32 now = 0;
             if (GetLocalTimeStamp(now)) {
+                now += 8*60*60; // convert to be Beijing Time
                 if (CPortal::GetInstance()->timeReady && (now - utc > 60 || utc - now > 60)) {
                     tm t;
-                    if (GetLocalTime(t))
+                    if (GetLocalTime(t, now))
                         SetValveTime(ForwarderID, ValveID, &t);
                 }
             }
@@ -1784,4 +1785,5 @@ uint32 CForwarderMonitor::BatchGetRecordsData() {
             }
         }
     }
+    return counter;
 }

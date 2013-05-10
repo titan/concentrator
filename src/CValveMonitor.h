@@ -82,6 +82,7 @@ private:
     void GetValveTime(uint32 vmac);
     void ParseValveTime(uint32 vmac, uint8 * data, uint16 len);
     void SetValveTime(uint32 vmac, tm * time);
+    void SyncValveTime();
 
     static CValveMonitor * instance;
     int com;
