@@ -33,7 +33,7 @@ CKey* CKey::GetInstance()
 
 uint32 CKey::Run()
 {
-   //key
+    //key
 	fd_set rfds,fds;
 	int retval;
 	int fd;
@@ -51,11 +51,11 @@ uint32 CKey::Run()
 	FD_SET(fd,&fds);
 
 	//滤掉缓冲区
-	while(read(fd,(char*)number, sizeof(unsigned char))>0);
+	while (read(fd,(char*)number, sizeof(unsigned char))>0);
 
 	while(1)
 	{
-      struct timeval tv;
+        struct timeval tv;
 		tv.tv_sec=0;
 		tv.tv_usec=10;
 		rfds = fds;
@@ -66,49 +66,49 @@ uint32 CKey::Run()
 			{
 				retval=read(fd, (char*)number, sizeof(unsigned char));
 				if (retval> 0)
-            {
-               if( number[0] & 0x80 )//only respond to the up key
-               {
-                  KeyE key = KEY_MAX;
-                  switch(number[0]&0x7F)
-                  {
-                     case 0x28:
-                        key = KEY_DOWN;
-                        DEBUG("Key 'Down Arrow up'\n");
-                        break;
+                {
+                    if( number[0] & 0x80 )//only respond to the up key
+                    {
+                        KeyE key = KEY_MAX;
+                        switch(number[0]&0x7F)
+                        {
+                        case 0x28:
+                            key = KEY_DOWN;
+                            DEBUG("Key 'Down Arrow up'\n");
+                            break;
 
-                     case 0x26:
-                        key = KEY_UP;
-                        DEBUG("Key 'Up Arrow up'\n");
-                        break;
+                        case 0x26:
+                            key = KEY_UP;
+                            DEBUG("Key 'Up Arrow up'\n");
+                            break;
 
-                     case 0x25:
-                        key = KEY_LEFT;
-                        DEBUG("Key 'Left Arrow up'\n");
-                        break;
+                        case 0x25:
+                            key = KEY_LEFT;
+                            DEBUG("Key 'Left Arrow up'\n");
+                            break;
 
-                     case 0x27:
-                        key = KEY_RIGHT;
-                        DEBUG("Key 'Right Arrow up'\n");
-                        break;
+                        case 0x27:
+                            key = KEY_RIGHT;
+                            DEBUG("Key 'Right Arrow up'\n");
+                            break;
 
-                     case 0x0D:
-                        key = KEY_ENTER;
-                        DEBUG("Key 'Enter up'\n");
-                        break;
+                        case 0x0D:
+                            key = KEY_ENTER;
+                            DEBUG("Key 'Enter up'\n");
+                            break;
 
-                     case 0x1B:
-                        key = KEY_ESC;
-                        DEBUG("Key 'Esc up'\n");
-                        break;
+                        case 0x1B:
+                            key = KEY_ESC;
+                            DEBUG("Key 'Esc up'\n");
+                            break;
 
-                     default:
-                        DEBUG("Key 'NULL up'\n");
-                        break;
-                  }
-                  CScreen::GetInstance()->InputKey(key);
-               }
-            }
+                        default:
+                            DEBUG("Key 'NULL up'\n");
+                            break;
+                        }
+                        CScreen::GetInstance()->InputKey(key);
+                    }
+                }
 			}
 		}
 	}

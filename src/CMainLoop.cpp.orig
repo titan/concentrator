@@ -1,0 +1,409 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <sys/select.h>
+#include <sys/time.h>
+#include "CMainLoop.h"
+#include "lcddrv.h"
+#include "Utils.h"
+#include "IValveMonitorFactory.h"
+#include "CHeatMonitor.h"
+#include "CPortal.h"
+
+#ifdef DEBUG_MAINLOOP
+#define DEBUG(...) do {printf("%s::%s----", __FILE__, __func__);printf(__VA_ARGS__);} while(false)
+#ifndef hexdump
+#define hexdump(data, len) do {for (uint32 i = 0; i < (uint32)len; i ++) { printf("%02x ", *(uint8 *)(data + i));} printf("\n");} while(0)
+#endif
+#else
+#define DEBUG(...)
+#ifndef hexdump
+#define hexdump(data, len)
+#endif
+#endif
+
+#define KEY_NAME "/dev/KBD0"
+
+//the screen shows only one line
+#define SL_Y 3
+//the screen shows two lines
+#define DL_Y0 1
+#define DL_Y1 4
+//the screen shows three lines
+#define TL_Y0 1
+#define TL_Y1 3
+#define TL_Y2 5
+
+extern int heatCount;
+
+static void PrintHZ(char x, char y, const char* pHZ, uint8 HZLen) {
+   for(uint8 i = 0; i < HZLen; i++) {
+      lcdwritehz(pHZ[i], y, x+i, 0);
+   }
+}
+
+static void PrintChar(char x, char y, const char * buf) {
+    char dx = x * 2;
+    for(int i = 0, len = strlen(buf); i < len; i ++){
+      lcdwritechar(buf[i], y, dx + i, 0, 0, 0, 0, 0);
+   }
+}
+
+CMainLoop * CMainLoop::instance = NULL;
+CMainLoop * CMainLoop::GetInstance() {
+    if (instance == NULL) {
+        instance = new CMainLoop();
+    }
+    return instance;
+}
+
+CMainLoop::CMainLoop() {
+    int len = heatCount + 6;
+    borders = new uint8[len];
+    borders[0] = 1;
+    borders[1] = 1;
+    borders[2] = 1;
+    borders[3] = 1;
+    for (int i = 4; i < heatCount; i ++) {
+        borders[i] = 5;
+    }
+    borders[4 + heatCount + 0] = 1;
+    borders[4 + heatCount + 1] = 0;
+    cardidx = 4 + heatCount + 0;
+    vidx = 0;
+    hidx = 0;
+}
+
+CMainLoop::~CMainLoop() {
+    delete borders;
+}
+
+void CMainLoop::Run() {
+
+    fd_set rfds;
+    struct timeval tv;
+    int retval, r;
+    char chr;
+
+    kfd = open(KEY_NAME,O_RDONLY);
+    if (kfd <0) {
+        DEBUG("open device key error!\n");
+        return;
+    }
+
+    FD_ZERO(&rfds);
+    FD_SET(kfd, &rfds);
+
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+
+    //init LCD
+    LcdGpin();
+    Lcd_TestBuf();
+    LcdInit(1);
+    LCDClear();
+
+    Draw();
+
+    while (true) {
+        retval = select(kfd + 1, &rfds, NULL, NULL, &tv);
+        if (retval) {
+            if (FD_ISSET(kfd, &rfds)) {
+                r = read(kfd, &chr, sizeof(char));
+                switch (chr) {
+                case 0x25: // left
+                    if (hidx != 0) {
+                        hidx --;
+                        Draw();
+                    }
+                    break;
+                case 0x26: { // up
+                    if (vidx != 0) {
+                        if (hidx == 0) {
+                            vidx --;
+                            Draw();
+                        }
+                    }
+                    break;
+                }
+                case 0x27: // right
+                    if (hidx < borders[vidx] - 1) {
+                        hidx ++;
+                        Draw();
+                    }
+                    break;
+                case 0x28: { // down
+                    if (borders[vidx + 1] != 0) {
+                        if (hidx == 0) {
+                            vidx ++;
+                            Draw();
+                        }
+                    }
+                    break;
+                }
+                case 0x0D: // enter
+                    break;
+                case 0x1B: // esc
+                    break;
+                }
+            }
+        }
+        sleep(1);
+    }
+}
+
+void CMainLoop::Draw() {
+    switch (vidx) {
+    case 0:
+        DrawInitial();
+        break;
+    case 1:
+        DrawStatus();
+        break;
+    case 2:
+        DrawGPRS();
+        break;
+    case 3:
+        if (wireless) {
+            DrawForwarder();
+        } else {
+            DrawValve();
+        }
+        break;
+    default:
+        if (vidx == cardidx) {
+            DrawCardHost();
+        } else {
+            DrawHeat();
+        }
+        break;
+    }
+}
+
+void CMainLoop::DrawInitial() {
+    LCDClear();
+    char buf[32] = {0};
+    bzero(buf, 32);
+    PrintHZ(0, TL_Y0, "数据集中器", 5);
+    sprintf(buf, "v%02d.%02d", VERSION, SUBVERSION);
+    PrintChar(5, TL_Y0, buf);
+    PrintChar(0, TL_Y1, "HDR30-S01");
+
+    uint32 date[7] = {0};
+    if (ERROR_OK == GetDateTime(date, 1)) { //RTC
+        bzero(buf, 32);
+        sprintf(buf, "%04d-%02d-%02d %02d:%02d", date[0], date[1], date[2], date[3], date[4]);
+        PrintChar(0, TL_Y2, buf);
+    }
+}
+
+void CMainLoop::DrawStatus() {
+    LCDClear();
+    Status status = IValveMonitorFactory::GetInstance()->GetStatus();
+    if (wireless) {
+        PrintHZ(0, TL_Y0, "转发器", 3);
+    } else {
+        PrintHZ(0, TL_Y0, "阀控器", 3);
+    }
+    switch (status) {
+    case STATUS_OK:
+        PrintChar(1/*space*/ + 3, TL_Y0, "OK");
+        break;
+    case STATUS_CHECKING:
+        PrintHZ(1/*space*/ + 3, TL_Y0, "检测中", 3);
+        break;
+    default:
+        PrintChar(1/*space*/ + 3, TL_Y0, "Err");
+        break;
+    }
+    status = STATUS_CHECKING;
+    CHeatMonitor::GetInstance()->GetStatus(status);
+    PrintHZ(0, TL_Y1, "热总表", 3);
+    switch (status) {
+    case STATUS_OK:
+        PrintChar(1/*space*/ + 3, TL_Y1, "OK");
+        break;
+    case STATUS_CHECKING:
+        PrintHZ(1/*space*/ + 3, TL_Y1, "检测中", 3);
+        break;
+    default:
+        PrintChar(1/*space*/ + 3, TL_Y1, "Err");
+        break;
+    }
+    status = STATUS_CHECKING;
+    CPortal::GetInstance()->GetGPRSStatus(status);
+    PrintChar(0, TL_Y2, "GPRS");
+    switch (status) {
+    case STATUS_OK:
+        PrintChar(1/*space*/ + 3, TL_Y1, "OK");
+        break;
+    case STATUS_CHECKING:
+        PrintHZ(1/*space*/ + 3, TL_Y1, "检测中", 3);
+        break;
+    default:
+        PrintChar(1/*space*/ + 3, TL_Y1, "Err");
+        break;
+    }
+}
+
+void CMainLoop::DrawGPRS() {
+    LCDClear();
+    uint8 signal = 99;
+    char buf[16];
+    Status status = STATUS_ERROR;
+    CPortal::GetInstance()->GetGPRSStatus(status);
+    PrintHZ(0, TL_Y0, "网络服务", 4);
+    PrintChar(4, TL_Y0, ":");
+    switch (status) {
+    case STATUS_OK:
+        PrintHZ(4 + 1, TL_Y0, "正常", 4);
+        CPortal::GetInstance()->GetGPRSSignalIntesity(signal);
+        PrintHZ(0, TL_Y1, "信号强度", 4);
+        PrintChar(4, TL_Y1, ":");
+        if (signal == 99) {
+            PrintChar(4 + 1, TL_Y1, "Busy");
+        } else {
+            bzero(buf, 16);
+            sprintf(buf, "%02d", signal);
+            PrintChar(4 + 1, TL_Y1, buf);
+        }
+        PrintHZ(0, TL_Y2, "远程连接", 4);
+        PrintChar(4, TL_Y2, "......");
+        break;
+    case STATUS_CHECKING:
+        PrintHZ(4 + 1, TL_Y1, "检测中", 3);
+        PrintHZ(0, TL_Y1, "信号强度", 4);
+        PrintChar(4, TL_Y1, ":...");
+        PrintHZ(0, TL_Y2, "远程连接", 4);
+        PrintChar(4, TL_Y2, "......");
+        break;
+    default:
+        PrintHZ(4 + 1, TL_Y1, "无", 1);
+        PrintHZ(0, TL_Y1, "信号强度", 4);
+        PrintChar(4, TL_Y1, ":");
+        PrintHZ(0, TL_Y2, "远程连接", 4);
+        PrintChar(4, TL_Y2, ":...");
+        break;
+    }
+}
+
+void CMainLoop::DrawForwarder() {
+    LCDClear();
+    static ForwarderInfoListT info;
+
+    if (!CForwarderMonitor::GetInstance()->GetForwarderInfo(info)) {
+        PrintHZ(0, DL_Y0, "转发器", 3);
+        PrintChar(3, DL_Y0, ":");
+        PrintHZ(0, DL_Y1, "检测中", 3);
+        return;
+    }
+
+    if (0 == info.size()) {
+        PrintHZ(0, DL_Y0, "转发器", 3);
+        PrintChar(3, DL_Y0, "0-0");
+        return;
+    }
+
+    borders[3] = info.size();
+    if (hidx >= borders[3]) {
+        hidx = borders[3] - 1;
+    }
+
+    char buf[32];
+    PrintHZ(0, DL_Y0, "转发器", 3);
+    bzero(buf, 32);
+    sprintf(buf, "%d-%d:%04X", borders[3], hidx + 1, (info[hidx].ForwarderID >> 16) & 0xFFFF);
+    PrintChar(3, DL_Y0, buf);
+
+    if (info[hidx].IsOffline) {
+        PrintChar(0, DL_Y1, "Offline");
+    } else {
+        PrintHZ(0, DL_Y1, "阀控器数量", 5);
+        bzero(buf, 32);
+        sprintf(buf, ":%d", info[hidx].ValveCount);
+        PrintChar(5, DL_Y1, buf);
+    }
+}
+
+void CMainLoop::DrawValve() {
+    LCDClear();
+}
+
+void CMainLoop::DrawHeat() {
+    uint8 idx = vidx - 4;
+    HeatNodeInfoListT info;
+    LCDClear();
+    if (!CHeatMonitor::GetInstance()->GetHeatNodeInfoList(info)) {
+        PrintHZ(0, TL_Y0, "热总表", 3);
+        PrintChar(3, TL_Y0, ":");
+        PrintHZ(0, TL_Y1, "检测中", 3);
+        return;
+    }
+
+    if (0 == info.size()) {
+        PrintHZ(0, TL_Y0, "热总表", 3);
+        PrintChar(3, TL_Y0, ":");
+        PrintChar(0, TL_Y1, "Err");
+        return;
+    }
+
+    char buf[32];
+    bzero(buf, 32);
+    sprintf(buf, "%d-%d(0x%02X):", info.size(), idx + 1, info[idx].MacAddress[0]);
+    PrintHZ(0, TL_Y0, "热总表", 3);
+    PrintChar(3, TL_Y0, buf);
+    if (info[idx].IsOffline) {
+        PrintChar(0, TL_Y1, "Offline");
+        borders[vidx] = 1;
+        return;
+    }
+    borders[vidx] = 5;
+
+    switch (hidx) {
+    case 0: {
+        PrintHZ(0, TL_Y1, "供水温度", 4);
+        PrintChar(4, TL_Y1, ":");
+        PrintChar(4 + 1, TL_Y1, info[idx].SupplyWaterTemperature);
+        PrintHZ(4 + 1 + strlen(info[idx].SupplyWaterTemperature) / 2, TL_Y1, "℃", 1);
+        PrintHZ(0, TL_Y2, "回水温度", 4);
+        PrintChar(4, TL_Y2, ":");
+        PrintChar(4 + 1, TL_Y1, info[idx].ReturnWaterTemperature);
+        PrintHZ(4 + 1 + strlen(info[idx].ReturnWaterTemperature) / 2, TL_Y1, "℃", 1);
+        break;
+    }
+    case 1: {
+        PrintHZ(0, TL_Y1, "瞬时热量", 4);
+        PrintChar(4, TL_Y1, ":");
+        PrintChar(1, TL_Y2, info[idx].CurrentHeatVelocity);
+        PrintChar(1 + strlen(info[idx].CurrentHeatVelocity) / 2, TL_Y2, "GJ");
+        break;
+    }
+    case 2: {
+        PrintHZ(0, TL_Y1, "瞬时流量", 4);
+        PrintChar(4, TL_Y1, ":");
+        PrintChar(1, TL_Y2, info[idx].CurrentFlowVelocity);
+        PrintHZ(1 + strlen(info[idx].CurrentFlowVelocity) / 2, TL_Y2, "㎥", 1);
+    }
+    case 3: {
+        PrintHZ(0, TL_Y1, "累计热量", 4);
+        PrintChar(4, TL_Y1, ":");
+        PrintChar(1, TL_Y2, info[idx].TotalHeat);
+        PrintChar(1 + strlen(info[idx].CurrentHeatVelocity) / 2, TL_Y2, "GJ");
+    }
+    case 4: {
+        PrintHZ(0, TL_Y1, "累计流量", 4);
+        PrintChar(4, TL_Y1, ":");
+        PrintChar(1, TL_Y2, info[idx].TotalFlow);
+        PrintHZ(1 + strlen(info[idx].TotalFlow) / 2, TL_Y2, "㎥", 1);
+    }
+    default:
+        break;
+    }
+}
+
+void CMainLoop::DrawCardHost() {
+    LCDClear();
+}

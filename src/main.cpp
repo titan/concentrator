@@ -18,6 +18,7 @@
 #include"Utils.h"
 #include "CCardHost.h"
 #include "CValveMonitor.h"
+#include "CMainLoop.h"
 
 #ifdef DEBUG_MAIN
 #define DEBUG(...) do {printf("%s::%s----", __FILE__, __func__);printf(__VA_ARGS__);} while(false)
@@ -65,35 +66,38 @@ static void StartCardHost();
 static void StartValveMonitor();
 
 bool wireless = true;
+int heatCount = 0;
 
-int main()
-{
-   SetLight(LIGHT_WARNING, false);//turn off warning light
-   if (access("config.ini", F_OK) == -1) {
-       wireless = true;
-       StartForwarder();
-   } else {
-       CINI ini("config.ini");
-       if (ini.GetValueBool("DEFAULT", "WIRELESS", true)) {
-           wireless = true;
-           StartForwarder();
-       } else {
-           wireless = false;
-           StartValveMonitor();
-       }
-   }
-   StartGeneralHeat();
-   StartPortal();
-   StartCardHost();
+int main() {
+    SetLight(LIGHT_WARNING, false);//turn off warning light
+    if (access("config.ini", F_OK) == -1) {
+        wireless = true;
+        StartForwarder();
+    } else {
+        CINI ini("config.ini");
+        if (ini.GetValueBool("DEFAULT", "WIRELESS", true)) {
+            wireless = true;
+            StartForwarder();
+        } else {
+            wireless = false;
+            StartValveMonitor();
+        }
+    }
+    StartGeneralHeat();
+    StartPortal();
+    StartCardHost();
 
-   CScreen::GetInstance()->PowerOn();
-   CKey::GetInstance()->Start();
-	while(1)
-	{
-      CScreen::GetInstance()->Draw();
-      sleep(1);
-	}
-   return 0;
+    CMainLoop::GetInstance()->Run();
+
+    /*
+    CScreen::GetInstance()->PowerOn();
+    CKey::GetInstance()->Start();
+    while (true) {
+        CScreen::GetInstance()->Draw();
+        sleep(1);
+    }
+    */
+    return 0;
 }
 
 static void TrimInvalidChar(string& Str)
@@ -231,6 +235,7 @@ void StartGeneralHeat()
          DEBUG("Heat node address:");
          PrintData(GeneralHeatAddress, sizeof(GeneralHeatAddress));
          CHeatMonitor::GetInstance()->AddGeneralHeat((uint8*)GeneralHeatAddress, sizeof(GeneralHeatAddress));
+         heatCount ++;
       }
    }
    SectionStr = TIME_SESSION;

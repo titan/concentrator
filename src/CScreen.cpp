@@ -146,7 +146,7 @@ void CScreen::PowerOn()
    LcdGpin();
    Lcd_TestBuf();
    LcdInit(1);
-   LCD_clear();
+   LCDClear();
 
    m_Timer.StartTimer( LCD_TIMEOUT );
 }
@@ -270,7 +270,7 @@ bool CScreen::IsDataInvalid()
 
 void CScreen::ClearScreen()
 {
-   LCD_clear();
+   LCDClear();
 }
 
 void CScreen::ClearScreenLineRect(ScreenLineE nLineIndex)
