@@ -19,8 +19,9 @@
 #define PKTLEN 512
 
 #define CMD_QUERY    0x01
-#define CMD_RECHARGE  0x02
+#define CMD_RECHARGE 0x02
 #define CMD_GETTIME  0x05
+#define CMD_INFO     0xF5
 
 /*
 // only for test
@@ -134,8 +135,9 @@ uint32 CCardHost::Run() {
             noneloop = 0;
         } else {
             noneloop ++;
-            if (noneloop % 16 == 15)
+            if (noneloop % 16 == 15) {
                 DEBUG("Nothing to read\n");
+            }
         } //else ParseAndExecute(sample, sizeof(sample)); // only for test
     }
     return 0;
@@ -207,6 +209,11 @@ void CCardHost::ParseAndExecute(uint8 *cmd, uint16 length) {
         DEBUG("Get time command\n");
         hexdump(cmd, length);
         HandleGetTime(data, crc - data);
+        break;
+    case CMD_INFO:
+        DEBUG("Query info command\n");
+        hexdump(cmd, length);
+        HandleInfo(data, crc - data);
         break;
     default:
         DEBUG("Unknow command\n");
@@ -300,6 +307,17 @@ void CCardHost::HandleGetTime(uint8 * data, uint16 len) {
         AckTimeOrRemove(NULL, 0);
         DEBUG("Fault device: %02x %02x %02x %02x %02x %02x\n", data[0], data[1], data[2], data[3], data[4], data[5]);
     }
+}
+
+void CCardHost::HandleInfo(uint8 * data, uint16 len) {
+    cardaddr_t addr;
+    info.clear();
+    for (uint16 i = 0, l = MIN((uint16)(data[0] * sizeof(cardaddr_t)), len - 1); i < l; i += sizeof(cardaddr_t)) {
+        bzero(&addr.x, sizeof(cardaddr_t));
+        memcpy(&addr.x, data + i + 1, sizeof(cardaddr_t));
+        info.push_back(addr);
+    }
+    infoGotten = true;
 }
 
 void CCardHost::AckQueryUser(userid_t uid, uint8 * data, uint16 len) {
@@ -432,7 +450,11 @@ void CCardHost::AckTimeOrRemove(uint8 * data, uint16 len) {
     buf[ptr] = 0x00; ptr ++;
     buf[ptr] = 0x00; ptr ++;
     if (len == 0) {
-        buf[ptr] = 0x05; ptr ++;
+        if (info.size() == 0) {
+            buf[ptr] = 0xf5; ptr ++;
+        } else {
+            buf[ptr] = 0x05; ptr ++;
+        }
         buf[ptr] = time & 0xFF; ptr ++;
         buf[ptr] = (time >> 8) & 0xFF; ptr ++;
         buf[ptr] = (time >> 16) & 0xFF; ptr ++;
@@ -460,4 +482,12 @@ void CCardHost::AckTimeOrRemove(uint8 * data, uint16 len) {
     cbuffer_write_done(cmdbuf);
     DEBUG("Response: ");
     hexdump(buf, ptr);
+}
+
+bool CCardHost::GetCardInfo(vector<cardaddr_t>& i) {
+    if (!infoGotten) {
+        return false;
+    }
+    i = info;
+    return true;
 }

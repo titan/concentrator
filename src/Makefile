@@ -1,8 +1,14 @@
 include ../script/makefile.include
 program_NAME := concentrator
 program_SRCS := $(wildcard *.c *.cpp)
-program_OBJS := $(patsubst %.c,%.o,$(patsubst %.cpp,%.o,$(program_SRCS)))#${program_SRCS:.c=.o .cpp=.o}
-clean_list += $(program_OBJS) $(program_NAME)
+program_OBJS := $(patsubst %.c,%.o,$(patsubst %.cpp,%.o,$(program_SRCS)))
+progens_SRCS := $(patsubst %.cpp.orig, %.cpp, $(wildcard *.cpp.orig))
+progens_OBJS := $(patsubst %.cpp,%.o,$(progens_SRCS))
+protobuf_GENS := $(patsubst %.proto,%.pb.cc,$(wildcard *.proto)) $(patsubst %.proto,%.pb.h,$(wildcard *.proto))
+protobuf_OBJS := $(patsubst %.proto,%.pb.o,$(wildcard *.proto))
+clean_list += $(program_OBJS) $(progens_OBJS) $(program_NAME) $(progens_SRCS) $(protobuf_GENS) $(protobuf_OBJS)
+
+.INTERMEDIATE:$(progens_SRCS)
 
 RM = rm
 CC = $(BASE)arm-none-linux-gnueabi-gcc
@@ -10,9 +16,13 @@ STRIP = $(BASE)arm-none-linux-gnueabi-strip
 CPPFLAGS += -Wall -g -O2 -lpthread -lstdc++ -fomit-frame-pointer
 PREDEFINES = -DLINUX -D__OS__=LINUX -DNDEBUG -DDEBUG_MAIN -DDEBUG_MAINLOOP
 CFLAGS += -Wextra $(CPPFLAGS) $(PREDEFINES)
-LDFLAGS =  -L../lib/libs_emsys_odm -l EMZY_ARM_ODM
-INCLUDE = -I.
+LDFLAGS =  -L../lib/libs_emsys_odm -l EMZY_ARM_ODM -L../lib/protobuf -l protobuf-lite
+INCLUDE = -I. -I../lib/protobuf
 TRANS-HZ = ../util/trans-hz.py
+PROTOC = protoc
+
+%.pb.cc: %.proto
+	$(PROTOC) --cpp_out=. $<
 
 %.cpp: %.cpp.orig
 	$(TRANS-HZ) $< $@
@@ -21,6 +31,9 @@ TRANS-HZ = ../util/trans-hz.py
 	$(CC) $(CFLAGS) $(INCLUDE) -c $< -o $@
 
 %.o: %.cpp
+	$(CC) $(CFLAGS) $(INCLUDE) -c $< -o $@
+
+%.o: %.cc
 	$(CC) $(CFLAGS) $(INCLUDE) -c $< -o $@
 
 .PHONY: all clean
@@ -38,8 +51,8 @@ clean:
 
 clean_list += ${program_OBJS:.o=.d}
 
-$(program_NAME): $(program_OBJS)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(program_OBJS) -o $(program_NAME)
+$(program_NAME): $(protobuf_OBJS) $(program_OBJS) $(progens_OBJS)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(program_OBJS) $(progens_OBJS) $(protobuf_OBJS) -o $(program_NAME)
 	$(STRIP) $(program_NAME)
 
 ifneq "$(MAKECMDGOALS)" "clean"

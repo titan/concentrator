@@ -342,9 +342,16 @@ void CValveMonitor::ParsePunctualData(uint32 vmac, uint8 * data, uint16 len) {
     for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
         if (memcmp(uid.x, iter->first.x, sizeof(userid_t)) == 0) {
             if (vmac != iter->second.vmac) {
+                for (map<userid_t, user_t>::iterator j = users.begin(); j != users.end(); j ++) {
+                    if (j->second.vmac == iter->second.vmac) {
+                        users.erase(j->first);
+                        break;
+                    }
+                }
                 iter->second.vmac = vmac;
                 syncUsers = true;
             }
+            break;
         }
     }
 

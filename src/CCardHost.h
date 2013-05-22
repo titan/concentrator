@@ -3,6 +3,12 @@
 #include "IThread.h"
 #include "cbuffer.h"
 #include "CLock.h"
+#include <vector>
+using namespace std;
+
+typedef struct {
+    uint8 x[6];
+} cardaddr_t;
 
 class CCardHost: public IThread {
 
@@ -12,6 +18,7 @@ public:
     void AckQueryUser(userid_t uid, uint8 * data, uint16 len); // called by IValveMonitor
     void AckRecharge(userid_t uid, uint8 * data, uint16 len); // called by IValveMonitor
     void AckTimeOrRemove(uint8 * data, uint16 len);
+    bool GetCardInfo(vector<cardaddr_t> &);
 
 private:
     CCardHost();
@@ -21,6 +28,7 @@ private:
     void HandleQueryUser(uint8 * buf, uint16 len);
     void HandleRecharge(uint8 * buf, uint16 len);
     void HandleGetTime(uint8 * buf, uint16 len);
+    void HandleInfo(uint8 * buf, uint16 len);
 
 protected:
     int com;
@@ -28,5 +36,7 @@ protected:
 private:
     static CCardHost * instance;
     cbuffer_t cmdbuf;
+    vector<cardaddr_t> info;
+    bool infoGotten;
 };
 #endif

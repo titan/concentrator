@@ -12,6 +12,9 @@
 #include "IValveMonitorFactory.h"
 #include "CHeatMonitor.h"
 #include "CPortal.h"
+#include "CCardHost.h"
+#include "CValveMonitor.h"
+#include "valveusers.pb.h"
 
 #ifdef DEBUG_MAINLOOP
 #define DEBUG(...) do {printf("%s::%s----", __FILE__, __func__);printf(__VA_ARGS__);} while(false)
@@ -38,6 +41,7 @@
 #define TL_Y2 5
 
 extern int heatCount;
+extern bool cardhostEnabled;
 
 static void PrintHZ(char x, char y, const char* pHZ, uint8 HZLen) {
    for(uint8 i = 0; i < HZLen; i++) {
@@ -61,6 +65,7 @@ CMainLoop * CMainLoop::GetInstance() {
 }
 
 CMainLoop::CMainLoop() {
+    usbmode = false;
     int len = heatCount + 6;
     borders = new uint8[len];
     borders[0] = 1;
@@ -87,6 +92,7 @@ void CMainLoop::Run() {
     struct timeval tv;
     int retval, r;
     char chr;
+    time_t last = time(NULL);
 
     kfd = open(KEY_NAME,O_RDONLY);
     if (kfd <0) {
@@ -94,10 +100,7 @@ void CMainLoop::Run() {
         return;
     }
 
-    FD_ZERO(&rfds);
-    FD_SET(kfd, &rfds);
-
-    tv.tv_sec = 1;
+    tv.tv_sec = 5;
     tv.tv_usec = 0;
 
     //init LCD
@@ -109,18 +112,22 @@ void CMainLoop::Run() {
     Draw();
 
     while (true) {
+        FD_ZERO(&rfds);
+        FD_SET(kfd, &rfds);
         retval = select(kfd + 1, &rfds, NULL, NULL, &tv);
         if (retval) {
             if (FD_ISSET(kfd, &rfds)) {
                 r = read(kfd, &chr, sizeof(char));
                 switch (chr) {
                 case 0x25: // left
+                    DEBUG("Left pressed!\n");
                     if (hidx != 0) {
                         hidx --;
                         Draw();
                     }
                     break;
                 case 0x26: { // up
+                    DEBUG("Up pressed!\n");
                     if (vidx != 0) {
                         if (hidx == 0) {
                             vidx --;
@@ -130,12 +137,14 @@ void CMainLoop::Run() {
                     break;
                 }
                 case 0x27: // right
+                    DEBUG("Right pressed!\n");
                     if (hidx < borders[vidx] - 1) {
                         hidx ++;
                         Draw();
                     }
                     break;
                 case 0x28: { // down
+                    DEBUG("Down pressed!\n");
                     if (borders[vidx + 1] != 0) {
                         if (hidx == 0) {
                             vidx ++;
@@ -145,41 +154,84 @@ void CMainLoop::Run() {
                     break;
                 }
                 case 0x0D: // enter
+                    DEBUG("Enter pressed!\n");
+                    if (vidx == 3 && wireless != true && time(NULL) - last > 300 && usbmode != true) {
+                        CValveMonitor::GetInstance()->Broadcast();
+                        last = time(NULL);
+                        checkValve = true;
+                        Draw();
+                    } else if (usbmode) {
+                        switch (usbstate) {
+                        case 0:
+                            usbstate = 1;
+                            break;
+                        case 2:
+                            usbstate = 0;
+                            usbmode = false;
+                            Draw();
+                            break;
+                        default:
+                            break;
+                        }
+                    }
                     break;
                 case 0x1B: // esc
+                    DEBUG("ESC pressed!\n");
+                    if (usbmode) {
+                        usbstate = 0;
+                        usbmode = false;
+                        Draw();
+                    }
                     break;
                 }
             }
+        } else if (time(NULL) - last > 300 && wireless != true && usbmode != true) {
+            Draw();
+            checkValve = false;
         }
         sleep(1);
     }
 }
 
 void CMainLoop::Draw() {
-    switch (vidx) {
-    case 0:
-        DrawInitial();
-        break;
-    case 1:
-        DrawStatus();
-        break;
-    case 2:
-        DrawGPRS();
-        break;
-    case 3:
-        if (wireless) {
-            DrawForwarder();
-        } else {
-            DrawValve();
+    if (usbmode) {
+        switch (usbstate) {
+        case 0:
+            DrawUsbPlugin();
+            break;
+        case 1:
+            DrawUsbBackup();
+            break;
+        case 2:
+            DrawUsbDone();
+            break;
         }
-        break;
-    default:
-        if (vidx == cardidx) {
-            DrawCardHost();
-        } else {
-            DrawHeat();
+    } else {
+        switch (vidx) {
+        case 0:
+            DrawInitial();
+            break;
+        case 1:
+            DrawStatus();
+            break;
+        case 2:
+            DrawGPRS();
+            break;
+        case 3:
+            if (wireless) {
+                DrawForwarder();
+            } else {
+                DrawValve();
+            }
+            break;
+        default:
+            if (vidx == cardidx) {
+                DrawCardHost();
+            } else {
+                DrawHeat();
+            }
+            break;
         }
-        break;
     }
 }
 
@@ -312,6 +364,8 @@ void CMainLoop::DrawForwarder() {
         hidx = borders[3] - 1;
     }
 
+    Write(info[hidx].A1ResponseStr, info[hidx].A1ResponseStrLen);
+
     char buf[32];
     PrintHZ(0, DL_Y0, "转发器", 3);
     bzero(buf, 32);
@@ -329,7 +383,38 @@ void CMainLoop::DrawForwarder() {
 }
 
 void CMainLoop::DrawValve() {
+    char buf[32];
     LCDClear();
+    PrintHZ(0, TL_Y0, "阀控器数量", 5);
+    PrintHZ(0, TL_Y1, "预设数量", 4);
+    bzero(buf, 32);
+    sprintf(buf, ":%d", valveCount);
+    PrintChar(4, TL_Y1, buf);
+    PrintHZ(0, TL_Y2, "在线数量", 4);
+    if (checkValve) {
+        PrintChar(4, TL_Y2, ":");
+        PrintHZ(5, TL_Y2, "检测中", 3);
+    } else {
+        GOOGLE_PROTOBUF_VERIFY_VERSION;
+        vector<user_t> users;
+        if (CValveMonitor::GetInstance()->GetUserList(users)) {
+            bzero(buf, 32);
+            sprintf(buf, ":%d", users.size());
+            PrintChar(4, TL_Y2, buf);
+            ValveUserList lst;
+            for (vector<user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+                ValveUser * u = lst.add_user();
+                u->set_uid((google::protobuf::uint64)iter->uid.x);
+                u->set_vmac(iter->vmac);
+            }
+            string strbuf;
+            lst.SerializeToString(&strbuf);
+            Write((uint8 *)strbuf.c_str(), strbuf.length());
+        } else {
+            PrintChar(4, TL_Y2, ":");
+            PrintHZ(5, TL_Y2, "检测中", 3);
+        }
+    }
 }
 
 void CMainLoop::DrawHeat() {
@@ -406,4 +491,58 @@ void CMainLoop::DrawHeat() {
 
 void CMainLoop::DrawCardHost() {
     LCDClear();
+    PrintHZ(0, TL_Y0, "集中刷卡器状态", 7);
+    if (!cardhostEnabled) {
+        PrintHZ(2, TL_Y1, "未启用", 3);
+        return;
+    }
+    vector<cardaddr_t> addrs;
+    if (!CCardHost::GetInstance()->GetCardInfo(addrs)) {
+        PrintHZ(2, TL_Y1, "检测中", 3);
+        return;
+    }
+    borders[cardidx] = addrs.size() + 1;
+    if (hidx >= borders[cardidx]) {
+        hidx = borders[cardidx] - 1;
+    }
+    char buf[32];
+    if (hidx == 0) {
+        PrintHZ(0, TL_Y1, "当前在线", 4);
+        bzero(buf, 32);
+        sprintf(buf, ":%d", addrs.size());
+        PrintChar(4, TL_Y1, buf);
+    } else {
+        uint8 offset = (hidx - 1) * 2;
+        bzero(buf, 32);
+        sprintf(buf, "%d:%02X%02X%02X%02X%02X%02X", hidx * 2 - 1, addrs[offset].x[0], addrs[offset].x[1], addrs[offset].x[2], addrs[offset].x[3], addrs[offset].x[4], addrs[offset].x[5]);
+        if (offset + 1 < addrs.size()) {
+            bzero(buf, 32);
+            sprintf(buf, "%d:%02X%02X%02X%02X%02X%02X", hidx * 2, addrs[offset + 1].x[0], addrs[offset + 1].x[1], addrs[offset + 1].x[2], addrs[offset + 1].x[3], addrs[offset + 1].x[4], addrs[offset + 1].x[5]);
+        }
+    }
+}
+
+void CMainLoop::DrawUsbPlugin() {
+    LCDClear();
+    PrintHZ(0, DL_Y0, "检测到授权磁盘", 7);
+    PrintHZ(0, DL_Y1, "是否备份数据", 6);
+    PrintChar(6, DL_Y1, "?");
+}
+
+void CMainLoop::DrawUsbBackup() {
+    LCDClear();
+    PrintHZ(0, DL_Y0, "正在备份数据中", 7);
+    PrintHZ(0, DL_Y1, "请等待", 3);
+    PrintChar(3, DL_Y1, "...");
+}
+
+void CMainLoop::DrawUsbDone() {
+    LCDClear();
+    PrintHZ(0, DL_Y0, "数据备份完成", 6);
+    PrintHZ(0, DL_Y1, "请拔出磁盘", 5);
+}
+
+void CMainLoop::Write(uint8 * data, uint16 len) {
+    if (com == -1) return;
+    write(com, data, len);
 }

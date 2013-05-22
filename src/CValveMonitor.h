@@ -52,6 +52,8 @@ public:
     void Recharge(userid_t uid, uint8 * data, uint16 len);
     uint16 ConfigValve(ValveCtrlType cmd, uint8 * data, uint16 len);
     Status GetStatus();
+    void Broadcast();
+    bool GetUserList(vector<user_t>& user);
 
 private:
     CValveMonitor();
@@ -61,8 +63,6 @@ private:
     void LoadRecords();
     void SaveRecords();
     virtual uint32 Run();
-    void Broadcast();
-    bool GetUserList(vector<user_t>& user);
     void ParseAck(uint8 * ack, uint16 len);
     void GetPunctualData();
     void ParsePunctualData(uint32 vmac, uint8 * data, uint16 len);

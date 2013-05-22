@@ -6,6 +6,9 @@
 #include<stdlib.h>
 
 #define DEC2BCD(value) (((value) / 10) << 4 | ((value) % 10))
+#ifndef MIN
+#define MIN(a,b) (a) < (b)? (a) : (b)
+#endif
 
 // #define CHINA_MOBILE
 #define CHINA_UNION

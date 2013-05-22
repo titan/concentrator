@@ -1,0 +1,10 @@
+option optimize_for = LITE_RUNTIME;
+
+message ValveUser {
+    required fixed64 uid = 1;
+    required fixed32 vmac = 2;
+}
+
+message ValveUserList {
+    repeated ValveUser user = 1;
+}

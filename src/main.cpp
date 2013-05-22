@@ -9,8 +9,6 @@
 #include <sys/time.h>
 
 #include<string>
-#include"CScreen.h"
-#include"CKey.h"
 #include"CHeatMonitor.h"
 #include"CForwarderMonitor.h"
 #include"CPortal.h"
@@ -67,12 +65,18 @@ static void StartValveMonitor();
 
 bool wireless = true;
 int heatCount = 0;
+bool cardhostEnabled = false;
 
 int main() {
+    string device;
+    string cfg;
     SetLight(LIGHT_WARNING, false);//turn off warning light
+    StartGeneralHeat(); // must be in front of StartValveMonitor
     if (access("config.ini", F_OK) == -1) {
         wireless = true;
         StartForwarder();
+        device = "/dev/ttyS7";
+        cfg = "2400,8,1,N";
     } else {
         CINI ini("config.ini");
         if (ini.GetValueBool("DEFAULT", "WIRELESS", true)) {
@@ -82,11 +86,23 @@ int main() {
             wireless = false;
             StartValveMonitor();
         }
+
+        device = ini.GetValueString("DEFAULT", "DEVICE", "/dev/ttyS7");
+        TrimInvalidChar(device);
+        cfg = ini.GetValueString("DEFAULT", "DEVCFG", "2400,8,1,N");
+        TrimInvalidChar(cfg);
     }
-    StartGeneralHeat();
     StartPortal();
     StartCardHost();
 
+    int com = OpenCom((char *)device.c_str(), (char *)cfg.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
+    if (com == -1) {
+        DEBUG("Initilize %s with %s failed!\n", device.c_str(), cfg.c_str());
+    } else {
+        DEBUG("Initilize %s(%s)\n", device.c_str(), cfg.c_str());
+    }
+
+    CMainLoop::GetInstance()->SetCom(com);
     CMainLoop::GetInstance()->Run();
 
     /*
@@ -302,6 +318,7 @@ void StartCardHost() {
     string name = ini.GetValueString(SECKEY, "DEVICE", "/dev/ttyS4");
     TrimInvalidChar(name);
     string cfg = ini.GetValueString(SECKEY, "DEV_CONFIG", "115200,8,1,N");
+    TrimInvalidChar(cfg);
     int com = OpenCom((char *)name.c_str(), (char *)cfg.c_str(), O_RDWR | O_NOCTTY);
     if (com == -1) {
         DEBUG("Initilize %s with %s failed!\n", name.c_str(), cfg.c_str());
@@ -310,6 +327,7 @@ void StartCardHost() {
     DEBUG("Initilize card host servcie with %s(%s)\n", name.c_str(), cfg.c_str());
     CCardHost::GetInstance()->SetCom(com);
     CCardHost::GetInstance()->Start();
+    cardhostEnabled = true;
 }
 
 #ifdef SECKEY
@@ -324,6 +342,7 @@ void StartValveMonitor() {
     string name = ini.GetValueString(SECKEY, "DEVICE", "/dev/ttyS5");
     TrimInvalidChar(name);
     string cfg = ini.GetValueString(SECKEY, "DEV_CONFIG", "2400,8,1,N");
+    TrimInvalidChar(cfg);
     int com = OpenCom((char *)name.c_str(), (char *)cfg.c_str(), O_RDWR | O_NOCTTY);
     if (com == -1) {
         DEBUG("Initilize %s with %s failed!\n", name.c_str(), cfg.c_str());
@@ -341,6 +360,9 @@ void StartValveMonitor() {
 
     int startTime = ini.GetValueInt(SECKEY, "START", 12);
     int interval = ini.GetValueInt(SECKEY, "INTERVAL", 30);
+    int number = ini.GetValueInt(SECKEY, "NUMBER", 0);
+
+    CMainLoop::GetInstance()->SetValveCount(number);
 
     CValveMonitor::GetInstance()->Init(startTime, interval);
     CValveMonitor::GetInstance()->Start();
