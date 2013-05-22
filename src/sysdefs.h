@@ -9,6 +9,9 @@
 #ifndef MIN
 #define MIN(a,b) (a) < (b)? (a) : (b)
 #endif
+#ifndef MAX
+#define MAX(a,b) (a) > (b)? (a) : (b)
+#endif
 
 // #define CHINA_MOBILE
 #define CHINA_UNION

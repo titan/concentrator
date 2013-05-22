@@ -6,6 +6,11 @@
 #include <fcntl.h>
 #include <sys/select.h>
 #include <sys/time.h>
+#include <sys/un.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <linux/types.h>
+#include <linux/netlink.h>
 #include "CMainLoop.h"
 #include "lcddrv.h"
 #include "Utils.h"
@@ -42,6 +47,32 @@
 
 extern int heatCount;
 extern bool cardhostEnabled;
+
+
+static int InitHotplugSock() {
+    struct sockaddr_nl snl;
+    const int buffersize = 16 * 1024;
+    int retval;
+    memset(&snl, 0x00, sizeof(struct sockaddr_nl));
+    snl.nl_family = AF_NETLINK;
+    snl.nl_pid = getpid();
+    snl.nl_groups = 1;
+    int hotplug_sock = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_KOBJECT_UEVENT);
+    if (hotplug_sock == -1) {
+        printf("error getting socket: %s", strerror(errno));
+        return -1;
+    }
+    /* set receive buffersize */
+    setsockopt(hotplug_sock, SOL_SOCKET, SO_RCVBUFFORCE, &buffersize, sizeof(buffersize));
+    retval = bind(hotplug_sock, (struct sockaddr *) &snl, sizeof(struct sockaddr_nl));
+    if (retval < 0) {
+        printf("bind failed: %s", strerror(errno));
+        close(hotplug_sock);
+        hotplug_sock = -1;
+        return -1;
+    }
+    return hotplug_sock;
+}
 
 static void PrintHZ(char x, char y, const char* pHZ, uint8 HZLen) {
    for(uint8 i = 0; i < HZLen; i++) {
@@ -80,10 +111,13 @@ CMainLoop::CMainLoop() {
     cardidx = 4 + heatCount + 0;
     vidx = 0;
     hidx = 0;
+    hotplug = -1;
 }
 
 CMainLoop::~CMainLoop() {
     delete borders;
+    if (hotplug != -1)
+        close(hotplug);
 }
 
 void CMainLoop::Run() {
@@ -92,6 +126,7 @@ void CMainLoop::Run() {
     struct timeval tv;
     int retval, r;
     char chr;
+    char buf[1024];
     time_t last = time(NULL);
 
     kfd = open(KEY_NAME,O_RDONLY);
@@ -99,6 +134,8 @@ void CMainLoop::Run() {
         DEBUG("open device key error!\n");
         return;
     }
+
+    hotplug = InitHotplugSock();
 
     tv.tv_sec = 5;
     tv.tv_usec = 0;
@@ -114,20 +151,22 @@ void CMainLoop::Run() {
     while (true) {
         FD_ZERO(&rfds);
         FD_SET(kfd, &rfds);
-        retval = select(kfd + 1, &rfds, NULL, NULL, &tv);
+        if (hotplug != -1)
+            FD_SET(hotplug, &rfds);
+        retval = select(MAX(kfd, hotplug) + 1, &rfds, NULL, NULL, &tv);
         if (retval) {
             if (FD_ISSET(kfd, &rfds)) {
                 r = read(kfd, &chr, sizeof(char));
                 switch (chr) {
                 case 0x25: // left
-                    DEBUG("Left pressed!\n");
+                    DEBUG("Left pressed\n");
                     if (hidx != 0) {
                         hidx --;
                         Draw();
                     }
                     break;
                 case 0x26: { // up
-                    DEBUG("Up pressed!\n");
+                    DEBUG("Up pressed\n");
                     if (vidx != 0) {
                         if (hidx == 0) {
                             vidx --;
@@ -137,14 +176,14 @@ void CMainLoop::Run() {
                     break;
                 }
                 case 0x27: // right
-                    DEBUG("Right pressed!\n");
+                    DEBUG("Right pressed\n");
                     if (hidx < borders[vidx] - 1) {
                         hidx ++;
                         Draw();
                     }
                     break;
                 case 0x28: { // down
-                    DEBUG("Down pressed!\n");
+                    DEBUG("Down pressed\n");
                     if (borders[vidx + 1] != 0) {
                         if (hidx == 0) {
                             vidx ++;
@@ -154,7 +193,7 @@ void CMainLoop::Run() {
                     break;
                 }
                 case 0x0D: // enter
-                    DEBUG("Enter pressed!\n");
+                    DEBUG("Enter pressed\n");
                     if (vidx == 3 && wireless != true && time(NULL) - last > 300 && usbmode != true) {
                         CValveMonitor::GetInstance()->Broadcast();
                         last = time(NULL);
@@ -164,6 +203,11 @@ void CMainLoop::Run() {
                         switch (usbstate) {
                         case 0:
                             usbstate = 1;
+                            Draw();
+                            break;
+                        case 1:
+                            usbstate = 2;
+                            Draw();
                             break;
                         case 2:
                             usbstate = 0;
@@ -176,13 +220,41 @@ void CMainLoop::Run() {
                     }
                     break;
                 case 0x1B: // esc
-                    DEBUG("ESC pressed!\n");
+                    DEBUG("ESC pressed\n");
                     if (usbmode) {
                         usbstate = 0;
                         usbmode = false;
                         Draw();
                     }
                     break;
+                }
+            }
+
+            if (FD_ISSET(hotplug, &rfds)) {
+                bzero(buf, 1024);
+                int r = recv(hotplug, buf, 1024, 0);
+                int p = 0;
+                while (p < r) {
+                    if (strstr(buf + p, "add@/block/sd")) {
+                        if (strlen(buf + p) > sizeof("add@/block/sd?/")) {
+                            bzero(usbdevice, 32);
+                            sprintf(usbdevice, "/dev/%s", buf + p + strlen("add@/block/sd?/"));
+                            DEBUG("/dev/%s plugged\n", usbdevice);
+                            usbmode = true;
+                            usbstate = 0;
+                            Draw();
+                        }
+                    } else if (strstr(buf + p, "remove@/block/sd")) {
+                        if (strlen(buf + p) > sizeof("remove@/block/sd?/")) {
+                            bzero(usbdevice, 32);
+                            sprintf(usbdevice, "/dev/%s", buf + p + strlen("remove@/block/sd?/"));
+                            DEBUG("/dev/%s removed\n", usbdevice);
+                            usbmode = false;
+                            usbstate = 0;
+                            Draw();
+                        }
+                    }
+                    p += strlen(buf + p) + 1;
                 }
             }
         } else if (time(NULL) - last > 300 && wireless != true && usbmode != true) {

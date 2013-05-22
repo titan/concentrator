@@ -33,5 +33,7 @@ private:
     int com;
     int valveCount;
     bool checkValve;
+    int hotplug;
+    char usbdevice[32];
 };
 #endif
