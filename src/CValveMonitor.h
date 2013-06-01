@@ -54,6 +54,7 @@ public:
     Status GetStatus();
     void Broadcast();
     bool GetUserList(vector<user_t>& user);
+    void SetGPIO(gpio_name_t gpio) {this->gpio = gpio;};
 
 private:
     CValveMonitor();
@@ -96,5 +97,6 @@ private:
     map<uint32, valve_heat_t> valveHeats; // vmac -> ...
     ValveDataType valveDataType;
     bool syncUsers, syncRecords;
+    gpio_name_t gpio;
 };
 #endif

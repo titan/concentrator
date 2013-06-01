@@ -193,7 +193,7 @@ bool CGprs::Connect(const char * IP, const uint32 Port)
     for (i = 0; i < 100; i ++) {
         len = LINE_LEN;
         bzero(atbuf, LINE_REAL_LEN);
-        if (Command("AT+CREG?\r\n", RX_TIMEOUT, "+CREG:", (char *)atbuf, len) != COMM_OK) continue;
+        if (Command("AT+CREG?\r\n", RX_TIMEOUT << 1, "+CREG:", (char *)atbuf, len) != COMM_OK) continue;
         char * stat = strchr((char *)atbuf, ',');
         if (stat != NULL) {
             stat ++;

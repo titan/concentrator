@@ -30,7 +30,7 @@
 #define LCD_MC_HIGH()        PIOOutValue(PB28, 1)
 #define LCD_MC_LOW()           PIOOutValue(PB28, 0)
 
-#define LCD_OUT(B)            if(B) PIOOutValue(PB26, 1),else PIOOutValue(PB26, 0)
+#define LCD_OUT(B)            (B)? PIOOutValue(PB26, 1): PIOOutValue(PB26, 0)
 #define LCD_OUT_SET()        PIOOutValue(PB26, 1)
 #define LCD_OUT_RESET()        PIOOutValue(PB26, 0)
 

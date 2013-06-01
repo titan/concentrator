@@ -5,11 +5,6 @@
 #include "CCardHost.h"
 #include "logdb.h"
 
-#ifndef CFG_TIMER_LIB
-#define CFG_TIMER_LIB
-#endif
-#include"libs_emsys_odm.h"
-
 #ifdef DEBUG_FORWARDER
 #define DEBUG(...) do {printf("%s::%s----", __FILE__, __func__);printf(__VA_ARGS__);} while(false)
 #ifndef hexdump
@@ -471,15 +466,18 @@ bool CForwarderMonitor::SendCommand(uint8* pCommand, uint32 CommandLen)
       DEBUG("Send Command ");
       hexdump(SendCommand, Pos);
       FlashLight(LIGHT_FORWARD);
+      TX_ENABLE(gpio);
       if( COMM_OK != m_pCommController->WriteBuf(SendCommand, Pos, FORWARDER_TIMEOUT) )
       {
          DEBUG("WriteError\n");
          continue;
       }
+      sleep(1);
 
       uint8 Buffer[MAX_BUFFER_LEN] = {0};
       uint32 BufferCount = sizeof(Buffer);
       FlashLight(LIGHT_FORWARD);
+      RX_ENABLE(gpio);
       if(COMM_OK == m_pCommController->ReadBuf(Buffer
                                              , BufferCount
                                              , FORWARDER_COMMAND_BEGIN_FLAG

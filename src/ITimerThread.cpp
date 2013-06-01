@@ -2,15 +2,16 @@
 #include<stdio.h>
 #include"ITimerThread.h"
 
-#ifndef CFG_TIMER_LIB
-#define CFG_TIMER_LIB
-#endif
-#include"libs_emsys_odm.h"
-
 #ifdef DEBUG_TIMER_THREAD
-#define DEBUG printf
+#define DEBUG(...) do {printf("%s::%s----", __FILE__, __func__);printf(__VA_ARGS__);} while(false)
+#ifndef hexdump
+#define hexdump(data, len) do {for (uint32 i = 0; i < (uint32)len; i ++) { printf("%02x ", *(uint8 *)(data + i));} printf("\n");} while(0)
+#endif
 #else
 #define DEBUG(...)
+#ifndef hexdump
+#define hexdump(data, len)
+#endif
 #endif
 
 CTimerThread::CTimerThread():m_hThreadTimer(NULL), m_Begin(0), m_nInterval(0)

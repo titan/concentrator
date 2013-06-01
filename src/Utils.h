@@ -1,16 +1,6 @@
 #ifndef __UTILS_H
 #define __UTILS_H
 #include"sysdefs.h"
-#ifndef CFG_GPIO_LIB
-#define CFG_GPIO_LIB 1
-#endif
-#ifndef CFG_DATETIM_LIB
-#define CFG_DATETIM_LIB
-#endif
-#ifndef CFG_USART_LIB
-#define CFG_USART_LIB 1
-#endif
-#include"libs_emsys_odm.h"
 #include<time.h>
 const uint8 DATETIME_LEN = 7;
 void PrintData( const uint8* pData, const uint32 DataLen );

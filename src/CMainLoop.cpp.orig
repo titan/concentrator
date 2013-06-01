@@ -137,7 +137,7 @@ void CMainLoop::Run() {
 
     hotplug = InitHotplugSock();
 
-    tv.tv_sec = 5;
+    tv.tv_sec = 1;
     tv.tv_usec = 0;
 
     //init LCD
@@ -616,5 +616,6 @@ void CMainLoop::DrawUsbDone() {
 
 void CMainLoop::Write(uint8 * data, uint16 len) {
     if (com == -1) return;
+    TX_ENABLE(gpio);
     write(com, data, len);
 }

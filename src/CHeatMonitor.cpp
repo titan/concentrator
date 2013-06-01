@@ -4,9 +4,15 @@
 #include"CPortal.h"
 
 #ifdef DEBUG_HEAT
-#define DEBUG printf
+#define DEBUG(...) do {printf("%s::%s----", __FILE__, __func__);printf(__VA_ARGS__);} while(false)
+#ifndef hexdump
+#define hexdump(data, len) do {for (uint32 i = 0; i < (uint32)len; i ++) { printf("%02x ", *(uint8 *)(data + i));} printf("\n");} while(0)
+#endif
 #else
 #define DEBUG(...)
+#ifndef hexdump
+#define hexdump(data, len)
+#endif
 #endif
 
 const int32 HEAT_TIMEOUT =  10*1000*1000;//10 second
@@ -102,7 +108,7 @@ void CHeatMonitor::GetHeatData()
       //uint8 MacAddress = HeatNodeIter->MacAddress[0]+10*HeatNodeIter->MacAddress[1];
       SendData[COMMAND_HEAT_NODE_ADDRESS_INDEX] = HeatNodeIter->MacAddress[0];
       SendData[COMMAND_CHECKSUM_INDEX] = GetCheckSum(SendData+1, COMMAND_HEAT_NODE_ADDRESS_INDEX);
-      PrintData(SendData, sizeof(SendData));
+      hexdump(SendData, sizeof(SendData));
 
       uint32 SendDataLen = sizeof(SendData);
       FlashLight(LIGHT_GENERAL_HEAT);
@@ -117,7 +123,7 @@ void CHeatMonitor::GetHeatData()
       FlashLight(LIGHT_GENERAL_HEAT);
       if(COMM_OK == m_pCommController->ReadMinByte(Buffer, BufferCount, GENERAL_HEAT_COMMAND_ACK_LEN, 0x68, 0x16, HEAT_TIMEOUT) )
       {
-         PrintData(Buffer, BufferCount);
+         hexdump(Buffer, BufferCount);
          if(ParseData(Buffer, BufferCount, HeatNodeIter))
          {
             HeatNodeIter->IsOffline = false;
@@ -195,14 +201,14 @@ void CHeatMonitor::SendHeatData()
             continue;
          }
          DEBUG("CHeatMonitor::SendHeatData()----HeatData:");
-         PrintData(Iter->MacAddress, sizeof(HeatNodeDataT));
+         hexdump(Iter->MacAddress, sizeof(HeatNodeDataT));
          memcpy(GeneralHeatData+sizeof(GeneralLeaderCharacter)+sizeof(GeneralHeatLen), Iter->MacAddress, GeneralHeatLen);
 
          //adjust the data
          //adjust the SupplyWaterTemperature
          const uint8 SUPPLY_WATERT_EMPERATURE_POS = sizeof(GeneralLeaderCharacter)+sizeof(GeneralHeatLen)+MACHINENAME_LEN;
          uint32 SupplyWaterTemperature = 0;
-         PrintData(GeneralHeatData+SUPPLY_WATERT_EMPERATURE_POS, sizeof(ERROR_FLAG));
+         hexdump(GeneralHeatData+SUPPLY_WATERT_EMPERATURE_POS, sizeof(ERROR_FLAG));
          if( memcmp(ERROR_FLAG, GeneralHeatData+SUPPLY_WATERT_EMPERATURE_POS, sizeof(ERROR_FLAG)) )
          {
             SupplyWaterTemperature = 10*((GeneralHeatData[SUPPLY_WATERT_EMPERATURE_POS+GENERALHEAT_TEMPERATURE_LEN-1]>>4)&0x0F)
@@ -222,7 +228,7 @@ void CHeatMonitor::SendHeatData()
          //adjust the ReturnWaterTemperature
          const uint8 RETURN_WATERT_EMPERATURE_POS = SUPPLY_WATERT_EMPERATURE_POS+GENERALHEAT_TEMPERATURE_LEN;
          uint32 ReturnWaterTemperature = 0;
-         PrintData(GeneralHeatData+RETURN_WATERT_EMPERATURE_POS, sizeof(ERROR_FLAG));
+         hexdump(GeneralHeatData+RETURN_WATERT_EMPERATURE_POS, sizeof(ERROR_FLAG));
          if( memcmp(ERROR_FLAG, GeneralHeatData+RETURN_WATERT_EMPERATURE_POS, sizeof(ERROR_FLAG)) )
          {
             ReturnWaterTemperature = 10*((GeneralHeatData[RETURN_WATERT_EMPERATURE_POS+GENERALHEAT_TEMPERATURE_LEN-1]>>4)&0x0F)
@@ -241,7 +247,7 @@ void CHeatMonitor::SendHeatData()
          GeneralHeatData[RETURN_WATERT_EMPERATURE_POS+3] = (ReturnWaterTemperature%100)<<4;
          //adjust CurrentFlowVelocity
          const uint8 CURRENT_FLOW_VELOCITY_POS = RETURN_WATERT_EMPERATURE_POS+GENERALHEAT_TEMPERATURE_LEN;
-         PrintData(GeneralHeatData+CURRENT_FLOW_VELOCITY_POS, sizeof(ERROR_FLAG));
+         hexdump(GeneralHeatData+CURRENT_FLOW_VELOCITY_POS, sizeof(ERROR_FLAG));
          if( 0 == memcmp(ERROR_FLAG, GeneralHeatData+CURRENT_FLOW_VELOCITY_POS, sizeof(ERROR_FLAG)) )
          {
             memset(GeneralHeatData+CURRENT_FLOW_VELOCITY_POS+1, 0, VELOCITY_LEN-1);
@@ -249,7 +255,7 @@ void CHeatMonitor::SendHeatData()
          GeneralHeatData[CURRENT_FLOW_VELOCITY_POS] = 0x01;//unit
          //adjust CurrentHeatVelocity
          const uint8 CURRENT_HEAT_VELOCITY_POS = CURRENT_FLOW_VELOCITY_POS+VELOCITY_LEN;
-         PrintData(GeneralHeatData+CURRENT_HEAT_VELOCITY_POS, sizeof(ERROR_FLAG));
+         hexdump(GeneralHeatData+CURRENT_HEAT_VELOCITY_POS, sizeof(ERROR_FLAG));
          if( 0 == memcmp(ERROR_FLAG, GeneralHeatData+CURRENT_HEAT_VELOCITY_POS, sizeof(ERROR_FLAG)) )
          {
             memset(GeneralHeatData+CURRENT_HEAT_VELOCITY_POS+1, 0, VELOCITY_LEN-1);
@@ -257,7 +263,7 @@ void CHeatMonitor::SendHeatData()
          GeneralHeatData[CURRENT_HEAT_VELOCITY_POS] = 0x01;//unit
          //adjust TotalFlow
          const uint8 TOTAL_FLOW_POS = CURRENT_HEAT_VELOCITY_POS+VELOCITY_LEN;
-         PrintData(GeneralHeatData+TOTAL_FLOW_POS, sizeof(ERROR_FLAG));
+         hexdump(GeneralHeatData+TOTAL_FLOW_POS, sizeof(ERROR_FLAG));
          if( 0 == memcmp(ERROR_FLAG, GeneralHeatData+TOTAL_FLOW_POS, sizeof(ERROR_FLAG)) )
          {
             memset(GeneralHeatData+TOTAL_FLOW_POS+1, 0, CAPACITY_LEN-1);
@@ -265,7 +271,7 @@ void CHeatMonitor::SendHeatData()
          GeneralHeatData[TOTAL_FLOW_POS] = 0x01;//unit
          //adjust TotalHeat
          const uint8 TOTAL_HEAT_POS = TOTAL_FLOW_POS+CAPACITY_LEN;
-         PrintData(GeneralHeatData+TOTAL_HEAT_POS, sizeof(ERROR_FLAG));
+         hexdump(GeneralHeatData+TOTAL_HEAT_POS, sizeof(ERROR_FLAG));
          if( 0 == memcmp(ERROR_FLAG, GeneralHeatData+TOTAL_HEAT_POS, sizeof(ERROR_FLAG)) )
          {
             memset(GeneralHeatData+TOTAL_HEAT_POS+1, 0, CAPACITY_LEN-1);
@@ -338,7 +344,7 @@ bool CHeatMonitor::GetHeatNodeInfoList(HeatNodeInfoListT& HeatNodeInfoList)
             if( memcmp( ERROR_FLAG, m_HeatNodeVector[i].SupplyWaterTemperature, sizeof(ERROR_FLAG) ) )
             {
                DEBUG("CHeatMonitor::GetHeatNodeInfoList()---SupplyWaterTemperature\n");
-               PrintData(m_HeatNodeVector[i].SupplyWaterTemperature, sizeof(m_HeatNodeVector[i].SupplyWaterTemperature));
+               hexdump(m_HeatNodeVector[i].SupplyWaterTemperature, sizeof(m_HeatNodeVector[i].SupplyWaterTemperature));
                memset( HeatNodeInfo.SupplyWaterTemperature, 0, sizeof(HeatNodeInfo.SupplyWaterTemperature) );
                uint32 SupplyWaterTemperature= 10*((m_HeatNodeVector[i].SupplyWaterTemperature[sizeof(m_HeatNodeVector[i].SupplyWaterTemperature)-1]>>4)&0x0F)
                                               + ((m_HeatNodeVector[i].SupplyWaterTemperature[sizeof(m_HeatNodeVector[i].SupplyWaterTemperature)-1]&0x0F));
@@ -355,7 +361,7 @@ bool CHeatMonitor::GetHeatNodeInfoList(HeatNodeInfoListT& HeatNodeInfoList)
             if( memcmp( ERROR_FLAG, m_HeatNodeVector[i].ReturnWaterTemperature, sizeof(ERROR_FLAG) ) )
             {
                DEBUG("CHeatMonitor::GetHeatNodeInfoList()---ReturnWaterTemperature\n");
-               PrintData(m_HeatNodeVector[i].ReturnWaterTemperature, sizeof(m_HeatNodeVector[i].ReturnWaterTemperature));
+               hexdump(m_HeatNodeVector[i].ReturnWaterTemperature, sizeof(m_HeatNodeVector[i].ReturnWaterTemperature));
                memset( HeatNodeInfo.ReturnWaterTemperature, 0, sizeof(HeatNodeInfo.ReturnWaterTemperature) );
                uint32 ReturnWaterTemperature= 10*((m_HeatNodeVector[i].ReturnWaterTemperature[sizeof(m_HeatNodeVector[i].ReturnWaterTemperature)-1]>>4)&0x0F)
                                               + (m_HeatNodeVector[i].ReturnWaterTemperature[sizeof(m_HeatNodeVector[i].ReturnWaterTemperature)-1]&0x0F);
@@ -371,7 +377,7 @@ bool CHeatMonitor::GetHeatNodeInfoList(HeatNodeInfoListT& HeatNodeInfoList)
             if( memcmp( ERROR_FLAG, m_HeatNodeVector[i].CurrentFlowVelocity, sizeof(ERROR_FLAG) ) )
             {
                DEBUG("CHeatMonitor::GetHeatNodeInfoList()---CurrentFlowVelocity\n");
-               PrintData(m_HeatNodeVector[i].CurrentFlowVelocity, sizeof(m_HeatNodeVector[i].CurrentFlowVelocity));
+               hexdump(m_HeatNodeVector[i].CurrentFlowVelocity, sizeof(m_HeatNodeVector[i].CurrentFlowVelocity));
                memset( HeatNodeInfo.CurrentFlowVelocity, 0, sizeof(HeatNodeInfo.CurrentFlowVelocity) );
                uint32 CurrentFlowVelocity= 10*((m_HeatNodeVector[i].CurrentFlowVelocity[sizeof(m_HeatNodeVector[i].CurrentFlowVelocity)-1]>>4)&0x0F)
                                            + (m_HeatNodeVector[i].CurrentFlowVelocity[sizeof(m_HeatNodeVector[i].CurrentFlowVelocity)-1]&0x0F);
@@ -390,7 +396,7 @@ bool CHeatMonitor::GetHeatNodeInfoList(HeatNodeInfoListT& HeatNodeInfoList)
             if( memcmp( ERROR_FLAG, m_HeatNodeVector[i].CurrentHeatVelocity, sizeof(ERROR_FLAG) ) )
             {
                DEBUG("CHeatMonitor::GetHeatNodeInfoList()---CurrentHeatVelocity\n");
-               PrintData(m_HeatNodeVector[i].CurrentHeatVelocity, sizeof(m_HeatNodeVector[i].CurrentHeatVelocity));
+               hexdump(m_HeatNodeVector[i].CurrentHeatVelocity, sizeof(m_HeatNodeVector[i].CurrentHeatVelocity));
                memset( HeatNodeInfo.CurrentHeatVelocity, 0, sizeof(HeatNodeInfo.CurrentHeatVelocity) );
                uint32 CurrentHeatVelocity= 10*((m_HeatNodeVector[i].CurrentHeatVelocity[sizeof(m_HeatNodeVector[i].CurrentHeatVelocity)-1]>>4)&0x0F)
                                            + (m_HeatNodeVector[i].CurrentHeatVelocity[sizeof(m_HeatNodeVector[i].CurrentHeatVelocity)-1]&0x0F);
@@ -412,7 +418,7 @@ bool CHeatMonitor::GetHeatNodeInfoList(HeatNodeInfoListT& HeatNodeInfoList)
             if( memcmp( ERROR_FLAG, m_HeatNodeVector[i].TotalFlow, sizeof(ERROR_FLAG) ) )
             {
                DEBUG("CHeatMonitor::GetHeatNodeInfoList()---TotalFlow\n");
-               PrintData(m_HeatNodeVector[i].TotalFlow, sizeof(m_HeatNodeVector[i].TotalFlow));
+               hexdump(m_HeatNodeVector[i].TotalFlow, sizeof(m_HeatNodeVector[i].TotalFlow));
                memset( HeatNodeInfo.TotalFlow, 0, sizeof(HeatNodeInfo.TotalFlow) );
                uint32 TotalFlow= 10*((m_HeatNodeVector[i].TotalFlow[sizeof(m_HeatNodeVector[i].TotalFlow)-1]>>4)&0x0F)
                                  + (m_HeatNodeVector[i].TotalFlow[sizeof(m_HeatNodeVector[i].TotalFlow)-1]&0x0F);
@@ -434,7 +440,7 @@ bool CHeatMonitor::GetHeatNodeInfoList(HeatNodeInfoListT& HeatNodeInfoList)
             if( memcmp( ERROR_FLAG, m_HeatNodeVector[i].TotalHeat, sizeof(ERROR_FLAG) ) )
             {
                DEBUG("CHeatMonitor::GetHeatNodeInfoList()---TotalHeat\n");
-               PrintData(m_HeatNodeVector[i].TotalHeat, sizeof(m_HeatNodeVector[i].TotalHeat));
+               hexdump(m_HeatNodeVector[i].TotalHeat, sizeof(m_HeatNodeVector[i].TotalHeat));
                memset( HeatNodeInfo.TotalHeat, 0, sizeof(HeatNodeInfo.TotalHeat) );
                uint32 TotalHeat= 10*((m_HeatNodeVector[i].TotalHeat[sizeof(m_HeatNodeVector[i].TotalHeat)-1]>>4)&0x0F)
                                  + (m_HeatNodeVector[i].TotalHeat[sizeof(m_HeatNodeVector[i].TotalHeat)-1]&0x0F);

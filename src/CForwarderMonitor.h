@@ -10,6 +10,7 @@
 #include"sysdefs.h"
 #include "cbuffer.h"
 #include "IValveMonitor.h"
+
 using namespace std;
 
 const uint8 FORWARDER_COMMAND_ID_LEN = sizeof(uint8);
@@ -159,6 +160,7 @@ class CForwarderMonitor:public IThread, public IValveMonitor
     void SetValveDataType(ValveDataType type){ valveDataType = type;};
     ValveDataType GetValveDataType(){return valveDataType;};
     static CForwarderMonitor* GetInstance();
+    void SetGPIO(gpio_name_t gpio) {this->gpio = gpio;};
   private:
     static CForwarderMonitor* m_Instance;
     CForwarderMonitor();
@@ -255,5 +257,6 @@ class CForwarderMonitor:public IThread, public IValveMonitor
     CLock users_lock;
     map<uint32, record_t> records; // vmac -> record
     bool syncRecords;
+    gpio_name_t gpio;
 };
 #endif

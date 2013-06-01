@@ -2,8 +2,6 @@
 #include "Utils.h"
 #include "IValveMonitorFactory.h"
 
-#include "libs_emsys_odm.h"
-
 #ifdef DEBUG_CARDHOST
 #define DEBUG(...) do {printf("%s::%s----", __FILE__, __func__);printf(__VA_ARGS__);} while(false)
 #ifndef hexdump
@@ -67,15 +65,20 @@ uint32 CCardHost::Run() {
     uint8 cmd[PKTLEN];
     uint8 * buf = NULL;
     uint16 rlen = 0, wlen = 0;
-    uint8 noneloop = 0;
+    uint8 nullloop = 0;
+
     while (true) {
 
         FD_ZERO(&rfds);
         FD_SET(com, &rfds);
 
         FD_ZERO(&wfds);
-        if (cbuffer_read(cmdbuf) != NULL)
+        if (cbuffer_read(cmdbuf) != NULL) {
             FD_SET(com, &wfds);
+            TX_ENABLE(gpio);
+        } else {
+            RX_ENABLE(gpio);
+        }
 
         /* Wait up to five seconds. */
         tv.tv_sec = 1;
@@ -92,7 +95,7 @@ uint32 CCardHost::Run() {
 
                 r = read(com, cmd + readed, rlen);
 
-                if (r == -1) {
+                if (r == -1 || r == 0) {
                     continue;
                 }
                 readed += r;
@@ -120,7 +123,7 @@ uint32 CCardHost::Run() {
                     }
                 }
                 w = write(com, buf + wrote, wlen - wrote);
-                if (w == -1) {
+                if (w == -1 || w == 0) {
                     continue;
                 }
                 wrote += w;
@@ -132,10 +135,10 @@ uint32 CCardHost::Run() {
                     sleep(1);
                 }
             }
-            noneloop = 0;
+            nullloop = 0;
         } else {
-            noneloop ++;
-            if (noneloop % 16 == 15) {
+            nullloop ++;
+            if (nullloop % 16 == 15) {
                 DEBUG("Nothing to read\n");
             }
         } //else ParseAndExecute(sample, sizeof(sample)); // only for test

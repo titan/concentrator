@@ -23,6 +23,8 @@
 
 #define VALVE_PACKET_FLAG 0xF1
 
+extern gpio_attr_t gpioattr;
+
 void vuserseq(void * key, size_t klen, void * data, size_t dlen, void * params, size_t plen) {
     map<userid_t, user_t, uidcmp> * users = (map<userid_t, user_t, uidcmp> *) params;
     userid_t * uid = (userid_t *) key;
@@ -126,8 +128,12 @@ uint32 CValveMonitor::Run() {
             }
         }
 
-        if (cbuffer_read(tx) != NULL && rc == wc)
+        if (cbuffer_read(tx) != NULL && rc == wc) {
             FD_SET(com, &wfds);
+            TX_ENABLE(gpio);
+        } else {
+            RX_ENABLE(gpio);
+        }
 
         tv.tv_sec = 1;
         tv.tv_usec = 0;
@@ -153,6 +159,8 @@ uint32 CValveMonitor::Run() {
                     }
                     continue;
                 }
+                DEBUG("read %d bytes: ", r);
+                hexdump(ack + readed, r);
                 readed += r;
 
                 if (rlen == PKTLEN && readed > 6 && ack[6] != 0xFF) {

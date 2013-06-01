@@ -8,6 +8,7 @@ public:
     void Run();
     void SetCom(int com) {this->com = com;};
     void SetValveCount(int count) {this->valveCount = count;};
+    void SetGPIO(gpio_name_t gpio) {this->gpio = gpio;};
 private:
     CMainLoop();
     ~CMainLoop();
@@ -35,5 +36,6 @@ private:
     bool checkValve;
     int hotplug;
     char usbdevice[32];
+    gpio_name_t gpio;
 };
 #endif
