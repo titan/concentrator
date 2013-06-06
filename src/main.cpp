@@ -68,6 +68,7 @@ bool wireless = true;
 int heatCount = 0;
 bool cardhostEnabled = false;
 gpio_attr_t gpioattr;
+int id = 0;
 
 int main() {
 
@@ -78,6 +79,7 @@ int main() {
 
     string device;
     string cfg;
+
     SetLight(LIGHT_WARNING, false);//turn off warning light
     StartGeneralHeat(); // must be in front of StartValveMonitor
     if (access("config.ini", F_OK) == -1) {
@@ -99,6 +101,7 @@ int main() {
         TrimInvalidChar(device);
         cfg = ini.GetValueString("DEFAULT", "DEVCFG", "2400,8,1,N");
         TrimInvalidChar(cfg);
+        id = ini.GetValueInt("DEFAULT", "JZQID", 0);
     }
     StartPortal();
     StartCardHost();
@@ -299,6 +302,11 @@ void StartPortal()
    DEBUG("[%s]%s=%d\n", SectionStr.c_str(), Key.c_str(), DestPort);
    pGPRS->SetIP(LocalPort, KeyValue.c_str(), DestPort);
 
+   uint8 jzqid[16];
+   bzero(jzqid, 16);
+   sprintf((char *)jzqid, "%08d", id);
+
+   CPortal::GetInstance()->SetJZQID(jzqid);
    CPortal::GetInstance()->SetGPRS(pGPRS);
    Key = GPRS_HEART_INTERVAL;
    int HeartInterval = GPRSINI.GetValueInt(SectionStr, Key, DefaultIntervalTime);

@@ -48,7 +48,7 @@ CValveMonitor * CValveMonitor::GetInstance() {
 }
 
 CValveMonitor::CValveMonitor():noonTimer(DAY_TYPE) {
-    tx = cbuffer_create(10, PKTLEN);
+    tx = cbuffer_create(12, PKTLEN);
     if (access("data/", F_OK) == -1) {
         mkdir("data", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
     }

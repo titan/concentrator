@@ -175,7 +175,6 @@ CPortal::CPortal(): timeReady(false)
                     // , m_FixHourTimer(MINUTE_TYPE)//just for test
                     , m_FixHourTimer(HOUR_TYPE)
 {
-   memset(m_IMEI, 0, sizeof(m_IMEI));
    if (access("queues/", F_OK) == -1) {
        mkdir("queues", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
    }
@@ -191,7 +190,7 @@ bool CPortal::Init(uint32 nInterval)
    {
       return false;
    }
-   DEBUG("m_IMEI=%s\n", m_IMEI);
+   DEBUG("JZQID=%s\n", m_IMEI);
    m_FixHourTimer.Start();
    DEBUG("nInterval=%u\n", nInterval);
    m_HeartBeatTimer.Start(nInterval);
@@ -258,10 +257,10 @@ uint32 CPortal::Run()
       {
          SetLight(LIGHT_GPRS, true);//turn on GPRS light
          m_pGPRS->Connect();
-         uint32 IMEILen = sizeof(m_IMEI);
-         m_pGPRS->GetIMEI(m_IMEI, IMEILen);
+         //uint32 IMEILen = sizeof(m_IMEI);
+         //m_pGPRS->GetIMEI(m_IMEI, IMEILen);
          m_IsRegistered = false;
-         DEBUG("Connected-IMEI=%s\n", m_IMEI);
+         //DEBUG("Connected-IMEI=%s\n", m_IMEI);
       }
       m_GPRSLock.UnLock();
 

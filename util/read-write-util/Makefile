@@ -4,8 +4,6 @@ program_SRCS := $(wildcard *.c)
 program_OBJS := $(patsubst %.c,%.o,$(program_SRCS))
 clean_list += $(program_OBJS) $(program_NAME)
 
-.INTERMEDIATE:$(progens_SRCS)
-
 RM = rm
 CC = $(BASE)arm-none-linux-gnueabi-gcc
 STRIP = $(BASE)arm-none-linux-gnueabi-strip

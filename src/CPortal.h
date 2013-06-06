@@ -9,6 +9,8 @@
 #include"CGprs.h"
 #include"CTimer.h"
 #include "logqueue.h"
+#include <string.h>
+
 using namespace std;
 
 enum FunctionCodeE
@@ -60,6 +62,9 @@ const uint32 MAX_FORWARDER_DATA_LEN = FORWARDER_TYPE_HEAT_DATA_LEN>FORWARDER_TYP
 
 class CPortal:public IThread
 {
+
+public:
+    void SetJZQID(uint8 * id) {bzero(this->m_IMEI, IMEI_LEN); memcpy(this->m_IMEI, id, IMEI_LEN);};
    public:
       void SetGPRS(CGprs* pGPRS);
       bool Init(uint32 nInterval);
