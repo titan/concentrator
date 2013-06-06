@@ -53,7 +53,7 @@ clean_list += ${program_OBJS:.o=.d}
 
 $(program_NAME): $(protobuf_OBJS) $(program_OBJS) $(progens_OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(program_OBJS) $(progens_OBJS) $(protobuf_OBJS) -o $(program_NAME)
-	#$(STRIP) $(program_NAME)
+	$(STRIP) $(program_NAME)
 
 ifneq "$(MAKECMDGOALS)" "clean"
 # Include the list of dependancies generated for each object file

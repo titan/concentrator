@@ -142,7 +142,8 @@ void dbclose(LOGDB * db) {
     close(db->dfd);
     close(db->ifd);
     close(db->pfd);
-    sbtree_free(db->root);
+    if (db->root)
+        sbtree_free(db->root);
     free(db);
 }
 
@@ -186,76 +187,12 @@ int dbseq(LOGDB * db, dbseqfun seqfun, void * params, size_t len) {
         return -1;
     }
 
-    tuple.fun = seqfun;
-    tuple.fd = db->dfd;
-    tuple.params = params;
-    tuple.len = len;
-    sbtree_sequence(db->root, sequence, &tuple, sizeof(seqtuple_t));
+    if (db->root) {
+        tuple.fun = seqfun;
+        tuple.fd = db->dfd;
+        tuple.params = params;
+        tuple.len = len;
+        sbtree_sequence(db->root, sequence, &tuple, sizeof(seqtuple_t));
+    }
     return 0;
 }
-
-#if 0
-
-typedef struct {
-    int id;
-    int value;
-} DATA;
-
-sbtidx_t genkey(void * data, size_t len) {
-    size_t i = 0;
-	sbtidx_t seed = 131; // 31 131 1313 13131 131313 etc..
-	sbtidx_t hash = 0;
-
-    for (; i < len; i ++) {
-		hash = hash * seed + * (unsigned char *) (data + i);
-	}
-
-	return hash;
-}
-
-void seq(void * key, size_t klen, void * data, size_t dlen, void * param, size_t plen) {
-    DATA * d = (DATA *) data;
-    printf("%4d - %d\n", *(int *)key, d->value);
-}
-
-int main(int argc, char ** argv) {
-    DATA data;
-    int i = 0, r;
-    size_t len;
-
-    /*
-    LOGDB * db = dbopen("test", DB_NEW, genkey);
-    if (db != NULL) {
-        for (i = 0; i < 100; i ++) {
-            data.id = i;
-            data.value = i;
-            dbput(db, &i, sizeof(int), &data, sizeof(DATA));
-        }
-        dbclose(db);
-    } else {
-        printf("Open test error\n");
-    }
-    */
-    /*
-    LOGDB * db = dbopen("test", DB_APPEND, genkey);
-    if (db != NULL) {
-        for (i = 100; i < 200; i ++) {
-            data.id = i;
-            data.value = i;
-            dbput(db, &i, sizeof(int), &data, sizeof(DATA));
-        }
-        dbclose(db);
-    } else {
-        printf("Open test error\n");
-    }
-    */
-    /*
-    LOGDB * db = dbopen("test", DB_RDONLY, genkey);
-    if (db != NULL) {
-        r = dbseq(db, seq);
-        dbclose(db);
-    }
-    */
-}
-
-#endif
