@@ -87,7 +87,7 @@ private:
 
     static CValveMonitor * instance;
     int com;
-    map<userid_t, user_t, uidcmp> users;
+    map<uint32, user_t> users;
     CLock users_lock, txlock;
     cbuffer_t tx;
     CRepeatTimer punctualTimer;

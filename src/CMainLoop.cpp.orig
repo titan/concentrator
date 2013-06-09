@@ -20,6 +20,7 @@
 #include "CCardHost.h"
 #include "CValveMonitor.h"
 #include "valveusers.pb.h"
+#include <math.h>
 
 #ifdef DEBUG_MAINLOOP
 #define DEBUG(...) do {printf("%s::%s----", __FILE__, __func__);printf(__VA_ARGS__);} while(false)
@@ -47,6 +48,7 @@
 
 extern int heatCount;
 extern bool cardhostEnabled;
+int valveTimeout;
 
 
 static int InitHotplugSock() {
@@ -112,10 +114,17 @@ CMainLoop::CMainLoop() {
     vidx = 0;
     hidx = 0;
     hotplug = -1;
+
+    checkings = new bool[len];
+    checkings[0] = false;
+    for (int i = 1; i < len; i ++) {
+        checkings[i] = true;
+    }
 }
 
 CMainLoop::~CMainLoop() {
     delete borders;
+    delete checkings;
     if (hotplug != -1)
         close(hotplug);
 }
@@ -128,12 +137,17 @@ void CMainLoop::Run() {
     char chr;
     char buf[1024];
     time_t last = time(NULL);
+    time_t valveLast = last;
 
     kfd = open(KEY_NAME,O_RDONLY);
     if (kfd <0) {
         DEBUG("open device key error!\n");
         return;
     }
+
+    valveTimeout = log10(valveCount);
+    if (valveTimeout == 0)
+        valveTimeout = 1;
 
     hotplug = InitHotplugSock();
 
@@ -194,9 +208,9 @@ void CMainLoop::Run() {
                 }
                 case 0x0D: // enter
                     DEBUG("Enter pressed\n");
-                    if (vidx == 3 && wireless != true && time(NULL) - last > 300 && usbmode != true) {
+                    if (vidx == 3 && wireless != true && time(NULL) - valveLast > valveTimeout && usbmode != true) {
                         CValveMonitor::GetInstance()->Broadcast();
-                        last = time(NULL);
+                        valveLast = time(NULL);
                         checkValve = true;
                         Draw();
                     } else if (usbmode) {
@@ -257,9 +271,15 @@ void CMainLoop::Run() {
                     p += strlen(buf + p) + 1;
                 }
             }
-        } else if (time(NULL) - last > 300 && wireless != true && usbmode != true) {
+        } else if (time(NULL) - valveLast > valveTimeout && wireless != true && usbmode != true && checkValve == true) {
             Draw();
             checkValve = false;
+        } else if (checkings[vidx] && time(NULL) - last > 10) {
+            last = time(NULL);
+            Draw();
+        } else if (time(NULL) - last > 60) {
+            last = time(NULL);
+            Draw();
         }
         sleep(1);
     }
@@ -326,6 +346,7 @@ void CMainLoop::DrawInitial() {
 
 void CMainLoop::DrawStatus() {
     LCDClear();
+    bool ok = false;
     Status status = IValveMonitorFactory::GetInstance()->GetStatus();
     if (wireless) {
         PrintHZ(0, TL_Y0, "转发器", 3);
@@ -335,6 +356,7 @@ void CMainLoop::DrawStatus() {
     switch (status) {
     case STATUS_OK:
         PrintChar(1/*space*/ + 3, TL_Y0, "OK");
+        ok = true;
         break;
     case STATUS_CHECKING:
         PrintHZ(1/*space*/ + 3, TL_Y0, "检测中", 3);
@@ -349,6 +371,7 @@ void CMainLoop::DrawStatus() {
     switch (status) {
     case STATUS_OK:
         PrintChar(1/*space*/ + 3, TL_Y1, "OK");
+        ok &= true;
         break;
     case STATUS_CHECKING:
         PrintHZ(1/*space*/ + 3, TL_Y1, "检测中", 3);
@@ -363,6 +386,7 @@ void CMainLoop::DrawStatus() {
     switch (status) {
     case STATUS_OK:
         PrintChar(1/*space*/ + 3, TL_Y1, "OK");
+        ok &= true;
         break;
     case STATUS_CHECKING:
         PrintHZ(1/*space*/ + 3, TL_Y1, "检测中", 3);
@@ -371,6 +395,7 @@ void CMainLoop::DrawStatus() {
         PrintChar(1/*space*/ + 3, TL_Y1, "Err");
         break;
     }
+    checkings[vidx] = ~ok;
 }
 
 void CMainLoop::DrawGPRS() {
@@ -422,8 +447,11 @@ void CMainLoop::DrawForwarder() {
         PrintHZ(0, DL_Y0, "转发器", 3);
         PrintChar(3, DL_Y0, ":");
         PrintHZ(0, DL_Y1, "检测中", 3);
+        checkings[vidx] = true;
         return;
     }
+
+    checkings[vidx] = false;
 
     if (0 == info.size()) {
         PrintHZ(0, DL_Y0, "转发器", 3);
@@ -466,6 +494,7 @@ void CMainLoop::DrawValve() {
     if (checkValve) {
         PrintChar(4, TL_Y2, ":");
         PrintHZ(5, TL_Y2, "检测中", 3);
+        checkings[vidx] = true;
     } else {
         GOOGLE_PROTOBUF_VERIFY_VERSION;
         vector<user_t> users;
@@ -482,9 +511,11 @@ void CMainLoop::DrawValve() {
             string strbuf;
             lst.SerializeToString(&strbuf);
             Write((uint8 *)strbuf.c_str(), strbuf.length());
+            checkings[vidx] = false;
         } else {
             PrintChar(4, TL_Y2, ":");
             PrintHZ(5, TL_Y2, "检测中", 3);
+            checkings[vidx] = true;
         }
     }
 }
@@ -497,8 +528,11 @@ void CMainLoop::DrawHeat() {
         PrintHZ(0, TL_Y0, "热总表", 3);
         PrintChar(3, TL_Y0, ":");
         PrintHZ(0, TL_Y1, "检测中", 3);
+        checkings[vidx] = true;
         return;
     }
+
+    checkings[vidx] = false;
 
     if (0 == info.size()) {
         PrintHZ(0, TL_Y0, "热总表", 3);
@@ -571,8 +605,10 @@ void CMainLoop::DrawCardHost() {
     vector<cardaddr_t> addrs;
     if (!CCardHost::GetInstance()->GetCardInfo(addrs)) {
         PrintHZ(2, TL_Y1, "检测中", 3);
+        checkings[vidx] = true;
         return;
     }
+    checkings[vidx] = false;
     borders[cardidx] = addrs.size() + 1;
     if (hidx >= borders[cardidx]) {
         hidx = borders[cardidx] - 1;

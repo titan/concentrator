@@ -26,10 +26,10 @@
 extern gpio_attr_t gpioattr;
 
 void vuserseq(void * key, size_t klen, void * data, size_t dlen, void * params, size_t plen) {
-    map<userid_t, user_t, uidcmp> * users = (map<userid_t, user_t, uidcmp> *) params;
-    userid_t * uid = (userid_t *) key;
+    map<uint32, user_t> * users = (map<uint32, user_t> *) params;
+    uint32 vmac = (uint32) key;
     user_t * user = (user_t *) data;
-    (* users)[* uid] = * user;
+    (* users)[vmac] = * user;
 }
 
 void vrecordseq(void * key, size_t klen, void * data, size_t dlen, void * params, size_t plen) {
@@ -73,8 +73,8 @@ void CValveMonitor::LoadUsers() {
 void CValveMonitor::SaveUsers() {
     LOGDB * db = dbopen((char *)"data/users", DB_NEW, genuserkey);
     if (db != NULL) {
-        for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
-            dbput(db, (void *)&iter->first, sizeof(userid_t), &iter->second, sizeof(user_t));
+        for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+            dbput(db, (void *)&iter->first, sizeof(uint32), &iter->second, sizeof(user_t));
         }
         dbclose(db);
         syncUsers = false;
@@ -238,7 +238,7 @@ void CValveMonitor::Broadcast() {
 
 bool CValveMonitor::GetUserList(vector<user_t>& u) {
     if (users_lock.TryLock()) {
-        for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+        for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
             u.push_back(iter->second);
         }
         users_lock.UnLock();
@@ -295,7 +295,7 @@ void CValveMonitor::ParseAck(uint8 * ack, uint16 len) {
         user_t user;
         memcpy(user.uid.x, data, dlen);
         user.vmac = mac;
-        users[user.uid] = user;
+        users[mac] = user;
         DEBUG("Found user [%02x %02x %02x %02x %02x %02x %02x %02x] in valve [%02x %02x %02x %02x]\n", user.uid.x[0], user.uid.x[1], user.uid.x[2], user.uid.x[3], user.uid.x[4], user.uid.x[5], user.uid.x[6], user.uid.x[7], user.vmac & 0xFF, (user.vmac >> 8) & 0xFF, (user.vmac >> 16) & 0xFF, (user.vmac >> 24) & 0xFF);
         syncUsers = true;
         break;
@@ -305,7 +305,7 @@ void CValveMonitor::ParseAck(uint8 * ack, uint16 len) {
 }
 
 void CValveMonitor::GetPunctualData() {
-    for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+    for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
         txlock.Lock();
         uint8 * buf = (uint8 *) cbuffer_write(tx);
         if (buf != NULL) {
@@ -347,17 +347,19 @@ void CValveMonitor::ParsePunctualData(uint32 vmac, uint8 * data, uint16 len) {
     userid_t uid;
     memcpy(&uid.x, data + ptr, sizeof(userid_t)); ptr += sizeof(userid_t);
 
-    for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
-        if (memcmp(uid.x, iter->first.x, sizeof(userid_t)) == 0) {
-            if (vmac != iter->second.vmac) {
-                for (map<userid_t, user_t>::iterator j = users.begin(); j != users.end(); j ++) {
-                    if (j->second.vmac == iter->second.vmac) {
+    for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+        if (vmac == iter->second.vmac) {
+            if (memcmp(uid.x, iter->second.uid.x, sizeof(userid_t)) != 0) {
+                /*
+                for (map<uint32, user_t>::iterator j = users.begin(); j != users.end(); j ++) {
+                    if ((memcmp(j->second.uid.x, iter->second.uid.x, sizeof(userid_t)) == 0)) {
                         users.erase(j->first);
                         break;
                     }
                 }
-                iter->second.vmac = vmac;
+                memcpy(iter->second.uid.x, uid.x, sizeof(userid_t));
                 syncUsers = true;
+                */
             }
             break;
         }
@@ -423,7 +425,7 @@ void CValveMonitor::GetRechargeData() {
     uint8 buf[PKTLEN];
     uint16 ptr = 0;
     const uint8 payload = 10;
-    for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+    for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
         record_t * rec = &records[iter->second.vmac];
         while (rec->sentRecharge != rec->recharge & 0x7F) {
             uint8 recharge = rec->recharge;
@@ -488,13 +490,13 @@ void CValveMonitor::ParseRechargeData(uint32 vmac, uint8 * data, uint16 len) {
     uint8 buf[PKTLEN];
     const uint8 rsize = 42;
     uint16 ptr = 0;
-    for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+    for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
         if (iter->second.vmac == vmac) {
             for (uint8 i = 0, count = len / rsize; i < count; i ++, ptr = 0) {
                 bzero(buf, PKTLEN);
                 buf[ptr] = VALVE_PACKET_FLAG; ptr ++;
                 buf[ptr] = sizeof(userid_t) + rsize; ptr ++;
-                memcpy(buf + ptr, iter->first.x, sizeof(userid_t)); ptr += sizeof(userid_t);
+                memcpy(buf + ptr, iter->second.uid.x, sizeof(userid_t)); ptr += sizeof(userid_t);
                 * (uint32 *)(buf + ptr) = vmac; ptr += sizeof(uint32);
                 memcpy(buf + ptr, data + i * rsize, rsize); ptr += rsize;
                 CPortal::GetInstance()->InsertChargeData(buf, ptr);
@@ -508,7 +510,7 @@ void CValveMonitor::GetConsumeData() {
     uint8 buf[PKTLEN];
     uint16 ptr = 0;
     const uint8 payload = 32;
-    for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+    for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
         record_t * rec = &records[iter->second.vmac];
         while (rec->sentConsume != rec->consume & 0x7FFF) {
             uint16 consume = rec->consume;
@@ -574,14 +576,14 @@ void CValveMonitor::ParseConsumeData(uint32 vmac, uint8 * data, uint16 len) {
     uint8 buf[PKTLEN];
     uint16 ptr = 0;
     const uint8 rsize = 8;
-    for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+    for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
         if (iter->second.vmac == vmac) {
             for (uint8 i = 0, count = (len - 8) / rsize; i < count; i ++, ptr = 0) {
                 bzero(buf, PKTLEN);
                 buf[ptr] = VALVE_PACKET_FLAG; ptr ++;
                 buf[ptr] = sizeof(userid_t) + rsize; ptr ++;
                 * (uint32 *)(buf + ptr) = vmac; ptr += sizeof(uint32);
-                memcpy(buf + ptr, iter->first.x, sizeof(userid_t)); ptr += sizeof(userid_t);
+                memcpy(buf + ptr, iter->second.uid.x, sizeof(userid_t)); ptr += sizeof(userid_t);
                 memcpy(buf + ptr, data + i * rsize + 4, 4); ptr += 24; // used time unit and skip unset fields
 
                 uint8 tmp[7] = {0};
@@ -600,8 +602,8 @@ void CValveMonitor::ParseConsumeData(uint32 vmac, uint8 * data, uint16 len) {
 }
 
 void CValveMonitor::QueryUser(userid_t uid, uint8 * data, uint16 len) {
-    for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
-        if (memcmp(iter->first.x, uid.x, sizeof(userid_t)) == 0) {
+    for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+        if (memcmp(iter->second.uid.x, uid.x, sizeof(userid_t)) == 0) {
             txlock.Lock();
             uint8 * buf = (uint8 *)cbuffer_write(tx);
             if (buf == NULL) {
@@ -632,9 +634,9 @@ void CValveMonitor::QueryUser(userid_t uid, uint8 * data, uint16 len) {
 }
 
 void CValveMonitor::ParseQueryUser(uint32 vmac, uint8 * data, uint16 len) {
-    for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+    for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
         if (iter->second.vmac == vmac) {
-            CCardHost::GetInstance()->AckQueryUser(iter->first, data, len);
+            CCardHost::GetInstance()->AckQueryUser(iter->second.uid, data, len);
             return;
         }
     }
@@ -646,12 +648,12 @@ void CValveMonitor::Recharge(userid_t uid, uint8 * data, uint16 len) {
     hexdump(uid.x, sizeof(userid_t));
     DEBUG("Recharge data ");
     hexdump(data, len);
-    for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+    for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
         DEBUG("Iter user id ");
-        hexdump(iter->first.x, sizeof(userid_t));
-        if (memcmp(iter->first.x, uid.x, sizeof(userid_t)) == 0) {
+        hexdump(iter->second.uid.x, sizeof(userid_t));
+        if (memcmp(iter->second.uid.x, uid.x, sizeof(userid_t)) == 0) {
             DEBUG("Found user id ");
-            hexdump(iter->first.x, sizeof(userid_t));
+            hexdump(iter->second.uid.x, sizeof(userid_t));
             txlock.Lock();
             uint8 * buf = (uint8 *)cbuffer_write(tx);
             if (buf == NULL) {
@@ -685,7 +687,7 @@ void CValveMonitor::ParseRecharge(uint32 vmac, uint8 * data, uint16 len) {
     DEBUG("Want Valve MAC: ");
     //hexdump(&vmac, sizeof(uint32));
     DEBUG("%02x %02x %02x %02x\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF);
-    for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+    for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
         DEBUG("Iter Valve MAC: ");
         //hexdump(&iter->second.vmac, sizeof(uint32));
         DEBUG("%02x %02x %02x %02x\n", iter->second.vmac & 0xFF, (iter->second.vmac >> 8) & 0xFF, (iter->second.vmac >> 16) & 0xFF, (iter->second.vmac >> 24) & 0xFF);
@@ -693,7 +695,7 @@ void CValveMonitor::ParseRecharge(uint32 vmac, uint8 * data, uint16 len) {
             DEBUG("Found Valve MAC: ");
             //hexdump(&iter->second.vmac, sizeof(uint32));
             DEBUG("%02x %02x %02x %02x\n", iter->second.vmac & 0xFF, (iter->second.vmac >> 8) & 0xFF, (iter->second.vmac >> 16) & 0xFF, (iter->second.vmac >> 24) & 0xFF);
-            CCardHost::GetInstance()->AckRecharge(iter->first, data, len);
+            CCardHost::GetInstance()->AckRecharge(iter->second.uid, data, len);
             return;
         }
     }
@@ -703,7 +705,7 @@ void CValveMonitor::ParseRecharge(uint32 vmac, uint8 * data, uint16 len) {
 uint16 CValveMonitor::ConfigValve(ValveCtrlType cmd, uint8 * data, uint16 len) {
     uint16 okay = 0;
 
-    for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+    for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
         txlock.Lock();
         uint8 * buf = (uint8 *)cbuffer_write(tx);
         uint16 ptr = 0;
@@ -748,7 +750,7 @@ Status CValveMonitor::GetStatus() {
 }
 
 void CValveMonitor::GetTimeData() {
-    for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+    for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
         txlock.Lock();
         uint8 * buf = (uint8 *) cbuffer_write(tx);
         if (buf != NULL) {
@@ -804,7 +806,7 @@ void CValveMonitor::SendValveData() {
 }
 
 void CValveMonitor::GetHeatData() {
-    for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+    for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
         txlock.Lock();
         uint8 * buf = (uint8 *) cbuffer_write(tx);
         if (buf != NULL) {
@@ -837,7 +839,7 @@ void CValveMonitor::GetHeatData() {
 }
 
 void CValveMonitor::ParseHeatData(uint32 vmac, uint8 * data, uint16 len) {
-    for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+    for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
         if (iter->second.vmac == vmac) {
             uint16 ptr = 0;
             while (ptr < len && data[ptr] != 0x68) ptr ++; // skip preface
@@ -884,7 +886,7 @@ void CValveMonitor::ParseHeatData(uint32 vmac, uint8 * data, uint16 len) {
             if (valveHeats.count(vmac) == 0) {
                 valve_heat_t tmp;
                 tmp.mac = vmac;
-                tmp.uid = iter->first;
+                tmp.uid = iter->second.uid;
                 tmp.type = type;
                 memcpy(tmp.addr, addr, 7);
                 memcpy(tmp.inTemp, inTemp, 3);
@@ -896,7 +898,7 @@ void CValveMonitor::ParseHeatData(uint32 vmac, uint8 * data, uint16 len) {
                 valveHeats[vmac] = tmp;
             } else {
                 valveHeats[vmac].mac = vmac;
-                valveHeats[vmac].uid = iter->first;
+                valveHeats[vmac].uid = iter->second.uid;
                 valveHeats[vmac].type = type;
                 memcpy(valveHeats[vmac].addr, addr, 7);
                 memcpy(valveHeats[vmac].inTemp, inTemp, 3);
@@ -1096,7 +1098,7 @@ void CValveMonitor::SetValveTime(uint32 vmac, tm * time) {
 }
 
 void CValveMonitor::SyncValveTime() {
-    for (map<userid_t, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+    for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
         GetValveTime(iter->second.vmac);
     }
 }

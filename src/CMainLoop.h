@@ -29,6 +29,7 @@ private:
     uint8 hidx, vidx; // indexes for screen
     uint8 cardidx;
     uint8 * borders;
+    bool * checkings;
     bool usbmode;
     int usbstate;
     int com;

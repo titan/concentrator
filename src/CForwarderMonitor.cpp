@@ -1658,7 +1658,7 @@ void CForwarderMonitor::SaveUsers() {
                 memcpy(user.uid.x, valveIter->second.ValveData.ValveTemperature.UserID, USERID_LEN);
                 user.fid = forwarderIter->first;
                 user.vmac = ((user.fid & 0xFFFF) << 16) | valveIter->first;
-                dbput(db, user.uid.x, USERID_LEN, &user, sizeof(user_t));
+                dbput(db, &user.vmac, sizeof(uint32), &user, sizeof(user_t));
                 users.push_back(user);
             }
         }
