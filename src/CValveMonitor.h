@@ -52,9 +52,10 @@ public:
     void Recharge(userid_t uid, uint8 * data, uint16 len);
     uint16 ConfigValve(ValveCtrlType cmd, uint8 * data, uint16 len);
     Status GetStatus();
-    void Broadcast();
+    void Broadcast(uint8 counter);
     bool GetUserList(vector<user_t>& user);
     void SetGPIO(gpio_name_t gpio) {this->gpio = gpio;};
+    void SetValveCount(int count) {this->valveCount = count;};
 
 private:
     CValveMonitor();
@@ -65,6 +66,9 @@ private:
     void SaveRecords();
     virtual uint32 Run();
     void ParseAck(uint8 * ack, uint16 len);
+    void BroadcastClearSID();
+    void BroadcastQuery();
+    void ParseBroadcast(uint32 vmac, uint8 * data, uint16 len);
     void GetPunctualData();
     void ParsePunctualData(uint32 vmac, uint8 * data, uint16 len);
     void GetRechargeData();
@@ -84,10 +88,12 @@ private:
     void ParseValveTime(uint32 vmac, uint8 * data, uint16 len);
     void SetValveTime(uint32 vmac, tm * time);
     void SyncValveTime();
+    void SendErrorValves();
 
     static CValveMonitor * instance;
     int com;
     map<uint32, user_t> users;
+    map<uint32, user_t> lastUsers;
     CLock users_lock, txlock;
     cbuffer_t tx;
     CRepeatTimer punctualTimer;
@@ -98,5 +104,8 @@ private:
     ValveDataType valveDataType;
     bool syncUsers, syncRecords;
     gpio_name_t gpio;
+    uint32 sid; // session id
+    uint8 counter; // broadcase counter
+    int valveCount;
 };
 #endif

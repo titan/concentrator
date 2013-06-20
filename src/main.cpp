@@ -378,6 +378,7 @@ void StartValveMonitor() {
     CMainLoop::GetInstance()->SetValveCount(number);
 
     SetPIOCfg(getGPIO(name.c_str()), gpioattr);
+    CValveMonitor::GetInstance()->SetValveCount(number);
     CValveMonitor::GetInstance()->SetGPIO(getGPIO(name.c_str()));
     CValveMonitor::GetInstance()->Init(startTime, interval);
     CValveMonitor::GetInstance()->Start();

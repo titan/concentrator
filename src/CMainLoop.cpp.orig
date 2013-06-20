@@ -151,7 +151,7 @@ void CMainLoop::Run() {
 
     hotplug = InitHotplugSock();
 
-    tv.tv_sec = 1;
+    tv.tv_sec = 2;
     tv.tv_usec = 0;
 
     //init LCD
@@ -209,7 +209,7 @@ void CMainLoop::Run() {
                 case 0x0D: // enter
                     DEBUG("Enter pressed\n");
                     if (vidx == 3 && wireless != true && time(NULL) - valveLast > valveTimeout && usbmode != true) {
-                        CValveMonitor::GetInstance()->Broadcast();
+                        CValveMonitor::GetInstance()->Broadcast(2); // don't broadcast with 1
                         valveLast = time(NULL);
                         checkValve = true;
                         Draw();

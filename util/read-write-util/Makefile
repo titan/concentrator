@@ -7,7 +7,7 @@ clean_list += $(program_OBJS) $(program_NAME)
 RM = rm
 CC = $(BASE)arm-none-linux-gnueabi-gcc
 STRIP = $(BASE)arm-none-linux-gnueabi-strip
-CFLAGS += -Wextra -O2
+CFLAGS += -Wextra -O2 -g
 LDFLAGS =  -L../../lib/libs_emsys_odm/ -l EMZY_ARM_ODM
 INCLUDE = -I../../lib/libs_emsys_odm/
 
@@ -29,7 +29,6 @@ clean_list += ${program_OBJS:.o=.d}
 
 $(program_NAME): $(program_OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $@.o -o $@
-	$(STRIP) $@
 
 ifneq "$(MAKECMDGOALS)" "clean"
 # Include the list of dependancies generated for each object file

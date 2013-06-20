@@ -47,7 +47,7 @@ CValveMonitor * CValveMonitor::GetInstance() {
     return instance;
 }
 
-CValveMonitor::CValveMonitor():noonTimer(DAY_TYPE) {
+CValveMonitor::CValveMonitor():noonTimer(DAY_TYPE), sid(0), counter(0) {
     tx = cbuffer_create(12, PKTLEN);
     if (access("data/", F_OK) == -1) {
         mkdir("data", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
@@ -65,7 +65,7 @@ bool CValveMonitor::Init(uint32 startTime, uint32 interval) {
 void CValveMonitor::LoadUsers() {
     LOGDB * db = dbopen((char *)"data/users", DB_RDONLY, genuserkey);
     if (db != NULL) {
-        dbseq(db, vuserseq, &users, sizeof(users));
+        dbseq(db, vuserseq, &lastUsers, sizeof(lastUsers));
         dbclose(db);
     }
 }
@@ -78,6 +78,10 @@ void CValveMonitor::SaveUsers() {
         }
         dbclose(db);
         syncUsers = false;
+        lastUsers.clear();
+        for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+            lastUsers[iter->first] = iter->second;
+        }
     }
 }
 
@@ -89,11 +93,27 @@ uint32 CValveMonitor::Run() {
     uint8 * buf = NULL;
     uint16 rlen = 0, wlen = 0;
     time_t last = 0;
-    uint32 rc = 0, wc = 0;
-    uint8 retry = 0;
+    uint32 rc = 0, wc = 0; // read and write counter
+    uint8 retry = 0; // read retry times
+    uint16 wi = 0; // write interval, ? seconds
 
     LoadUsers();
     LoadRecords();
+
+    BroadcastClearSID();
+    sleep(1);
+    BroadcastClearSID();
+    sleep(1);
+    BroadcastClearSID();
+    sleep(1);
+
+    srandom(time(NULL));
+    sid = random();
+
+    Broadcast(++counter);
+    Broadcast(++counter);
+    Broadcast(++counter);
+    BroadcastQuery();
 
     while (true) {
 
@@ -101,34 +121,36 @@ uint32 CValveMonitor::Run() {
         FD_SET(com, &rfds);
         FD_ZERO(&wfds);
 
-        if (users.size() == 0 && time(NULL) - last > 600) {
-            Broadcast();
-            last = time(NULL);
-        } else {
-            if (punctualTimer.Done()) {
-                SyncValveTime();
-                GetPunctualData();
-                GetTimeData();
-                if (valveDataType == VALVE_DATA_TYPE_HEAT) {
-                    GetHeatData();
-                }
-                if (valveTemperatures.size() > 0 || valveHeats.size() > 0) {
-                    SendValveData();
-                }
-                if (syncUsers) {
-                    SaveUsers();
-                }
-                if (syncRecords) {
-                    SaveRecords();
-                }
+        if (punctualTimer.Done()) {
+            SyncValveTime();
+            GetPunctualData();
+            GetTimeData();
+            if (valveDataType == VALVE_DATA_TYPE_HEAT) {
+                GetHeatData();
             }
-            if (noonTimer.Done()) {
-                GetRechargeData();
-                GetConsumeData();
+            if (valveTemperatures.size() > 0 || valveHeats.size() > 0) {
+                SendValveData();
             }
+            if (users.size() != valveCount) {
+                DEBUG("Defined valve count: %d, found valve count: %d\n", valveCount, users.size());
+                SendErrorValves();
+            }
+            if (syncUsers) {
+                SaveUsers();
+            }
+            if (syncRecords) {
+                SaveRecords();
+            }
+            BroadcastQuery();
+        }
+        if (noonTimer.Done()) {
+            GetRechargeData();
+            GetConsumeData();
         }
 
-        if (cbuffer_read(tx) != NULL && rc == wc) {
+        if (cbuffer_read(tx) != NULL && rc == wc && time(NULL) - last > wi) {
+            time_t t = time(NULL);
+            DEBUG("%d - %d = %d, greater than %d?\n", t, last, t - last, wi);
             FD_SET(com, &wfds);
             TX_ENABLE(gpio);
         } else {
@@ -195,6 +217,18 @@ uint32 CValveMonitor::Run() {
                 }
                 wrote += w;
                 if (wrote == wlen) {
+                    uint8 code;
+                    if (buf[6] == 0xFF) {
+                        code = buf[9];
+                    } else {
+                        code = buf[7];
+                    }
+                    if (code == 0xFF) {
+                        wi = 60 * 2;
+                    } else {
+                        wi = 0;
+                    }
+                    last = time(NULL);
                     DEBUG("Write %d bytes:", wlen);
                     hexdump(buf, wlen);
                     cbuffer_read_done(tx);
@@ -218,7 +252,22 @@ uint32 CValveMonitor::Run() {
     return 0;
 }
 
-void CValveMonitor::Broadcast() {
+void CValveMonitor::BroadcastClearSID() {
+    uint8 buf[PKTLEN];
+    uint8 ptr = 0;
+    bzero(buf, PKTLEN);
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = 0xFF; ptr ++;
+    buf[ptr] = PORT; ptr ++;
+    buf[ptr] = RAND; ptr ++;
+    buf[ptr] = 0x01; ptr ++;
+    buf[ptr] = VALVE_BROADCAST_CLEAR_SID; ptr ++;
+    SendCommand(buf, ptr);
+}
+
+void CValveMonitor::Broadcast(uint8 counter) {
     txlock.Lock();
     uint8 * buf = (uint8 *) cbuffer_write(tx);
     if (buf != NULL) {
@@ -229,11 +278,58 @@ void CValveMonitor::Broadcast() {
         buf[ptr] = 0xFF; ptr ++;
         buf[ptr] = PORT; ptr ++;
         buf[ptr] = RAND; ptr ++;
-        buf[ptr] = 0x01; ptr ++;
+        buf[ptr] = 0x06; ptr ++;
         buf[ptr] = VALVE_BROADCAST; ptr ++;
+        buf[ptr] = counter; ptr ++;
+        memcpy(buf + ptr, &sid, sizeof(uint32)); ptr += sizeof(uint32);
         cbuffer_write_done(tx);
     }
     txlock.UnLock();
+}
+
+void CValveMonitor::BroadcastQuery() {
+    txlock.Lock();
+    uint8 * buf = (uint8 *) cbuffer_write(tx);
+    if (buf != NULL) {
+        uint16 ptr = 0;
+        buf[ptr] = 0xFF; ptr ++;
+        buf[ptr] = 0xFF; ptr ++;
+        buf[ptr] = 0xFF; ptr ++;
+        buf[ptr] = 0xFF; ptr ++;
+        buf[ptr] = PORT; ptr ++;
+        buf[ptr] = RAND; ptr ++;
+        buf[ptr] = 0x06; ptr ++;
+        buf[ptr] = VALVE_BROADCAST; ptr ++;
+        buf[ptr] = 0xCC; ptr ++;
+        memcpy(buf + ptr, &sid, sizeof(uint32)); ptr += sizeof(uint32);
+        cbuffer_write_done(tx);
+    }
+    txlock.UnLock();
+}
+
+void CValveMonitor::ParseBroadcast(uint32 vmac, uint8 * data, uint16 len) {
+    uint8 buf[PKTLEN];
+    uint16 ptr = 0;
+    if (len == 8) {
+        user_t user;
+        memcpy(user.uid.x, data, sizeof(user_t));
+        user.vmac = vmac;
+        users[vmac] = user;
+        DEBUG("Found user [%02x %02x %02x %02x %02x %02x %02x %02x] in valve [%02x %02x %02x %02x]\n", user.uid.x[0], user.uid.x[1], user.uid.x[2], user.uid.x[3], user.uid.x[4], user.uid.x[5], user.uid.x[6], user.uid.x[7], user.vmac & 0xFF, (user.vmac >> 8) & 0xFF, (user.vmac >> 16) & 0xFF, (user.vmac >> 24) & 0xFF);
+        syncUsers = true;
+        bzero(buf,PKTLEN);
+        memcpy(buf, &vmac, sizeof(uint32)); ptr += sizeof(uint32);
+        buf[ptr] = PORT; ptr ++;
+        buf[ptr] = RAND; ptr ++;
+        buf[ptr] = 0x06; ptr ++; // len
+        buf[ptr] = VALVE_BROADCAST; ptr ++;
+        buf[ptr] = 0xAC; ptr ++;
+        memcpy(buf + ptr, &sid, sizeof(uint32)); ptr += sizeof(uint32);
+        SendCommand(buf, ptr); // send only, on reponse
+    } else if (len == 1) {
+        Broadcast(counter ++);
+        Broadcast(counter ++);
+    }
 }
 
 bool CValveMonitor::GetUserList(vector<user_t>& u) {
@@ -292,12 +388,7 @@ void CValveMonitor::ParseAck(uint8 * ack, uint16 len) {
         ParseRecharge(mac, data, dlen);
         break;
     case VALVE_BROADCAST:
-        user_t user;
-        memcpy(user.uid.x, data, dlen);
-        user.vmac = mac;
-        users[mac] = user;
-        DEBUG("Found user [%02x %02x %02x %02x %02x %02x %02x %02x] in valve [%02x %02x %02x %02x]\n", user.uid.x[0], user.uid.x[1], user.uid.x[2], user.uid.x[3], user.uid.x[4], user.uid.x[5], user.uid.x[6], user.uid.x[7], user.vmac & 0xFF, (user.vmac >> 8) & 0xFF, (user.vmac >> 16) & 0xFF, (user.vmac >> 24) & 0xFF);
-        syncUsers = true;
+        ParseBroadcast(mac, data, dlen);
         break;
     default:
         break;
@@ -968,7 +1059,6 @@ bool CValveMonitor::WaitCmdAck(uint8 * data, uint16 * len) {
     int retval, r, readed = 0;
     uint8 * ack = data;
     uint16 rlen = 0;
-    time_t last = 0;
     uint8 retry = 3;
 
     FD_ZERO(&rfds);
@@ -1100,5 +1190,21 @@ void CValveMonitor::SetValveTime(uint32 vmac, tm * time) {
 void CValveMonitor::SyncValveTime() {
     for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
         GetValveTime(iter->second.vmac);
+    }
+}
+
+void CValveMonitor::SendErrorValves() {
+    bool found = false;
+    for (map<uint32, user_t>::iterator i = lastUsers.begin(); i != lastUsers.end(); i ++) {
+        found = false;
+        for (map<uint32, user_t>::iterator j = users.begin(); j != users.end(); j ++) {
+            if (i->first == j->first) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            // todo: send it to server
+        }
     }
 }
