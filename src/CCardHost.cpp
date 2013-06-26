@@ -89,25 +89,25 @@ uint32 CCardHost::Run() {
             if (FD_ISSET(com, &rfds)) {
 
                 if (readed == 0) {
-                    rlen = PKTLEN;
+                    rlen = 4;
                     bzero(cmd, PKTLEN);
                 }
 
-                r = read(com, cmd + readed, rlen);
+                r = read(com, cmd + readed, rlen - readed);
 
                 if (r == -1 || r == 0) {
                     continue;
                 }
                 readed += r;
 
-                if (rlen == PKTLEN && readed > 1 && cmd[1] != 0xFF) {
+                if (rlen == 4 && readed > 1 && cmd[1] != 0xFF) {
                     rlen = 1 + 1 + 6 + 6 + cmd[1]; // header + len + src + dst + data
-                } else if (rlen == PKTLEN && readed > 3 && cmd[1] == 0xFF) {
-                    rlen = 1 + 2 + 6 + 6 + ((uint16)cmd[2]) << 8 + cmd[3]; // header + len + src + dst + data
+                } else if (rlen == 4 && readed > 3 && cmd[1] == 0xFF) {
+                    rlen = 1 + 3 + 6 + 6 + ((uint16)cmd[2]) << 8 + cmd[3]; // header + len + src + dst + data
                 }
                 if (readed == rlen) {
                     readed = 0;
-                    DEBUG("read %d bytes: ", rlen);
+                    DEBUG("Read %d bytes: ", rlen);
                     hexdump(cmd, rlen);
                     ParseAndExecute(cmd, rlen);
                 }
@@ -117,7 +117,7 @@ uint32 CCardHost::Run() {
                 if (buf == NULL) continue; // no acks to send
                 if (wrote == 0) {
                     if (buf[1] == 0xFF) {
-                        wlen = 1 + 2 + 6 + 6 + ((uint16)buf[2]) << 8 + buf[3]; // header + len + src + dst + data
+                        wlen = 1 + 3 + 6 + 6 + ((uint16)buf[2]) << 8 + buf[3]; // header + len + src + dst + data
                     } else {
                         wlen = 1 + 1 + 6 + 6 + buf[1]; // header + len + src + dst + data
                     }

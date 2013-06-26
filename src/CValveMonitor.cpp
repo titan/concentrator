@@ -164,18 +164,18 @@ uint32 CValveMonitor::Run() {
             if (FD_ISSET(com, &rfds)) {
 
                 if (readed == 0) {
-                    rlen = 8192;
-                    bzero(ack, 8192);
+                    rlen = 9;
+                    bzero(ack, PKTLEN);
                 }
 
-                r = read(com, ack + readed, rlen);
+                r = read(com, ack + readed, rlen - readed);
 
                 if (r == -1 || r == 0) {
                     if (retry > 3) {
                         if (rc != wc) {
                             DEBUG("Read timeout, retry: %d, rc: %d, wc: %d\n", retry, rc, wc);
                             readed = 0;
-                            rlen = 8192;
+                            rlen = 9;
                         }
 
                         retry = 0;
@@ -189,33 +189,17 @@ uint32 CValveMonitor::Run() {
                 hexdump(ack + readed, r);
                 readed += r;
 
-                if (rlen == 8192 && readed > 6 && ack[6] != 0xFF) {
+                if (rlen == 9 && readed > 6 && ack[6] != 0xFF) {
                     rlen = 4 + 1 + 1 + 1 + ack[6] + 2; // mac + port + rand + len + data + crc
-                } else if (rlen == 8192 && readed > 6 && ack[6] == 0xFF) {
+                } else if (rlen == 9 && readed > 8 && ack[6] == 0xFF) {
                     rlen = 4 + 1 + 1 + 3 + ((uint16)ack[7]) << 8 + ack[8] + 2; // mac + port + rand + len + data + crc
                 }
-                while (readed >= rlen) {
+                if (readed == rlen) {
+                    readed = 0;
                     DEBUG("Read %d bytes: ", rlen);
-                    if (rlen == 0) {
-                        readed = 0;
-                        break;
-                    }
                     hexdump(ack, rlen);
                     ParseAck(ack, rlen);
                     rc ++;
-                    if (readed != rlen) {
-                        memmove(ack + rlen, ack, readed - rlen);
-                    }
-                    readed -= rlen;
-                    if (readed > 6) {
-                        if (ack[6] != 0xFF) {
-                            rlen = 4 + 1 + 1 + 1 + ack[6] + 2; // mac + port + rand + len + data + crc
-                        } else {
-                            rlen = 4 + 1 + 1 + 3 + ((uint16)ack[7]) << 8 + ack[8] + 2; // mac + port + rand + len + data + crc
-                        }
-                    } else {
-                        rlen = 8192 - readed;
-                    }
                 }
             }
             if (FD_ISSET(com, &wfds)) {
