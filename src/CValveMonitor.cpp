@@ -89,7 +89,7 @@ uint32 CValveMonitor::Run() {
     fd_set rfds, wfds;
     struct timeval tv;
     int retval, r, readed = 0, w, wrote = 0;
-    uint8 ack[PKTLEN];
+    uint8 ack[8192];
     uint8 * buf = NULL;
     uint16 rlen = 0, wlen = 0;
     time_t last = 0;
@@ -164,16 +164,20 @@ uint32 CValveMonitor::Run() {
             if (FD_ISSET(com, &rfds)) {
 
                 if (readed == 0) {
-                    rlen = PKTLEN;
-                    bzero(ack, PKTLEN);
+                    rlen = 8192;
+                    bzero(ack, 8192);
                 }
 
                 r = read(com, ack + readed, rlen);
 
                 if (r == -1 || r == 0) {
                     if (retry > 3) {
-                        if (rc != wc)
+                        if (rc != wc) {
                             DEBUG("Read timeout, retry: %d, rc: %d, wc: %d\n", retry, rc, wc);
+                            readed = 0;
+                            rlen = 8192;
+                        }
+
                         retry = 0;
                         rc = wc;
                     } else {
@@ -181,21 +185,37 @@ uint32 CValveMonitor::Run() {
                     }
                     continue;
                 }
-                DEBUG("read %d bytes: ", r);
+                DEBUG("readed: %d, rlen: %d, read %d bytes: ", readed, rlen, r);
                 hexdump(ack + readed, r);
                 readed += r;
 
-                if (rlen == PKTLEN && readed > 6 && ack[6] != 0xFF) {
+                if (rlen == 8192 && readed > 6 && ack[6] != 0xFF) {
                     rlen = 4 + 1 + 1 + 1 + ack[6] + 2; // mac + port + rand + len + data + crc
-                } else if (rlen == PKTLEN && readed > 6 && ack[6] == 0xFF) {
+                } else if (rlen == 8192 && readed > 6 && ack[6] == 0xFF) {
                     rlen = 4 + 1 + 1 + 3 + ((uint16)ack[7]) << 8 + ack[8] + 2; // mac + port + rand + len + data + crc
                 }
-                if (readed == rlen) {
-                    readed = 0;
-                    DEBUG("read %d bytes: ", rlen);
+                while (readed >= rlen) {
+                    DEBUG("Read %d bytes: ", rlen);
+                    if (rlen == 0) {
+                        readed = 0;
+                        break;
+                    }
                     hexdump(ack, rlen);
                     ParseAck(ack, rlen);
                     rc ++;
+                    if (readed != rlen) {
+                        memmove(ack + rlen, ack, readed - rlen);
+                    }
+                    readed -= rlen;
+                    if (readed > 6) {
+                        if (ack[6] != 0xFF) {
+                            rlen = 4 + 1 + 1 + 1 + ack[6] + 2; // mac + port + rand + len + data + crc
+                        } else {
+                            rlen = 4 + 1 + 1 + 3 + ((uint16)ack[7]) << 8 + ack[8] + 2; // mac + port + rand + len + data + crc
+                        }
+                    } else {
+                        rlen = 8192 - readed;
+                    }
                 }
             }
             if (FD_ISSET(com, &wfds)) {
@@ -239,8 +259,11 @@ uint32 CValveMonitor::Run() {
             }
         } else {
             if (retry > 3) {
-                if (rc != wc)
+                if (rc != wc) {
                     DEBUG("Read timeout, retry: %d, rc: %d, wc: %d\n", retry, rc, wc);
+                    readed = 0;
+                    rlen = 8192;
+                }
                 retry = 0;
                 rc = wc;
             } else {

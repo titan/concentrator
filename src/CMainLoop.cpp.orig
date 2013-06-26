@@ -138,6 +138,7 @@ void CMainLoop::Run() {
     char buf[1024];
     time_t last = time(NULL);
     time_t valveLast = last;
+    time_t lastKeyPressed = last;
 
     kfd = open(KEY_NAME,O_RDONLY);
     if (kfd <0) {
@@ -171,6 +172,8 @@ void CMainLoop::Run() {
         if (retval) {
             if (FD_ISSET(kfd, &rfds)) {
                 r = read(kfd, &chr, sizeof(char));
+                lastKeyPressed = time(NULL);
+                LcdLedOn();
                 switch (chr) {
                 case 0x25: // left
                     DEBUG("Left pressed\n");
@@ -280,6 +283,12 @@ void CMainLoop::Run() {
         } else if (time(NULL) - last > 60) {
             last = time(NULL);
             Draw();
+        } else if (vidx == 0) {
+            Draw();
+        }
+
+        if (lastKeyPressed - time(NULL) > 30) {
+            LcdLedOff();
         }
         sleep(1);
     }
