@@ -150,7 +150,6 @@ void CCardHost::ParseAndExecute(uint8 *cmd, uint16 length) {
     uint8 * src, * dst, * code, * data, * crc;
     uint16 len;
     uint16 ptr = 0, gcrc;
-    hexdump(cmd, length);
     if (cmd[0] != 0x55) {
         DEBUG("Not come from card host\n");
         return;
