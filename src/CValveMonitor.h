@@ -95,7 +95,7 @@ private:
     map<uint32, user_t> users;
     map<uint32, user_t> lastUsers;
     CLock users_lock, txlock;
-    cbuffer_t tx;
+    cbuffer_t tx; // send command buffer
     CRepeatTimer punctualTimer;
     CFixTimer noonTimer;
     map<uint32, record_t> records; // vmac -> record
@@ -107,5 +107,6 @@ private:
     uint32 sid; // session id
     uint8 counter; // broadcase counter
     int valveCount;
+    cbuffer_t rx; // received valve macs
 };
 #endif

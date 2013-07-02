@@ -49,6 +49,7 @@ CValveMonitor * CValveMonitor::GetInstance() {
 
 CValveMonitor::CValveMonitor():noonTimer(DAY_TYPE), sid(0), counter(0) {
     tx = cbuffer_create(12, PKTLEN);
+    rx = cbuffer_create(10, sizeof(uint32)); // valve mac
     if (access("data/", F_OK) == -1) {
         mkdir("data", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
     }
@@ -56,6 +57,7 @@ CValveMonitor::CValveMonitor():noonTimer(DAY_TYPE), sid(0), counter(0) {
 
 CValveMonitor::~CValveMonitor() {
     cbuffer_free(tx);
+    cbuffer_free(rx);
 }
 
 bool CValveMonitor::Init(uint32 startTime, uint32 interval) {
@@ -148,11 +150,25 @@ uint32 CValveMonitor::Run() {
             GetConsumeData();
         }
 
-        if (cbuffer_read(tx) != NULL && rc == wc && time(NULL) - last > wi) {
+        if ((cbuffer_read(tx) != NULL || cbuffer_read(rx) != NULL) && rc == wc && time(NULL) - last > wi) {
             time_t t = time(NULL);
-            DEBUG("%d - %d = %d, greater than %d?\n", t, last, t - last, wi);
+            DEBUG("Delay %d seconds\n", t - last);
             FD_SET(com, &wfds);
             TX_ENABLE(gpio);
+            // ack found valves
+            while (cbuffer_read(rx) != NULL) {
+                uint8 ptr = 0;
+                bzero(ack, PKTLEN);
+                memcpy(ack, cbuffer_read(rx), sizeof(uint32)); ptr += sizeof(uint32);
+                ack[ptr] = PORT; ptr ++;
+                ack[ptr] = RAND; ptr ++;
+                ack[ptr] = 0x06; ptr ++; // len
+                ack[ptr] = VALVE_BROADCAST; ptr ++;
+                ack[ptr] = 0xAC; ptr ++;
+                memcpy(ack + ptr, &sid, sizeof(uint32)); ptr += sizeof(uint32);
+                SendCommand(ack, ptr); // send only
+                cbuffer_read_done(rx);
+            }
         } else {
             RX_ENABLE(gpio);
         }
@@ -315,7 +331,7 @@ void CValveMonitor::BroadcastQuery() {
 }
 
 void CValveMonitor::ParseBroadcast(uint32 vmac, uint8 * data, uint16 len) {
-    uint8 buf[PKTLEN];
+    uint8 * buf;
     uint16 ptr = 0;
     if (len == 8) {
         user_t user;
@@ -324,15 +340,30 @@ void CValveMonitor::ParseBroadcast(uint32 vmac, uint8 * data, uint16 len) {
         users[vmac] = user;
         DEBUG("Found user [%02x %02x %02x %02x %02x %02x %02x %02x] in valve [%02x %02x %02x %02x]\n", user.uid.x[0], user.uid.x[1], user.uid.x[2], user.uid.x[3], user.uid.x[4], user.uid.x[5], user.uid.x[6], user.uid.x[7], user.vmac & 0xFF, (user.vmac >> 8) & 0xFF, (user.vmac >> 16) & 0xFF, (user.vmac >> 24) & 0xFF);
         syncUsers = true;
-        bzero(buf,PKTLEN);
-        memcpy(buf, &vmac, sizeof(uint32)); ptr += sizeof(uint32);
-        buf[ptr] = PORT; ptr ++;
-        buf[ptr] = RAND; ptr ++;
-        buf[ptr] = 0x06; ptr ++; // len
-        buf[ptr] = VALVE_BROADCAST; ptr ++;
-        buf[ptr] = 0xAC; ptr ++;
-        memcpy(buf + ptr, &sid, sizeof(uint32)); ptr += sizeof(uint32);
-        SendCommand(buf, ptr); // send only, on reponse
+        buf = (uint8 *) cbuffer_write(rx);
+        if (buf != NULL) {
+            DEBUG("Add valve [%02x %02x %02x %02x] to response queue\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF);
+            bzero(buf, sizeof(uint32));
+            memcpy(buf, &vmac, sizeof(uint32));
+            cbuffer_write_done(rx);
+        } else {
+            buf = (uint8 *) cbuffer_write(tx);
+            if (buf != NULL) {
+                DEBUG("Response queue is full, then add valve [%02x %02x %02x %02x] to sending command buffer directly\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF);
+                bzero(buf, PKTLEN);
+                memcpy(buf, &vmac, sizeof(uint32)); ptr += sizeof(uint32);
+                buf[ptr] = PORT; ptr ++;
+                buf[ptr] = RAND; ptr ++;
+                buf[ptr] = 0x06; ptr ++; // len
+                buf[ptr] = VALVE_BROADCAST; ptr ++;
+                buf[ptr] = 0xAC; ptr ++;
+                memcpy(buf + ptr, &sid, sizeof(uint32)); ptr += sizeof(uint32);
+                cbuffer_write_done(tx);
+                //SendCommand(buf, ptr); // send only, no reponse
+            } else {
+                DEBUG("No enough memory to response valve [%02x %02x %02x %02x]\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF);
+            }
+        }
     } else if (len == 1) {
         Broadcast(counter ++);
         Broadcast(counter ++);
@@ -1080,20 +1111,20 @@ bool CValveMonitor::WaitCmdAck(uint8 * data, uint16 * len) {
             if (FD_ISSET(com, &rfds)) {
 
                 if (readed == 0) {
-                    rlen = PKTLEN;
+                    rlen = 9;
                     bzero(ack, PKTLEN);
                 }
 
-                r = read(com, ack + readed, rlen);
+                r = read(com, ack + readed, rlen - readed);
 
                 if (r == -1) {
                     continue;
                 }
                 readed += r;
 
-                if (rlen == PKTLEN && readed > 6 && ack[6] != 0xFF) {
+                if (rlen == 9 && readed > 6 && ack[6] != 0xFF) {
                     rlen = 4 + 1 + 1 + 1 + ack[6] + 2; // mac + port + rand + len + data + crc
-                } else if (rlen == PKTLEN && readed > 6 && ack[6] == 0xFF) {
+                } else if (rlen == 9 && readed > 6 && ack[6] == 0xFF) {
                     rlen = 4 + 1 + 1 + 3 + ((uint16)ack[7]) << 8 + ack[8] + 2; // mac + port + rand + len + data + crc
                 }
                 if (readed == rlen) {
