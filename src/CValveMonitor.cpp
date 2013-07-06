@@ -39,6 +39,10 @@ void vrecordseq(void * key, size_t klen, void * data, size_t dlen, void * params
     (* records)[* vmac] = * record;
 }
 
+void recharge_callback(user_t * user) {
+    CCardHost::GetInstance()->AckRecharge(user->uid, NULL, 0);
+}
+
 CValveMonitor * CValveMonitor::instance = NULL;
 CValveMonitor * CValveMonitor::GetInstance() {
     if (instance == NULL) {
@@ -49,6 +53,7 @@ CValveMonitor * CValveMonitor::GetInstance() {
 
 CValveMonitor::CValveMonitor():noonTimer(DAY_TYPE), sid(0), counter(0) {
     tx = cbuffer_create(12, PKTLEN);
+    htx = cbuffer_create(10, PKTLEN);
     rx = cbuffer_create(10, sizeof(uint32)); // valve mac
     if (access("data/", F_OK) == -1) {
         mkdir("data", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
@@ -57,6 +62,7 @@ CValveMonitor::CValveMonitor():noonTimer(DAY_TYPE), sid(0), counter(0) {
 
 CValveMonitor::~CValveMonitor() {
     cbuffer_free(tx);
+    cbuffer_free(htx);
     cbuffer_free(rx);
 }
 
@@ -98,6 +104,7 @@ uint32 CValveMonitor::Run() {
     uint32 rc = 0, wc = 0; // read and write counter
     uint8 retry = 0; // read retry times
     uint16 wi = 0; // write interval, ? seconds
+    uint8 priority = 0; // 0 for normal, 1 for high
 
     LoadUsers();
     LoadRecords();
@@ -122,6 +129,16 @@ uint32 CValveMonitor::Run() {
         FD_ZERO(&rfds);
         FD_SET(com, &rfds);
         FD_ZERO(&wfds);
+
+        // check expired
+        time_t now = time(NULL);
+        for (map<uint32, expire_t>::iterator iter = expires.begin(); iter != expires.end(); iter ++) {
+            if (now > iter->second.timestamp) {
+                iter->second.callback(&users[iter->first]);
+                DEBUG("Recharge Valve[%02x %02x %02x %02x] is expired!\n", iter->first & 0xFF, (iter->first >> 8) & 0xFF, (iter->first >> 16) & 0xFF, (iter->first >> 24) & 0xFF);
+                expires.erase(iter++);
+            }
+        }
 
         if (punctualTimer.Done()) {
             SyncValveTime();
@@ -150,9 +167,9 @@ uint32 CValveMonitor::Run() {
             GetConsumeData();
         }
 
-        if ((cbuffer_read(tx) != NULL || cbuffer_read(rx) != NULL) && rc == wc && time(NULL) - last > wi) {
+        if ((cbuffer_read(tx) != NULL || cbuffer_read(htx) != NULL || cbuffer_read(rx) != NULL) && rc == wc && time(NULL) - last > wi) {
             time_t t = time(NULL);
-            DEBUG("Delay %d seconds\n", t - last);
+            DEBUG("Delay %ld seconds, interval: %d seconds\n", t - last, wi);
             FD_SET(com, &wfds);
             TX_ENABLE(gpio);
             // ack found valves
@@ -187,7 +204,7 @@ uint32 CValveMonitor::Run() {
                 r = read(com, ack + readed, rlen - readed);
 
                 if (r == -1 || r == 0) {
-                    if (retry > 3) {
+                    if (retry > 2) {
                         if (rc != wc) {
                             DEBUG("Read timeout, retry: %d, rc: %d, wc: %d\n", retry, rc, wc);
                             readed = 0;
@@ -205,6 +222,14 @@ uint32 CValveMonitor::Run() {
                 hexdump(ack + readed, r);
                 readed += r;
 
+                // try to recover from the wrong packet
+                while (readed > 5 && ack[4] != 0x0F) {
+                    // found mistake in packet
+                    memmove(ack, ack + 1, --readed);
+                    DEBUG("Recover to ");
+                    hexdump(ack, readed);
+                }
+
                 if (rlen == 9 && readed > 6 && ack[6] != 0xFF) {
                     rlen = 4 + 1 + 1 + 1 + ack[6] + 2; // mac + port + rand + len + data + crc
                 } else if (rlen == 9 && readed > 8 && ack[6] == 0xFF) {
@@ -219,8 +244,13 @@ uint32 CValveMonitor::Run() {
                 }
             }
             if (FD_ISSET(com, &wfds)) {
-                buf = (uint8 *) cbuffer_read(tx);
-                if (buf == NULL) continue;
+                buf = (uint8 *) cbuffer_read(htx);
+                priority = 1;
+                if (buf == NULL) {
+                    buf = (uint8 *) cbuffer_read(tx);
+                    if (buf == NULL) continue;
+                    priority = 0;
+                }
                 if (wrote == 0) {
                     if (buf[6] == 0xFF) {
                         wlen = 4 + 1 + 1 + 3 + ((uint16)buf[7]) << 8 + buf[8] + 2; // mac + port + rand + len + data + crc
@@ -251,18 +281,21 @@ uint32 CValveMonitor::Run() {
                     last = time(NULL);
                     DEBUG("Write %d bytes:", wlen);
                     hexdump(buf, wlen);
-                    cbuffer_read_done(tx);
+                    if (priority == 0)
+                        cbuffer_read_done(tx);
+                    else
+                        cbuffer_read_done(htx);
                     wrote = 0;
-                    sleep(1);
+                    myusleep(200 * 1000);
                     wc ++;
                 }
             }
         } else {
-            if (retry > 3) {
+            if (retry > 2) {
                 if (rc != wc) {
                     DEBUG("Read timeout, retry: %d, rc: %d, wc: %d\n", retry, rc, wc);
                     readed = 0;
-                    rlen = 8192;
+                    rlen = 9;
                 }
                 retry = 0;
                 rc = wc;
@@ -335,10 +368,15 @@ void CValveMonitor::ParseBroadcast(uint32 vmac, uint8 * data, uint16 len) {
     uint16 ptr = 0;
     if (len == 8) {
         user_t user;
-        memcpy(user.uid.x, data, sizeof(user_t));
+        memcpy(user.uid.x, data, sizeof(userid_t));
+        map<uint32, user_t>::iterator i = users.find(vmac);
+        if (i != users.end()) {
+            DEBUG("Valve [%02x %02x %02x %02x] has bound user [%02x %02x %02x %02x %02x %02x %02x %02x], but still tries to bind user [%02x %02x %02x %02x %02x %02x %02x %02x]\n", user.vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF, i->second.uid.x[0], i->second.uid.x[1], i->second.uid.x[2], i->second.uid.x[3], i->second.uid.x[4], i->second.uid.x[5], i->second.uid.x[6], i->second.uid.x[7], user.uid.x[0], user.uid.x[1], user.uid.x[2], user.uid.x[3], user.uid.x[4], user.uid.x[5], user.uid.x[6], user.uid.x[7]);
+            return;
+        }
         user.vmac = vmac;
         users[vmac] = user;
-        DEBUG("Found user [%02x %02x %02x %02x %02x %02x %02x %02x] in valve [%02x %02x %02x %02x]\n", user.uid.x[0], user.uid.x[1], user.uid.x[2], user.uid.x[3], user.uid.x[4], user.uid.x[5], user.uid.x[6], user.uid.x[7], user.vmac & 0xFF, (user.vmac >> 8) & 0xFF, (user.vmac >> 16) & 0xFF, (user.vmac >> 24) & 0xFF);
+        DEBUG("Found user [%02x %02x %02x %02x %02x %02x %02x %02x] in valve [%02x %02x %02x %02x], total count: %d\n", user.uid.x[0], user.uid.x[1], user.uid.x[2], user.uid.x[3], user.uid.x[4], user.uid.x[5], user.uid.x[6], user.uid.x[7], user.vmac & 0xFF, (user.vmac >> 8) & 0xFF, (user.vmac >> 16) & 0xFF, (user.vmac >> 24) & 0xFF, users.size());
         syncUsers = true;
         buf = (uint8 *) cbuffer_write(rx);
         if (buf != NULL) {
@@ -384,7 +422,7 @@ bool CValveMonitor::GetUserList(vector<user_t>& u) {
 void CValveMonitor::ParseAck(uint8 * ack, uint16 len) {
     uint16 gcrc = GenerateCRC(ack, len - 2);
     if ((gcrc & 0xFF) != ack[len - 1] && ((gcrc >> 8) & 0xFF) != ack[len - 2]) {
-        DEBUG("CRC error want %0x %0x, generate %0x %0x\n", ack[len - 1], ack[len - 2], (gcrc & 0xFF), ((gcrc >> 8) & 0xFF));
+        DEBUG("CRC error want %02x %02x, generate %02x %02x\n", ack[len - 1], ack[len - 2], (gcrc & 0xFF), ((gcrc >> 8) & 0xFF));
         return;
     }
     uint32 mac = 0;
@@ -429,6 +467,8 @@ void CValveMonitor::ParseAck(uint8 * ack, uint16 len) {
         ParseBroadcast(mac, data, dlen);
         break;
     default:
+        DEBUG("Unknow ack from valve[%02x %02x %02x %02x]: ", mac & 0xFF, (mac >> 8) & 0xFF, (mac >> 16) & 0xFF, (mac >> 24) & 0xFF);
+        hexdump(data, dlen);
         break;
     }
 }
@@ -783,10 +823,11 @@ void CValveMonitor::Recharge(userid_t uid, uint8 * data, uint16 len) {
         if (memcmp(iter->second.uid.x, uid.x, sizeof(userid_t)) == 0) {
             DEBUG("Found user id ");
             hexdump(iter->second.uid.x, sizeof(userid_t));
-            txlock.Lock();
-            uint8 * buf = (uint8 *)cbuffer_write(tx);
+            htxlock.Lock();
+            uint8 * buf = (uint8 *)cbuffer_write(htx);
             if (buf == NULL) {
                 DEBUG("No enough memory for recharge\n");
+                CCardHost::GetInstance()->AckRecharge(uid, NULL, 0);
                 return;
             }
             bzero(buf, PKTLEN);
@@ -805,25 +846,27 @@ void CValveMonitor::Recharge(userid_t uid, uint8 * data, uint16 len) {
                 buf[ptr] = VALVE_RECHARGE; ptr ++;
                 memcpy(buf + ptr, data, len);
             }
-            cbuffer_write_done(tx);
-            txlock.UnLock();
+            cbuffer_write_done(htx);
+            htxlock.UnLock();
+            expire_t expire;
+            expire.timestamp = time(NULL) + 5; // 5 seconds
+            expire.callback = recharge_callback;
+            expires[iter->first] = expire;
             return;
         }
     }
 }
 
 void CValveMonitor::ParseRecharge(uint32 vmac, uint8 * data, uint16 len) {
-    DEBUG("Want Valve MAC: ");
-    //hexdump(&vmac, sizeof(uint32));
-    DEBUG("%02x %02x %02x %02x\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF);
+    DEBUG("Want Valve MAC: %02x %02x %02x %02x\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF);
     for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
-        DEBUG("Iter Valve MAC: ");
-        //hexdump(&iter->second.vmac, sizeof(uint32));
-        DEBUG("%02x %02x %02x %02x\n", iter->second.vmac & 0xFF, (iter->second.vmac >> 8) & 0xFF, (iter->second.vmac >> 16) & 0xFF, (iter->second.vmac >> 24) & 0xFF);
+        DEBUG("Iter Valve MAC: %02x %02x %02x %02x\n", iter->second.vmac & 0xFF, (iter->second.vmac >> 8) & 0xFF, (iter->second.vmac >> 16) & 0xFF, (iter->second.vmac >> 24) & 0xFF);
         if (iter->second.vmac == vmac) {
-            DEBUG("Found Valve MAC: ");
-            //hexdump(&iter->second.vmac, sizeof(uint32));
-            DEBUG("%02x %02x %02x %02x\n", iter->second.vmac & 0xFF, (iter->second.vmac >> 8) & 0xFF, (iter->second.vmac >> 16) & 0xFF, (iter->second.vmac >> 24) & 0xFF);
+            map<uint32, expire_t>::iterator i = expires.find(vmac);
+            if (i != expires.end()) {
+                expires.erase(i);
+            }
+            DEBUG("Found Valve MAC: %02x %02x %02x %02x\n", iter->second.vmac & 0xFF, (iter->second.vmac >> 8) & 0xFF, (iter->second.vmac >> 16) & 0xFF, (iter->second.vmac >> 24) & 0xFF);
             CCardHost::GetInstance()->AckRecharge(iter->second.uid, data, len);
             return;
         }
@@ -835,8 +878,8 @@ uint16 CValveMonitor::ConfigValve(ValveCtrlType cmd, uint8 * data, uint16 len) {
     uint16 okay = 0;
 
     for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
-        txlock.Lock();
-        uint8 * buf = (uint8 *)cbuffer_write(tx);
+        htxlock.Lock();
+        uint8 * buf = (uint8 *)cbuffer_write(htx);
         uint16 ptr = 0;
         if (buf == NULL) {
             DEBUG("No enough memory for config valve\n");
@@ -858,9 +901,9 @@ uint16 CValveMonitor::ConfigValve(ValveCtrlType cmd, uint8 * data, uint16 len) {
             buf[ptr] = cmd; ptr ++;
             memcpy(buf + ptr, data, len);
         }
-        cbuffer_write_done(tx);
+        cbuffer_write_done(htx);
         okay ++;
-        txlock.UnLock();
+        htxlock.UnLock();
     }
     return okay;
 }
@@ -1054,7 +1097,7 @@ bool CValveMonitor::SendCommand(uint8 * data, uint16 len) {
     FD_ZERO(&wfds);
     FD_SET(com, &wfds);
 
-    tv.tv_sec = 5;
+    tv.tv_sec = 1;
     tv.tv_usec = 0;
 
     while (retry > 0) {
@@ -1081,7 +1124,7 @@ bool CValveMonitor::SendCommand(uint8 * data, uint16 len) {
                     DEBUG("Write %d bytes:", wlen);
                     hexdump(buf, wlen);
                     wrote = 0;
-                    sleep(1);
+                    myusleep(200 * 1000);
                     return true;
                 }
             }
@@ -1104,7 +1147,7 @@ bool CValveMonitor::WaitCmdAck(uint8 * data, uint16 * len) {
 
     while (retry > 0) {
         retry --;
-        tv.tv_sec = 5;
+        tv.tv_sec = 1;
         tv.tv_usec = 0;
         retval = select(com + 1, &rfds, NULL, NULL, &tv);
         if (retval) {

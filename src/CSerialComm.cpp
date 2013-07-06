@@ -279,7 +279,7 @@ ECommError CSerialComm::ReadMinByte(uint8* pBuffer, uint32& BufferLen, const uin
          {
             break;
          }
-         usleep(100*1000);
+         myusleep(100 * 1000);
       }
       if(j >= MAX_WRITEREAD_COUNT)
       {

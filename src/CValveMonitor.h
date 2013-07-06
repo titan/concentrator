@@ -12,10 +12,6 @@
 
 using namespace std;
 
-struct uidcmp {
-    bool operator() (const userid_t& lhs, const userid_t& rhs) const { for (int i = 0; i < USERID_LEN; i ++) {if (lhs.x[i] == rhs.x[i]) continue; else return lhs.x[i] < rhs.x[i];} return false;}
-};
-
 typedef struct {
     uint32 mac;
     userid_t uid;
@@ -40,6 +36,13 @@ typedef struct {
     uint8 workTime[3];
     uint32 timestamp;
 } __attribute__ ((packed, aligned(1))) valve_heat_t;
+
+typedef void (*expire_callback)(user_t *);
+
+typedef struct {
+    time_t timestamp;
+    expire_callback callback;
+} expire_t;
 
 class CValveMonitor: public IThread, public IValveMonitor {
 public:
@@ -92,10 +95,12 @@ private:
 
     static CValveMonitor * instance;
     int com;
-    map<uint32, user_t> users;
-    map<uint32, user_t> lastUsers;
-    CLock users_lock, txlock;
+    map<uint32, user_t> users; // vmac -> user_t
+    map<uint32, user_t> lastUsers; // vmac -> user_t
+    map<uint32, expire_t> expires; // vmac -> expire_t
+    CLock users_lock, txlock, htxlock;
     cbuffer_t tx; // send command buffer
+    cbuffer_t htx; // high priority sending command buffer
     CRepeatTimer punctualTimer;
     CFixTimer noonTimer;
     map<uint32, record_t> records; // vmac -> record

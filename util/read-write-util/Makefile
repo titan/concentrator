@@ -1,5 +1,5 @@
 include ../../script/makefile.include
-program_NAME := test-read test-write echo-client echo-server
+program_NAME := test-read test-write echo-client echo-server test-usleep
 program_SRCS := $(wildcard *.c)
 program_OBJS := $(patsubst %.c,%.o,$(program_SRCS))
 clean_list += $(program_OBJS) $(program_NAME)

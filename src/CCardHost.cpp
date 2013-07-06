@@ -132,15 +132,16 @@ uint32 CCardHost::Run() {
                     hexdump(buf, wlen);
                     cbuffer_read_done(cmdbuf);
                     wrote = 0;
-                    sleep(1);
+                    myusleep(200 * 1000);
                 }
             }
             nullloop = 0;
         } else {
             nullloop ++;
-            if (nullloop % 16 == 15) {
+            if (nullloop % 32 == 31) {
                 DEBUG("Nothing to read\n");
             }
+            myusleep(1000 * 1000);
         } //else ParseAndExecute(sample, sizeof(sample)); // only for test
     }
     return 0;
@@ -421,7 +422,7 @@ void CCardHost::AckRecharge(userid_t uid, uint8 * data, uint16 len) {
 }
 
 void CCardHost::AckTimeOrRemove(uint8 * data, uint16 len) {
-    uint32 ptr = 0, time = 0;
+    uint32 ptr = 0, now = 0;
     uint16 crc = 0, cmdlen = 0;
     uint8 * buf = (uint8 *)cbuffer_write(cmdbuf);
 
@@ -431,7 +432,7 @@ void CCardHost::AckTimeOrRemove(uint8 * data, uint16 len) {
     }
 
     if (len == 0) {
-        if (!GetLocalTimeStamp(time)) {
+        if (!GetLocalTimeStamp(now)) {
             DEBUG("Cannot get local time, abort!\n");
             return;
         }
@@ -457,10 +458,10 @@ void CCardHost::AckTimeOrRemove(uint8 * data, uint16 len) {
         } else {
             buf[ptr] = 0x05; ptr ++;
         }
-        buf[ptr] = time & 0xFF; ptr ++;
-        buf[ptr] = (time >> 8) & 0xFF; ptr ++;
-        buf[ptr] = (time >> 16) & 0xFF; ptr ++;
-        buf[ptr] = (time >> 24) & 0xFF; ptr ++;
+        buf[ptr] = now & 0xFF; ptr ++;
+        buf[ptr] = (now >> 8) & 0xFF; ptr ++;
+        buf[ptr] = (now >> 16) & 0xFF; ptr ++;
+        buf[ptr] = (now >> 24) & 0xFF; ptr ++;
         len = 4;
     } else {
         buf[ptr] = 0x85; ptr ++;

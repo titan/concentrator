@@ -478,7 +478,7 @@ void FlashLight(LightE Light)
    SetPIOCfg((gpio_name_t)GPIOPin, AttrOut);
 
    PIOOutValue((gpio_name_t)GPIOPin, 1);
-   usleep(100*1000);
+   myusleep(100 * 1000);
    PIOOutValue((gpio_name_t)GPIOPin, 0);
 }
 

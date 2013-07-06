@@ -641,7 +641,7 @@ bool CPortal::GPRS_Send(uint8* pData, uint32 DataLen)
             DEBUG("end--SentSerialIndex=%u OK\n", SentSerialIndex);
             break;
          }
-         usleep(1000*200);//AT module sends data one UDP packet per time
+         myusleep(200 * 1000);//AT module sends data one UDP packet per time
       }
       if(false == Ret)
       {
@@ -1118,12 +1118,12 @@ void CPortal::CheckNewVersion() {
             if (m_pGPRS->GetSignalIntesity(signalIntesity)) {
                 if (signalIntesity < 15) {
                     DEBUG("Signal intesity is too weak, ignore %s\n", key);
-                    sleep(1);
+                    myusleep(200 * 1000);
                     continue;
                 }
             } else {
                 DEBUG("Cannot get signal intesity, ignore %s\n", key);
-                sleep(1);
+                myusleep(200 * 1000);
                 continue;
             }
             char url[1024] = {0};

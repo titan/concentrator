@@ -1,9 +1,7 @@
 #ifndef SYSDEFS_H
 #define SYSDEFS_H
-#if __OS__ == WINDOWS
-#include<windows.h>
-#endif
-#include<stdlib.h>
+#include <stdlib.h>
+#include <time.h>
 
 #define DEC2BCD(value) (((value) / 10) << 4 | ((value) % 10))
 #ifndef MIN
@@ -133,5 +131,22 @@ inline gpio_name_t getGPIO(const char * device) {
     } else {
         return PA18;
     }
+}
+
+inline int myusleep(unsigned long usec) {
+    struct timespec tv;
+    tv.tv_sec = usec / 1000000;
+    tv.tv_nsec = (usec % 1000000) * 1000 ;
+
+    while (1) {
+        int rval = nanosleep(&tv, &tv);
+        if (rval == 0)
+            return 0;
+        else if (errno == EINTR)
+            continue;
+        else
+            return rval;
+    }
+    return 0;
 }
 #endif

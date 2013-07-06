@@ -322,7 +322,7 @@ bool CGprs::GetIMEI(uint8* pIMEI, uint32& IMEILen)
 bool CGprs::SwitchMode(enum GPRSWorkMode to) {
     if (this->mode == WORK_MODE_TT) {
         if (to == WORK_MODE_HTTP) {
-            sleep(1);
+            myusleep(500 * 1000);
             if (Command("+++", RX_TIMEOUT) != COMM_OK) goto switch_to_http_err0;
             if (Command("AT+CSQ\r\n", RX_TIMEOUT, "+CSQ:") != COMM_OK) goto switch_to_http_err1;
             if (Command("AT+CGATT?\r\n", RX_TIMEOUT, "+CGATT:") != COMM_OK) goto switch_to_http_err1;
@@ -571,13 +571,13 @@ bool CGprs::GetSignalIntesity(uint8& nSignalIntesity)
     bool goBackTT = false;
 
     if (mode == WORK_MODE_TT) {
-        sleep(1);
+        myusleep(500 * 1000);
         if (Command("+++", RX_TIMEOUT) != COMM_OK) {
             DEBUG("Cannot leave TT mode\n");
             return false;
         }
         goBackTT = true;
-        sleep(1);
+        myusleep(500 * 1000);
     }
 
     len = LINE_LEN;
@@ -745,8 +745,5 @@ ECommError CGprs::ReadRawData(uint8 * buf, uint32 len, int32 timeout) {
 }
 
 void CGprs::Delay(uint32 ms) {
-    struct timespec rqtp;
-    rqtp.tv_sec = 0;
-    rqtp.tv_nsec = ms * 1000 * 1000;      //1000 ns = 1 us, 1000 us = 1ms
-    nanosleep(&rqtp, NULL);
+    myusleep(ms * 1000);
 }

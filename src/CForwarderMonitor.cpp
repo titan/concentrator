@@ -472,7 +472,7 @@ bool CForwarderMonitor::SendCommand(uint8* pCommand, uint32 CommandLen)
          DEBUG("WriteError\n");
          continue;
       }
-      sleep(1);
+      myusleep(200 * 1000);
 
       uint8 Buffer[MAX_BUFFER_LEN] = {0};
       uint32 BufferCount = sizeof(Buffer);
@@ -494,7 +494,7 @@ bool CForwarderMonitor::SendCommand(uint8* pCommand, uint32 CommandLen)
             return true;
          }else
          {
-            sleep(1);
+            myusleep(200 * 1000);
          }
       }
    }
