@@ -134,8 +134,8 @@ uint32 CValveMonitor::Run() {
         time_t now = time(NULL);
         for (map<uint32, expire_t>::iterator iter = expires.begin(); iter != expires.end(); iter ++) {
             if (now > iter->second.timestamp) {
-                iter->second.callback(&users[iter->first]);
                 DEBUG("Recharge Valve[%02x %02x %02x %02x] is expired!\n", iter->first & 0xFF, (iter->first >> 8) & 0xFF, (iter->first >> 16) & 0xFF, (iter->first >> 24) & 0xFF);
+                iter->second.callback(&users[iter->first]);
                 expires.erase(iter++);
             }
         }
@@ -279,6 +279,13 @@ uint32 CValveMonitor::Run() {
                         wi = 0;
                     }
                     last = time(NULL);
+#ifdef DEBUG_VALVE_TRACE_RECHARGE
+                    if (code == VALVE_RECHARGE) {
+                        uint32 vmac;
+                        memcpy(&vmac, buf, sizeof(uint32));
+                        timers[vmac].timestamp2 = last;
+                    }
+#endif
                     DEBUG("Write %d bytes:", wlen);
                     hexdump(buf, wlen);
                     if (priority == 0)
@@ -852,12 +859,22 @@ void CValveMonitor::Recharge(userid_t uid, uint8 * data, uint16 len) {
             expire.timestamp = time(NULL) + 5; // 5 seconds
             expire.callback = recharge_callback;
             expires[iter->first] = expire;
+#ifdef DEBUG_VALVE_TRACE_RECHARGE
+            mytimer_t timer;
+            timer.timestamp1 = time(NULL);
+            timers[iter->first] = timer;
+#endif
             return;
         }
     }
 }
 
 void CValveMonitor::ParseRecharge(uint32 vmac, uint8 * data, uint16 len) {
+#ifdef DEBUG_VALVE_TRACE_RECHARGE
+    timers[vmac].timestamp3 = time(NULL);
+    mytimer_t timer = timers[vmac];
+    DEBUG("Recharge timing: received -> sent: %d, sent -> acked: %d\n", timer.timestamp2 - timer.timestamp1, timer.timestamp3 - timer.timestamp2);
+#endif
     DEBUG("Want Valve MAC: %02x %02x %02x %02x\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF);
     for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
         DEBUG("Iter Valve MAC: %02x %02x %02x %02x\n", iter->second.vmac & 0xFF, (iter->second.vmac >> 8) & 0xFF, (iter->second.vmac >> 16) & 0xFF, (iter->second.vmac >> 24) & 0xFF);

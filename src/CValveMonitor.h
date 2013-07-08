@@ -44,6 +44,16 @@ typedef struct {
     expire_callback callback;
 } expire_t;
 
+#ifdef DEBUG_VALVE_TRACE_RECHARGE
+
+typedef struct {
+    time_t timestamp1;
+    time_t timestamp2;
+    time_t timestamp3;
+} mytimer_t;
+
+#endif
+
 class CValveMonitor: public IThread, public IValveMonitor {
 public:
     static CValveMonitor * GetInstance();
@@ -113,5 +123,8 @@ private:
     uint8 counter; // broadcase counter
     int valveCount;
     cbuffer_t rx; // received valve macs
+#ifdef DEBUG_VALVE_TRACE_RECHARGE
+    map<uint32, mytimer_t> timers;
+#endif
 };
 #endif
