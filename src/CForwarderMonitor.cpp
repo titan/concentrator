@@ -6,7 +6,8 @@
 #include "logdb.h"
 
 #ifdef DEBUG_FORWARDER
-#define DEBUG(...) do {printf("%s::%s----", __FILE__, __func__);printf(__VA_ARGS__);} while(false)
+#include <time.h>
+#define DEBUG(...) do {printf("%ld %s::%s %d ----", time(NULL), __FILE__, __func__, __LINE__);printf(__VA_ARGS__);} while(false)
 #ifndef hexdump
 #define hexdump(data, len) do {for (uint32 i = 0; i < (uint32)len; i ++) { printf("%02x ", *(uint8 *)(data + i));} printf("\n");} while(0)
 #endif
@@ -293,20 +294,20 @@ void CForwarderMonitor::GetValveTime() {
     SendValveCtrlOneByOne(ValveCommand, sizeof(ValveCommand));
 }
 
-void CForwarderMonitor::SetValveTime(uint32 fid, uint16 vid, tm * time) {
+void CForwarderMonitor::SetValveTime(uint32 fid, uint16 vid, tm * t) {
     DEBUG("\n");
     uint8 buf[] = {VALVE_CTRL_FLAG, VALVE_CTRL_RANDAM, 0x09/*Len*/, VALVE_SET_TIME, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
     uint8 ptr = 4;
-    uint16 century = ((time->tm_year + 1900) / 100);
-    uint16 year = (time->tm_year + 1900) % 100;
+    uint16 century = ((t->tm_year + 1900) / 100);
+    uint16 year = (t->tm_year + 1900) % 100;
     buf[ptr] = DEC2BCD(century); ptr ++;
     buf[ptr] = DEC2BCD(year); ptr ++;
-    buf[ptr] = DEC2BCD(time->tm_mon + 1); ptr ++;
-    buf[ptr] = DEC2BCD(time->tm_mday); ptr ++;
-    buf[ptr] = DEC2BCD(time->tm_hour); ptr ++;
-    buf[ptr] = DEC2BCD(time->tm_min); ptr ++;
-    buf[ptr] = DEC2BCD(time->tm_sec); ptr ++;
-    buf[ptr] = DEC2BCD(time->tm_wday); ptr ++;
+    buf[ptr] = DEC2BCD(t->tm_mon + 1); ptr ++;
+    buf[ptr] = DEC2BCD(t->tm_mday); ptr ++;
+    buf[ptr] = DEC2BCD(t->tm_hour); ptr ++;
+    buf[ptr] = DEC2BCD(t->tm_min); ptr ++;
+    buf[ptr] = DEC2BCD(t->tm_sec); ptr ++;
+    buf[ptr] = DEC2BCD(t->tm_wday); ptr ++;
 
     if (false == SendA2A3(buf, sizeof(buf), fid, vid)) {
         DEBUG("Set valve time failed, Forwarder=0x%08X, Valve=0x%04X\n", fid, vid);

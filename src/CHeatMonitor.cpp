@@ -4,7 +4,8 @@
 #include"CPortal.h"
 
 #ifdef DEBUG_HEAT
-#define DEBUG(...) do {printf("%s::%s----", __FILE__, __func__);printf(__VA_ARGS__);} while(false)
+#include <time.h>
+#define DEBUG(...) do {printf("%ld %s::%s %d ----", time(NULL), __FILE__, __func__, __LINE__);printf(__VA_ARGS__);} while(false)
 #ifndef hexdump
 #define hexdump(data, len) do {for (uint32 i = 0; i < (uint32)len; i ++) { printf("%02x ", *(uint8 *)(data + i));} printf("\n");} while(0)
 #endif
@@ -114,7 +115,7 @@ void CHeatMonitor::GetHeatData()
       FlashLight(LIGHT_GENERAL_HEAT);
       if(COMM_OK != m_pCommController->WriteBuf(SendData, SendDataLen, HEAT_TIMEOUT))
       {
-         DEBUG("CHeatMonitor::GetHeatData()----WriteError\n");
+         DEBUG("WriteError\n");
          return;
       }
 
@@ -141,14 +142,14 @@ bool CHeatMonitor::ParseData(const uint8* pData, uint32 DataLen, HeatNodeVectorT
 {
    if(GENERAL_HEAT_COMMAND_ACK_LEN != DataLen)
    {
-      DEBUG("CHeatMonitor::ParseData()----DataLen(%d) NOT match\n", DataLen);
+      DEBUG("DataLen(%d) NOT match\n", DataLen);
       assert(GENERAL_HEAT_COMMAND_ACK_LEN == DataLen);
       return false;
    }
    assert(HeatNodeIter != m_HeatNodeVector.end());
    if(HeatNodeIter == m_HeatNodeVector.end())
    {
-      DEBUG("CHeatMonitor::ParseData()----Invalid node iterator\n");
+      DEBUG("Invalid node iterator\n");
       return false;
    }
 
@@ -200,7 +201,7 @@ void CHeatMonitor::SendHeatData()
          {
             continue;
          }
-         DEBUG("CHeatMonitor::SendHeatData()----HeatData:");
+         DEBUG("HeatData:");
          hexdump(Iter->MacAddress, sizeof(HeatNodeDataT));
          memcpy(GeneralHeatData+sizeof(GeneralLeaderCharacter)+sizeof(GeneralHeatLen), Iter->MacAddress, GeneralHeatLen);
 
@@ -292,7 +293,7 @@ bool CHeatMonitor::GetStatus(Status& Status)
    {
       if( false == IsStarted() )
       {
-         DEBUG("CHeatMonitor::GetStatus()----Status error\n");
+         DEBUG("Status error\n");
          Status = STATUS_ERROR;
          Ret = true;
       }else
@@ -475,12 +476,12 @@ bool CHeatMonitor::GetHeatNodeInfoList(HeatNodeInfoListT& HeatNodeInfoList)
 
 void CHeatMonitor::GetHeatInfoTask()
 {
-   DEBUG("CHeatMonitor::GetHeatInfoTask()----m_GetHeatInforTaskActive=%d, m_IsHeatInfoReady=%d\n", m_GetHeatInforTaskActive, m_IsHeatInfoReady);
+   DEBUG("m_GetHeatInforTaskActive=%d, m_IsHeatInfoReady=%d\n", m_GetHeatInforTaskActive, m_IsHeatInfoReady);
    if( m_GetHeatInforTaskActive )
    {
       if( false == m_IsHeatInfoReady )
       {
-         DEBUG("CHeatMonitor::GetHeatInfoTask()----GetHeatInfo\n");
+         DEBUG("GetHeatInfo\n");
          GetHeatData();
       }
 
@@ -492,7 +493,7 @@ void CHeatMonitor::GetHeatInfoTask()
 
    if( m_HeatInfoTimeOut.Done() )
    {
-      DEBUG("CHeatMonitor::GetHeatInfoTask()----HeatInfo NOT ready\n");
+      DEBUG("HeatInfo NOT ready\n");
       m_IsHeatInfoReady = false;
    }
 }

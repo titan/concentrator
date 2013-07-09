@@ -2,9 +2,16 @@
 #include"IThread.h"
 
 #ifdef DEBUG_THREAD
-#define DEBUG printf
+#include <time.h>
+#define DEBUG(...) do {printf("%ld %s::%s %d ----", time(NULL), __FILE__, __func__, __LINE__);printf(__VA_ARGS__);} while(false)
+#ifndef hexdump
+#define hexdump(data, len) do {for (uint32 i = 0; i < (uint32)len; i ++) { printf("%02x ", *(uint8 *)(data + i));} printf("\n");} while(0)
+#endif
 #else
 #define DEBUG(...)
+#ifndef hexdump
+#define hexdump(data, len)
+#endif
 #endif
 
 /*******************************IThread*******************************************/
@@ -26,7 +33,7 @@ IThread::~IThread()
 
 bool IThread::Start(int32 Priority)
 {
-    DEBUG("IThread::Start()\n");
+    DEBUG("%d\n", Priority);
 
     pthread_create(&m_hThread, 0, thread_handler, this);
     if (m_hThread) {
@@ -41,7 +48,7 @@ bool IThread::Start(int32 Priority)
         }
         return true;
     } else {
-        DEBUG("IThread::Start()-----fail to create thread\n");
+        DEBUG("fail to create thread\n");
         return false;
     }
 }

@@ -3,9 +3,16 @@
 #include"CTimer.h"
 
 #ifdef DEBUG_TIMER
-#define DEBUG printf
+#include <time.h>
+#define DEBUG(...) do {printf("%ld %s::%s %d ----", time(NULL), __FILE__, __func__, __LINE__);printf(__VA_ARGS__);} while(false)
+#ifndef hexdump
+#define hexdump(data, len) do {for (uint32 i = 0; i < (uint32)len; i ++) { printf("%02x ", *(uint8 *)(data + i));} printf("\n");} while(0)
+#endif
 #else
 #define DEBUG(...)
+#ifndef hexdump
+#define hexdump(data, len)
+#endif
 #endif
 
 /*********************************CTimer****************************************/
@@ -88,7 +95,7 @@ bool CFixTimer::Start(uint32 TimeOffset)
    uint32 TimeData[DATETIME_LEN] = {0};
    if(ERROR_OK != GetDateTime(TimeData, 1))//RTC
    {
-      DEBUG("CFixTimer::Start()----Can't read time from RTC\n");
+      DEBUG("Can't read time from RTC\n");
       return false;
    }
 
@@ -113,7 +120,7 @@ bool CFixTimer::Start(uint32 TimeOffset)
    }
    if(0 == m_nInterval )
    {
-      DEBUG("CFixTimer::Start()----m_nInterval=0\n");
+      DEBUG("m_nInterval=0\n");
       return false;
    }
 
@@ -123,7 +130,7 @@ bool CFixTimer::Start(uint32 TimeOffset)
       TimeData[i] = 0;
    }
    TimeData[m_TimerType+1] = TimeOffset;
-   DEBUG("CFixTimer::Start()----NextTime=%04u-%02u-%02u %02u:%02u:%02u\n", TimeData[0], TimeData[1], TimeData[2], TimeData[3], TimeData[4], TimeData[5]);
+   DEBUG("NextTime=%04u-%02u-%02u %02u:%02u:%02u\n", TimeData[0], TimeData[1], TimeData[2], TimeData[3], TimeData[4], TimeData[5]);
    m_NextTime = DateTime2TimeStamp(TimeData[0], TimeData[1], TimeData[2], TimeData[3], TimeData[4], TimeData[5]);
    return true;
 }
@@ -132,7 +139,7 @@ bool CFixTimer::Done()
 {
    if(0 == m_nInterval )
    {
-      DEBUG("CFixTimer::Done()----m_nInterval=0\n");
+      DEBUG("m_nInterval=0\n");
       return false;
    }
 

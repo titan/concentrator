@@ -6,7 +6,8 @@
 #include "CCardHost.h"
 
 #ifdef DEBUG_VALVE
-#define DEBUG(...) do {printf("%s::%s----", __FILE__, __func__);printf(__VA_ARGS__);} while(false)
+#include <time.h>
+#define DEBUG(...) do {printf("%ld %s::%s %d ----", time(NULL), __FILE__, __func__, __LINE__);printf(__VA_ARGS__);} while(false)
 #ifndef hexdump
 #define hexdump(data, len) do {for (uint32 i = 0; i < (uint32)len; i ++) { printf("%02x ", *(uint8 *)(data + i));} printf("\n");} while(0)
 #endif
@@ -1259,8 +1260,8 @@ void CValveMonitor::ParseValveTime(uint32 vmac, uint8 * data, uint16 len) {
     }
 }
 
-void CValveMonitor::SetValveTime(uint32 vmac, tm * time) {
-    DEBUG("Sync valve(%02x %02x %02x %02x) time to %d-%d-%d %d:%d:%d %d\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF, time->tm_year + 1900, time->tm_mon + 1, time->tm_mday, time->tm_hour, time->tm_min, time->tm_sec, time->tm_wday);
+void CValveMonitor::SetValveTime(uint32 vmac, tm * t) {
+    DEBUG("Sync valve(%02x %02x %02x %02x) time to %d-%d-%d %d:%d:%d %d\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF, t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, t->tm_wday);
     txlock.Lock();
     uint8 * buf = (uint8 *) cbuffer_write(tx);
     if (buf != NULL) {
@@ -1270,16 +1271,16 @@ void CValveMonitor::SetValveTime(uint32 vmac, tm * time) {
         buf[ptr] = RAND; ptr ++;
         buf[ptr] = 0x09; ptr ++; // len
         buf[ptr] = VALVE_SET_TIME; ptr ++;
-        uint16 century = ((time->tm_year + 1900) / 100);
-        uint16 year = (time->tm_year + 1900) % 100;
+        uint16 century = ((t->tm_year + 1900) / 100);
+        uint16 year = (t->tm_year + 1900) % 100;
         buf[ptr] = DEC2BCD(century); ptr ++;
         buf[ptr] = DEC2BCD(year); ptr ++;
-        buf[ptr] = DEC2BCD(time->tm_mon + 1); ptr ++;
-        buf[ptr] = DEC2BCD(time->tm_mday); ptr ++;
-        buf[ptr] = DEC2BCD(time->tm_hour); ptr ++;
-        buf[ptr] = DEC2BCD(time->tm_min); ptr ++;
-        buf[ptr] = DEC2BCD(time->tm_sec); ptr ++;
-        buf[ptr] = DEC2BCD(time->tm_wday); ptr ++;
+        buf[ptr] = DEC2BCD(t->tm_mon + 1); ptr ++;
+        buf[ptr] = DEC2BCD(t->tm_mday); ptr ++;
+        buf[ptr] = DEC2BCD(t->tm_hour); ptr ++;
+        buf[ptr] = DEC2BCD(t->tm_min); ptr ++;
+        buf[ptr] = DEC2BCD(t->tm_sec); ptr ++;
+        buf[ptr] = DEC2BCD(t->tm_wday); ptr ++;
         cbuffer_write_done(tx);
     }
     txlock.UnLock();

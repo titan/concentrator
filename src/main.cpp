@@ -20,7 +20,8 @@
 #include "sysdefs.h"
 
 #ifdef DEBUG_MAIN
-#define DEBUG(...) do {printf("%s::%s----", __FILE__, __func__);printf(__VA_ARGS__);} while(false)
+#include <time.h>
+#define DEBUG(...) do {printf("%ld %s::%s %d ----", time(NULL), __FILE__, __func__, __LINE__);printf(__VA_ARGS__);} while(false)
 #else
 #define DEBUG(...)
 #endif
@@ -246,7 +247,7 @@ void StartGeneralHeat()
       {
          if( ( false == Char2Int(KeyValue[KeyValue.size()-i-1], LowByte) ) || ( false == Char2Int(KeyValue[KeyValue.size()-i-2], HighByte) ) )
          {
-            DEBUG("StartGeneralHeat()----%s is not a valid heat address\n", KeyValue.c_str());
+            DEBUG("%s is not a valid heat address\n", KeyValue.c_str());
             Ret = false;
             break;
          }
