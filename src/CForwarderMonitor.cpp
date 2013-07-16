@@ -124,17 +124,18 @@ void CForwarderMonitor::SetCom(CSerialComm* pCom)
 
 uint32 CForwarderMonitor::Run()
 {
-    uint32 i = 0;
+    time_t last = 0;
     LoadUsers();
     LoadRecords();
-    while(1) {
+    while (1) {
         ResetForwarderData();
 
-        if (i % 60 == 0 || users.size() == 0) {
+        if (time(NULL) - last > 300 || (time(NULL) - last > 10 && users.size() == 0)) {
             SendA1();
             GetValveUserID();
+            last = time(NULL);
         }
-        if( m_RepeatTimer.Done() ) {
+        if ( m_RepeatTimer.Done() ) {
             if (m_IsNewUserIDFound)
                 SaveUsers();
             m_ForwarderLock.Lock();
@@ -165,7 +166,6 @@ uint32 CForwarderMonitor::Run()
         DayNoonTimerTask();
 
         sleep(1);
-        i ++;
     }
 }
 
@@ -288,7 +288,8 @@ void CForwarderMonitor::ResetForwarderData()//must firstly be called in each loo
 void CForwarderMonitor::GetValveTime() {
     DEBUG("\n");
     if (false == m_ForwardInfoDataReady) {
-        SendA1();
+        //SendA1();
+        return;
     }
     const uint8 ValveCommand[] = {VALVE_CTRL_FLAG, VALVE_CTRL_RANDAM, 0x01/*Len*/, VALVE_GET_TIME};
     SendValveCtrlOneByOne(ValveCommand, sizeof(ValveCommand));
@@ -317,7 +318,8 @@ void CForwarderMonitor::SetValveTime(uint32 fid, uint16 vid, tm * t) {
 uint8 CForwarderMonitor::GetValveRecord() {
     DEBUG("\n");
     if (false == m_ForwardInfoDataReady) {
-        SendA1();
+        //SendA1();
+        return 0;
     }
     const uint8 ValveCommand[] = {VALVE_CTRL_FLAG, VALVE_CTRL_RANDAM, 0x01/*Len*/, VALVE_GET_VALVE_RECORD};
     return SendValveCtrlOneByOne(ValveCommand, sizeof(ValveCommand));
@@ -326,7 +328,8 @@ uint8 CForwarderMonitor::GetValveRecord() {
 void CForwarderMonitor::GetValveTemperature() {
     DEBUG("\n");
     if (false == m_ForwardInfoDataReady ) {
-        SendA1();
+        //SendA1();
+        return;
     }
 
     for (ForwarderMapT::iterator ForwarderIter = m_DraftForwarderMap.begin(); ForwarderIter != m_DraftForwarderMap.end(); ForwarderIter++ ) {
@@ -383,7 +386,9 @@ void CForwarderMonitor::DayNoonTimerTask()
       //get Valve Record
       if( false == m_ForwardInfoDataReady )
       {
-         SendA1();
+         //SendA1();
+         m_ForwarderLock.UnLock();
+         return;
       }
 
       /*
@@ -465,19 +470,18 @@ bool CForwarderMonitor::SendCommand(uint8* pCommand, uint32 CommandLen)
    {
       DEBUG("Send Command ");
       hexdump(SendCommand, Pos);
-      FlashLight(LIGHT_FORWARD);
       TX_ENABLE(gpio);
       if( COMM_OK != m_pCommController->WriteBuf(SendCommand, Pos, FORWARDER_TIMEOUT) )
       {
          DEBUG("WriteError\n");
          continue;
       }
+      FlashLight(LIGHT_FORWARD);
       RX_ENABLE(gpio);
       myusleep(50 * 1000);
 
       uint8 Buffer[MAX_BUFFER_LEN] = {0};
       uint32 BufferCount = sizeof(Buffer);
-      FlashLight(LIGHT_FORWARD);
       if (COMM_OK == m_pCommController->ReadBuf(Buffer
                                                 , BufferCount
                                                 , FORWARDER_COMMAND_BEGIN_FLAG
@@ -485,6 +489,7 @@ bool CForwarderMonitor::SendCommand(uint8* pCommand, uint32 CommandLen)
                                                 , FORWARDER_COMMAND_END_FLAG
                                                 , sizeof(FORWARDER_COMMAND_END_FLAG)
                                                 , FORWARDER_TIMEOUT) ) {
+          FlashLight(LIGHT_FORWARD);
           if (ParseData(Buffer+sizeof(FORWARDER_COMMAND_BEGIN_FLAG)
                         , BufferCount-sizeof(FORWARDER_COMMAND_BEGIN_FLAG)-sizeof(FORWARDER_COMMAND_END_FLAG)
                         , pCommand
@@ -1445,7 +1450,8 @@ void CForwarderMonitor::GetForwarderInfoTask()
    m_ForwarderLock.Lock();
    if( false == m_ForwardInfoDataReady )
    {
-      SendA1();
+       //SendA1();
+       return;
    }
 
    if(m_ForwardInfoTimeOut.Done())
@@ -1468,7 +1474,8 @@ uint16 CForwarderMonitor::ConfigValve(ValveCtrlType ValveCtrl, uint8* pConfigStr
    m_ForwarderLock.Lock();
    if( false == m_ForwardInfoDataReady )
    {
-      SendA1();
+       //SendA1();
+       return 0;
    }
 
    ValveConfigOKCount = 0;
@@ -1616,7 +1623,8 @@ void CForwarderMonitor::SendCardHostCommand() {
 void CForwarderMonitor::GetPunctualData() {
     DEBUG("\n");
     if( false == m_ForwardInfoDataReady ) {
-        SendA1();
+        //SendA1();
+        return;
     }
 
     //ClearValveRecord();
@@ -1627,7 +1635,8 @@ void CForwarderMonitor::GetPunctualData() {
 void CForwarderMonitor::GetHeatData() {
     DEBUG("\n");
     if( false == m_ForwardInfoDataReady ) {
-        SendA1();
+        //SendA1();
+        return;
     }
     const uint8 cmd[] = {VALVE_CTRL_FLAG, VALVE_CTRL_RANDAM, 0x011/*Len*/, VALVE_GET_HEAT_DATA, 0x68, 0x20, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0x01, 0x03, 0x90, 0x1F, 0x0B, 0xEC, 0x16};
     SendValveCtrlOneByOne(cmd, sizeof(cmd));

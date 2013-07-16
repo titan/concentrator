@@ -288,7 +288,7 @@ void CMainLoop::Run() {
             Draw();
         }
 
-        if (lastKeyPressed - time(NULL) > 30) {
+        if (time(NULL) - lastKeyPressed > 30) {
             LcdLedOff();
         }
         sleep(1);
