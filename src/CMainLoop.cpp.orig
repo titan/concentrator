@@ -153,8 +153,8 @@ void CMainLoop::Run() {
 
     hotplug = InitHotplugSock();
 
-    tv.tv_sec = 2;
-    tv.tv_usec = 0;
+    tv.tv_sec = 0;
+    tv.tv_usec = 200000;
 
     //init LCD
     LcdGpin();
@@ -245,6 +245,8 @@ void CMainLoop::Run() {
                         Draw();
                     }
                     break;
+                default:
+                    break;
                 }
             }
 
@@ -284,14 +286,16 @@ void CMainLoop::Run() {
         } else if (time(NULL) - last > 60) {
             last = time(NULL);
             Draw();
-        } else if (vidx == 0) {
+        } else if (vidx == 0 && time(NULL) - last > 1) {
+            last = time(NULL);
             Draw();
         }
 
         if (time(NULL) - lastKeyPressed > 30) {
             LcdLedOff();
+            vidx = 0;
+            hidx = 0;
         }
-        sleep(1);
     }
 }
 
@@ -477,9 +481,10 @@ void CMainLoop::DrawForwarder() {
     Write(info[hidx].A1ResponseStr, info[hidx].A1ResponseStrLen);
 
     char buf[32];
+    int fid = (info[hidx].ForwarderID >> 16) & 0xFFFF;
     PrintHZ(0, DL_Y0, "转发器", 3);
     bzero(buf, 32);
-    sprintf(buf, "%d-%d:%04X", borders[3], hidx + 1, (info[hidx].ForwarderID >> 16) & 0xFFFF);
+    sprintf(buf, "%d-%d:%02X%02X", borders[3], hidx + 1, fid & 0xFF, (fid >> 8) & 0xFF);
     PrintChar(3, DL_Y0, buf);
 
     if (info[hidx].IsOffline) {
