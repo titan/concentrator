@@ -445,7 +445,6 @@ void CForwarderMonitor::ClearValveRecord()
 
 bool CForwarderMonitor::SendCommand(uint8* pCommand, uint32 CommandLen)
 {
-   DEBUG("\n");
    if(NULL == m_pCommController)
    {
       DEBUG("COMM is NULL\n");
@@ -473,30 +472,29 @@ bool CForwarderMonitor::SendCommand(uint8* pCommand, uint32 CommandLen)
          DEBUG("WriteError\n");
          continue;
       }
-      myusleep(200 * 1000);
+      RX_ENABLE(gpio);
+      myusleep(50 * 1000);
 
       uint8 Buffer[MAX_BUFFER_LEN] = {0};
       uint32 BufferCount = sizeof(Buffer);
       FlashLight(LIGHT_FORWARD);
-      RX_ENABLE(gpio);
-      if(COMM_OK == m_pCommController->ReadBuf(Buffer
-                                             , BufferCount
-                                             , FORWARDER_COMMAND_BEGIN_FLAG
-                                             , sizeof(FORWARDER_COMMAND_BEGIN_FLAG)
-                                             , FORWARDER_COMMAND_END_FLAG
-                                             , sizeof(FORWARDER_COMMAND_END_FLAG)
-                                             , FORWARDER_TIMEOUT) )
-      {
-         if(ParseData(Buffer+sizeof(FORWARDER_COMMAND_BEGIN_FLAG)
-                      , BufferCount-sizeof(FORWARDER_COMMAND_BEGIN_FLAG)-sizeof(FORWARDER_COMMAND_END_FLAG)
-                      , pCommand
-                      , CommandLen))
-         {
-            return true;
-         }else
-         {
-            myusleep(200 * 1000);
-         }
+      if (COMM_OK == m_pCommController->ReadBuf(Buffer
+                                                , BufferCount
+                                                , FORWARDER_COMMAND_BEGIN_FLAG
+                                                , sizeof(FORWARDER_COMMAND_BEGIN_FLAG)
+                                                , FORWARDER_COMMAND_END_FLAG
+                                                , sizeof(FORWARDER_COMMAND_END_FLAG)
+                                                , FORWARDER_TIMEOUT) ) {
+          if (ParseData(Buffer+sizeof(FORWARDER_COMMAND_BEGIN_FLAG)
+                        , BufferCount-sizeof(FORWARDER_COMMAND_BEGIN_FLAG)-sizeof(FORWARDER_COMMAND_END_FLAG)
+                        , pCommand
+                        , CommandLen)) {
+              return true;
+          } else {
+              myusleep(200 * 1000);
+          }
+      } else {
+          DEBUG("ReadBuf timeout\n");
       }
    }
    return false;
