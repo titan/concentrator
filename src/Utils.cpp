@@ -532,3 +532,73 @@ void LOG(const char* fmt, ...)
 
    LogLock.UnLock();
 }
+
+int str2hex(char * str, uint8 * data) {
+    uint8 tmp = 0;
+    int k = 0;
+    while (str[0] == '0' && str[0] != 0) str ++;
+    for (int i = 0, len = strlen(str), j = len % 2; i < len; i ++) {
+        switch (str[i]) {
+        case '1':
+            tmp |= 0x1;
+                break;
+        case '2':
+            tmp |= 0x2;
+            break;
+        case '3':
+            tmp |= 0x3;
+            break;
+        case '4':
+            tmp |= 0x4;
+            break;
+        case '5':
+            tmp |= 0x5;
+            break;
+        case '6':
+            tmp |= 0x6;
+            break;
+        case '7':
+            tmp |= 0x7;
+            break;
+        case '8':
+            tmp |= 0x8;
+            break;
+        case '9':
+            tmp |= 0x9;
+            break;
+        case 'a':
+        case 'A':
+            tmp |= 0xa;
+            break;
+        case 'b':
+        case 'B':
+            tmp |= 0xb;
+            break;
+        case 'c':
+        case 'C':
+            tmp |= 0xc;
+            break;
+        case 'd':
+        case 'D':
+            tmp |= 0xd;
+            break;
+        case 'e':
+        case 'E':
+            tmp |= 0xe;
+            break;
+        case 'f':
+        case 'F':
+            tmp |= 0xf;
+            break;
+        default:
+            break;
+        }
+        if (i % 2 == j) {
+            tmp = tmp << 4;
+        } else {
+            data[k++] = tmp;
+            tmp = 0;
+        }
+    }
+    return k;
+}

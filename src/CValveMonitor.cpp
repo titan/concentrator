@@ -4,6 +4,9 @@
 #include "libs_emsys_odm.h"
 #include "CPortal.h"
 #include "CCardHost.h"
+#include "csvparser.h"
+#include <iostream>
+#include <fstream>
 
 #ifdef DEBUG_VALVE
 #include <time.h>
@@ -99,29 +102,87 @@ uint32 CValveMonitor::Run() {
     fd_set rfds, wfds;
     struct timeval tv;
     int retval, r, readed = 0, w, wrote = 0;
-    uint8 ack[PKTLEN];
+    uint8 ack[PKTLEN], cmd[PKTLEN];
     uint8 * buf = NULL;
-    uint16 rlen = 0, wlen = 0;
+    uint16 rlen = 0, wlen = 0, tmplen;
     time_t lastWrite = 0;
     uint32 rc = 0, wc = 0; // read and write counter
     uint8 retry = 0; // read retry times
     uint8 priority = 0; // 0 for normal, 1 for high
     bool broadcasting = true;
     int iomode = 0; // 1 for read, 0 for write
+    int workmode = 0; // 0 for dynamical register, 1 for csv register
+
+    if (access("user_info.csv", F_OK) == 0) {
+        workmode = 1;
+    }
 
     LoadUsers();
     LoadRecords();
 
-    TX_ENABLE(gpio);
-    BroadcastClearSID();
-    sleep(1);
-    BroadcastClearSID();
-    sleep(1);
-    BroadcastClearSID();
-    sleep(1);
+registering:
 
-    srandom(time(NULL));
-    sid = random();
+    if (workmode == 0) {
+        TX_ENABLE(gpio);
+        BroadcastClearSID();
+        sleep(1);
+        BroadcastClearSID();
+        sleep(1);
+        BroadcastClearSID();
+        sleep(1);
+
+        srandom(time(NULL));
+        sid = random();
+    } else {
+        vector<user_t> unregistered;
+        vector<string> row;
+        string line;
+        ifstream in("user_info.csv");
+        if (in.fail()) {
+            DEBUG("user_info.csv not found\n");
+            workmode = 0;
+            goto registering;
+        }
+        while (getline(in, line) && in.good()) {
+            user_t u;
+            csvline_populate(row, line, ',');
+            if (row.size() < 2) continue;
+            if (row[0].length() != 4) continue;
+            if (row[1].length() != 8) continue;
+            if (str2hex((char *)row[0].c_str(), (uint8 *)&u.vmac) == 0) u.vmac = 0;
+            if (str2hex((char *)row[1].c_str(), u.uid.x) == 0) bzero(u.uid.x, sizeof(userid_t));
+            bzero(cmd, PKTLEN);
+            uint8 ptr = 0;
+            memcpy(cmd, &u.vmac, sizeof(uint32)); ptr += sizeof(uint32);
+            cmd[ptr] = PORT; ptr ++;
+            cmd[ptr] = RAND; ptr ++;
+            cmd[ptr] = 0x09; ptr ++; // len
+            cmd[ptr] = 0x1A; ptr ++;
+            memcpy(cmd, u.uid.x, sizeof(userid_t)); ptr += sizeof(userid_t);
+            for (int i = 0; i < 3; i ++) {
+                SendCommand(cmd, ptr);
+                sleep(1);
+                if (WaitCmdAck(ack, &tmplen)) {
+                    if (memcmp(ack, &u.vmac, sizeof(uint32)) == 0) {
+                        // found it
+                        users[u.vmac] = u;
+                        goto cont;
+                    }
+                }
+            }
+            unregistered.push_back(u);
+        cont:
+            continue;
+        }
+        in.close();
+        if (unregistered.size() > 0) {
+            // report to server
+        }
+        if (users.size() == 0) {
+            workmode = 0;
+            goto registering;
+        }
+    }
 
     while (true) {
         // check expired
@@ -134,7 +195,7 @@ uint32 CValveMonitor::Run() {
             }
         }
 
-        if (broadcasting) {
+        if (broadcasting && workmode == 0) {
             if (counter == 4) {
                 unregisteredCounter = 0;
                 BroadcastQuery();
@@ -159,7 +220,7 @@ uint32 CValveMonitor::Run() {
                     Broadcast(++counter);
                 }
             }
-        } else if (broadcasting == false && unregisteredCounter > 0) {
+        } else if (broadcasting == false && unregisteredCounter > 0 && workmode == 0) {
             DEBUG("%d valves are unregistered, rebroadcasting\n", unregisteredCounter);
             broadcasting = true;
             counter = 1;
@@ -184,7 +245,7 @@ uint32 CValveMonitor::Run() {
                 if (syncRecords) {
                     SaveRecords();
                 }
-                BroadcastQuery();
+                if (workmode == 0) BroadcastQuery();
             }
             if (noonTimer.Done()) {
                 GetRechargeData();
@@ -196,7 +257,6 @@ uint32 CValveMonitor::Run() {
         FD_ZERO(&wfds);
 
         if ((cbuffer_read(tx) != NULL || cbuffer_read(htx) != NULL) && rc >= wc) {
-            //time_t t = time(NULL);
             FD_SET(com, &wfds);
             if (iomode == 1) {TX_ENABLE(gpio); iomode = 0;}
         } else {
