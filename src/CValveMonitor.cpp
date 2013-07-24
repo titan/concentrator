@@ -9,7 +9,8 @@
 #include <time.h>
 #define DEBUG(...) do {printf("%ld %s::%s %d ----", time(NULL), __FILE__, __func__, __LINE__);printf(__VA_ARGS__);} while(false)
 #ifndef hexdump
-#define hexdump(data, len) do {for (uint32 i = 0; i < (uint32)len; i ++) { printf("%02x ", *(uint8 *)(data + i));} printf("\n");} while(0)
+#include <strings.h>
+#define hexdump(data, len) do { if (len < 1024) { char hexdumpbuf[3072]; bzero(hexdumpbuf, 3072); for (uint32 i = 0; i < (uint32)len; i ++) { sprintf(hexdumpbuf + i * 3, "%02x ", *(uint8 *)(data + i));} puts(hexdumpbuf);} else { char * hexdumpbuf = (char *) malloc(len * 3 + 1); if (hexdumpbuf != NULL) {bzero(hexdumpbuf, len * 3 + 1); for (uint32 i = 0; i < (uint32)len; i ++) { sprintf(hexdumpbuf + i * 3, "%02x ", *(uint8 *)(data + i));} puts(hexdumpbuf); free(hexdumpbuf);} else puts("Too long, ignoring");}} while(0)
 #endif
 #else
 #define DEBUG(...)
@@ -52,7 +53,7 @@ CValveMonitor * CValveMonitor::GetInstance() {
     return instance;
 }
 
-CValveMonitor::CValveMonitor():noonTimer(DAY_TYPE), sid(0), counter(0) {
+CValveMonitor::CValveMonitor():noonTimer(DAY_TYPE), sid(0), counter(0), unregisteredCounter(0) {
     tx = cbuffer_create(12, PKTLEN);
     htx = cbuffer_create(10, PKTLEN);
     rx = cbuffer_create(10, sizeof(uint32)); // valve mac
@@ -98,18 +99,20 @@ uint32 CValveMonitor::Run() {
     fd_set rfds, wfds;
     struct timeval tv;
     int retval, r, readed = 0, w, wrote = 0;
-    uint8 ack[8192];
+    uint8 ack[PKTLEN];
     uint8 * buf = NULL;
     uint16 rlen = 0, wlen = 0;
-    time_t last = 0;
+    time_t lastWrite = 0;
     uint32 rc = 0, wc = 0; // read and write counter
     uint8 retry = 0; // read retry times
-    uint16 wi = 0; // write interval, ? seconds
     uint8 priority = 0; // 0 for normal, 1 for high
+    bool broadcasting = true;
+    int iomode = 0; // 1 for read, 0 for write
 
     LoadUsers();
     LoadRecords();
 
+    TX_ENABLE(gpio);
     BroadcastClearSID();
     sleep(1);
     BroadcastClearSID();
@@ -120,17 +123,7 @@ uint32 CValveMonitor::Run() {
     srandom(time(NULL));
     sid = random();
 
-    Broadcast(++counter);
-    Broadcast(++counter);
-    Broadcast(++counter);
-    BroadcastQuery();
-
     while (true) {
-
-        FD_ZERO(&rfds);
-        FD_SET(com, &rfds);
-        FD_ZERO(&wfds);
-
         // check expired
         time_t now = time(NULL);
         for (map<uint32, expire_t>::iterator iter = expires.begin(); iter != expires.end(); iter ++) {
@@ -141,54 +134,74 @@ uint32 CValveMonitor::Run() {
             }
         }
 
-        if (punctualTimer.Done()) {
-            SyncValveTime();
-            GetPunctualData();
-            GetTimeData();
-            if (valveDataType == VALVE_DATA_TYPE_HEAT) {
-                GetHeatData();
+        if (broadcasting) {
+            if (counter == 4) {
+                unregisteredCounter = 0;
+                BroadcastQuery();
+                broadcasting = false;
+                counter ++;
+            } else {
+                if (time(NULL) - lastWrite > (120 + valveCount - 60)) {
+                    if (iomode == 1) {TX_ENABLE(gpio); iomode = 0;}
+                    while (cbuffer_read(rx) != NULL) {
+                        uint8 ptr = 0;
+                        bzero(ack, PKTLEN);
+                        memcpy(ack, cbuffer_read(rx), sizeof(uint32)); ptr += sizeof(uint32);
+                        cbuffer_read_done(rx);
+                        ack[ptr] = PORT; ptr ++;
+                        ack[ptr] = RAND; ptr ++;
+                        ack[ptr] = 0x06; ptr ++; // len
+                        ack[ptr] = VALVE_BROADCAST; ptr ++;
+                        ack[ptr] = 0xAC; ptr ++;
+                        memcpy(ack + ptr, &sid, sizeof(uint32)); ptr += sizeof(uint32);
+                        SendCommand(ack, ptr); // send only
+                    }
+                    Broadcast(++counter);
+                }
             }
-            if (valveTemperatures.size() > 0 || valveHeats.size() > 0) {
-                SendValveData();
+        } else if (broadcasting == false && unregisteredCounter > 0) {
+            DEBUG("%d valves are unregistered, rebroadcasting\n", unregisteredCounter);
+            broadcasting = true;
+            counter = 1;
+        } else {
+            if (punctualTimer.Done()) {
+                SyncValveTime();
+                GetPunctualData();
+                GetTimeData();
+                if (valveDataType == VALVE_DATA_TYPE_HEAT) {
+                    GetHeatData();
+                }
+                if (valveTemperatures.size() > 0 || valveHeats.size() > 0) {
+                    SendValveData();
+                }
+                if (users.size() != valveCount) {
+                    DEBUG("Defined valve count: %d, found valve count: %d\n", valveCount, users.size());
+                    SendErrorValves();
+                }
+                if (syncUsers) {
+                    SaveUsers();
+                }
+                if (syncRecords) {
+                    SaveRecords();
+                }
+                BroadcastQuery();
             }
-            if (users.size() != valveCount) {
-                DEBUG("Defined valve count: %d, found valve count: %d\n", valveCount, users.size());
-                SendErrorValves();
+            if (noonTimer.Done()) {
+                GetRechargeData();
+                GetConsumeData();
             }
-            if (syncUsers) {
-                SaveUsers();
-            }
-            if (syncRecords) {
-                SaveRecords();
-            }
-            BroadcastQuery();
-        }
-        if (noonTimer.Done()) {
-            GetRechargeData();
-            GetConsumeData();
         }
 
-        if ((cbuffer_read(tx) != NULL || cbuffer_read(htx) != NULL || cbuffer_read(rx) != NULL) && rc == wc && time(NULL) - last > wi) {
-            time_t t = time(NULL);
-            DEBUG("Delay %ld seconds, interval: %d seconds\n", t - last, wi);
+        FD_ZERO(&rfds);
+        FD_ZERO(&wfds);
+
+        if ((cbuffer_read(tx) != NULL || cbuffer_read(htx) != NULL) && rc >= wc) {
+            //time_t t = time(NULL);
             FD_SET(com, &wfds);
-            TX_ENABLE(gpio);
-            // ack found valves
-            while (cbuffer_read(rx) != NULL) {
-                uint8 ptr = 0;
-                bzero(ack, PKTLEN);
-                memcpy(ack, cbuffer_read(rx), sizeof(uint32)); ptr += sizeof(uint32);
-                ack[ptr] = PORT; ptr ++;
-                ack[ptr] = RAND; ptr ++;
-                ack[ptr] = 0x06; ptr ++; // len
-                ack[ptr] = VALVE_BROADCAST; ptr ++;
-                ack[ptr] = 0xAC; ptr ++;
-                memcpy(ack + ptr, &sid, sizeof(uint32)); ptr += sizeof(uint32);
-                SendCommand(ack, ptr); // send only
-                cbuffer_read_done(rx);
-            }
+            if (iomode == 1) {TX_ENABLE(gpio); iomode = 0;}
         } else {
-            RX_ENABLE(gpio);
+            FD_SET(com, &rfds);
+            if (iomode == 0) {RX_ENABLE(gpio); iomode = 1;}
         }
 
         tv.tv_sec = 1;
@@ -268,23 +281,18 @@ uint32 CValveMonitor::Run() {
                 }
                 wrote += w;
                 if (wrote == wlen) {
+                    lastWrite = time(NULL);
+#ifdef DEBUG_VALVE_TRACE_RECHARGE
                     uint8 code;
                     if (buf[6] == 0xFF) {
                         code = buf[9];
                     } else {
                         code = buf[7];
                     }
-                    if (code == 0xFF) {
-                        wi = 60 * 2;
-                    } else {
-                        wi = 0;
-                    }
-                    last = time(NULL);
-#ifdef DEBUG_VALVE_TRACE_RECHARGE
                     if (code == VALVE_RECHARGE) {
                         uint32 vmac;
                         memcpy(&vmac, buf, sizeof(uint32));
-                        timers[vmac].timestamp2 = last;
+                        timers[vmac].timestamp2 = lastWrite;
                     }
 #endif
                     DEBUG("Write %d bytes:", wlen);
@@ -294,7 +302,7 @@ uint32 CValveMonitor::Run() {
                     else
                         cbuffer_read_done(htx);
                     wrote = 0;
-                    myusleep(200 * 1000);
+                    myusleep(500 * 1000);
                     wc ++;
                 }
             }
@@ -411,8 +419,8 @@ void CValveMonitor::ParseBroadcast(uint32 vmac, uint8 * data, uint16 len) {
             }
         }
     } else if (len == 1) {
-        Broadcast(counter ++);
-        Broadcast(counter ++);
+        DEBUG("Valve[%02x %02x %02x %02x] is unregistered\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF);
+        unregisteredCounter ++;
     }
 }
 
@@ -1142,7 +1150,7 @@ bool CValveMonitor::SendCommand(uint8 * data, uint16 len) {
                     DEBUG("Write %d bytes:", wlen);
                     hexdump(buf, wlen);
                     wrote = 0;
-                    myusleep(200 * 1000);
+                    myusleep(500 * 1000);
                     return true;
                 }
             }

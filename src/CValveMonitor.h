@@ -123,6 +123,7 @@ private:
     uint8 counter; // broadcase counter
     int valveCount;
     cbuffer_t rx; // received valve macs
+    int unregisteredCounter; // unregistered valve counter
 #ifdef DEBUG_VALVE_TRACE_RECHARGE
     map<uint32, mytimer_t> timers;
 #endif
