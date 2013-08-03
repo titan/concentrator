@@ -23,34 +23,33 @@ CTimerThread::~CTimerThread()
 }
 void CTimerThread::SetTimer(uint32 Begin, uint32 nInterval)
 {
-  DEBUG("CTimerThread::SetTimer(Begin=%d, nInterval=%d)\n", Begin, nInterval);
-  m_Begin = Begin;
-  m_nInterval = nInterval;
+    DEBUG("CTimerThread::SetTimer(Begin=%d, nInterval=%d)\n", Begin, nInterval);
+    m_Begin = Begin;
+    m_nInterval = nInterval;
 }
 void CTimerThread::StartTimer()
 {
-  DEBUG("CTimerThread::StartTimer()\n");
-  pthread_create(&m_hThreadTimer, NULL, OnTimer_stub, this);
+    DEBUG("CTimerThread::StartTimer()\n");
+    pthread_create(&m_hThreadTimer, NULL, OnTimer_stub, this);
 }
 void CTimerThread::StopTimer()
 {
-  DEBUG("CTimerThread::StopTimer()\n");
-  pthread_cancel(m_hThreadTimer);
-  pthread_join(m_hThreadTimer, NULL); //wait the thread stopped
+    DEBUG("CTimerThread::StopTimer()\n");
+    pthread_cancel(m_hThreadTimer);
+    pthread_join(m_hThreadTimer, NULL); //wait the thread stopped
 }
 void CTimerThread::thread_proc()
 {
-  DEBUG("CTimerThread::thread_proc()\n");
-  Usermsdelay(m_Begin);
-  while(true)
-  {
-    DEBUG("CTimerThread::thread_proc()---loop\n");
-    OnTimer();
-    pthread_testcancel();
-    Usermsdelay(m_nInterval);
-  }
+    DEBUG("CTimerThread::thread_proc()\n");
+    Usermsdelay(m_Begin);
+    while (true) {
+        DEBUG("CTimerThread::thread_proc()---loop\n");
+        OnTimer();
+        pthread_testcancel();
+        Usermsdelay(m_nInterval);
+    }
 }
 void CTimerThread::OnTimer()
 {
-  return;
+    return;
 }

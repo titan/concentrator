@@ -30,8 +30,8 @@ along with CINI.  If not, see <http://www.gnu.org/licenses/>.
 */
 CINIComment::CINIComment(const std::string & comment)
 {
-	this->m_type = INI_ELEMENT_COMMENT;
-	SetComment(comment);
+    this->m_type = INI_ELEMENT_COMMENT;
+    SetComment(comment);
 }
 
 /**
@@ -40,7 +40,7 @@ CINIComment::CINIComment(const std::string & comment)
 */
 void CINIComment::SetComment(const std::string & comment)
 {
-	this->m_comment = comment;
+    this->m_comment = comment;
 }
 
 /**
@@ -49,5 +49,5 @@ void CINIComment::SetComment(const std::string & comment)
 */
 const std::string CINIComment::ToString() const
 {
-	return this->m_comment;
+    return this->m_comment;
 }

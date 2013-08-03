@@ -41,7 +41,7 @@ along with CINI.  If not, see <http://www.gnu.org/licenses/>.
 */
 CINI::CINI()
 {
-	this->m_filename = "new.ini";
+    this->m_filename = "new.ini";
 }
 
 /**
@@ -50,7 +50,7 @@ CINI::CINI()
 */
 CINI::CINI(const CINI & sinip)
 {
-	Copy(sinip);
+    Copy(sinip);
 }
 
 /**
@@ -60,7 +60,7 @@ CINI::CINI(const CINI & sinip)
 */
 CINI::CINI(const std::string & filename)
 {
-	Parse(filename);
+    Parse(filename);
 }
 
 /**
@@ -68,7 +68,7 @@ CINI::CINI(const std::string & filename)
 */
 CINI::~CINI()
 {
-	Clear();
+    Clear();
 }
 
 /**
@@ -77,83 +77,70 @@ CINI::~CINI()
 */
 void CINI::Parse(const std::string & filename)
 {
-   DEBUG("CINI::Parse(%s)\n", filename.c_str());
-	this->m_data.clear();
-	this->m_filename = filename;
+    DEBUG("CINI::Parse(%s)\n", filename.c_str());
+    this->m_data.clear();
+    this->m_filename = filename;
 
-	std::string line;
-	std::string currentSection = "";
+    std::string line;
+    std::string currentSection = "";
 
-	std::string::size_type pos, pos2;
+    std::string::size_type pos, pos2;
 
-	// Anonymous section
-	this->m_data.push_back(new CINISection(""));
+    // Anonymous section
+    this->m_data.push_back(new CINISection(""));
 
-	// Open the file
-	std::fstream file(this->m_filename.c_str());
-	if(file.is_open())
-	{
-      DEBUG("open %s OK\n", filename.c_str());
-		// While there is no errors.
-		while(file.good())
-		{
-			// Get a line.
-			std::getline(file, line);
-			line = Trim(line);
+    // Open the file
+    std::fstream file(this->m_filename.c_str());
+    if (file.is_open()) {
+        DEBUG("open %s OK\n", filename.c_str());
+        // While there is no errors.
+        while (file.good()) {
+            // Get a line.
+            std::getline(file, line);
+            line = Trim(line);
 
-			if(line != "")
-			{
-				// Comment
-				if(line[0] == '#' || line[0] == ';')
-				{
-					GetSection(currentSection)->AddElement(new CINIComment(line));
-				}
-				else
-				{
-					pos = line.find_first_of('[');
-				    pos2=line.find_first_of(']');
+            if (line != "") {
+                // Comment
+                if (line[0] == '#' || line[0] == ';') {
+                    GetSection(currentSection)->AddElement(new CINIComment(line));
+                } else {
+                    pos = line.find_first_of('[');
+                    pos2=line.find_first_of(']');
 
-				    // Section
-				    if(pos != std::string::npos && pos2 != std::string::npos && pos < pos2)
-				    {
-				        currentSection = line.substr(pos + 1, pos2 - (pos + 1));
-						this->m_data.push_back(new CINISection(currentSection));
-				    }
-					else
-					{
-						pos = line.find_first_of('=');
-						if(pos != std::string::npos)
-						{
-							// Property
-							pos2 = std::min(line.find_first_of(';'), line.find_first_of('#'));
-							std::string key = Trim(line.substr(0, pos));
-							std::string value;
+                    // Section
+                    if (pos != std::string::npos && pos2 != std::string::npos && pos < pos2) {
+                        currentSection = line.substr(pos + 1, pos2 - (pos + 1));
+                        this->m_data.push_back(new CINISection(currentSection));
+                    } else {
+                        pos = line.find_first_of('=');
+                        if (pos != std::string::npos) {
+                            // Property
+                            pos2 = std::min(line.find_first_of(';'), line.find_first_of('#'));
+                            std::string key = Trim(line.substr(0, pos));
+                            std::string value;
 
-							// Search for a comment
-							if(pos2 != std::string::npos)
-							{
-								// Property with a comment
-								value = Trim(line.substr(pos + 1, pos2 - (pos + 1)));
+                            // Search for a comment
+                            if (pos2 != std::string::npos) {
+                                // Property with a comment
+                                value = Trim(line.substr(pos + 1, pos2 - (pos + 1)));
 
-								if(key != "" && value != "")
-									GetSection(currentSection)->AddElement(new CINIProperty(key, value, Trim(line.substr(pos2, line.length() - pos2))));
-							}
-							else
-							{
-								// Property without comment
-								value = Trim(line.substr(pos + 1, line.length() - (pos + 1)));
+                                if (key != "" && value != "")
+                                    GetSection(currentSection)->AddElement(new CINIProperty(key, value, Trim(line.substr(pos2, line.length() - pos2))));
+                            } else {
+                                // Property without comment
+                                value = Trim(line.substr(pos + 1, line.length() - (pos + 1)));
 
-								if(key != "" && value != "")
-									GetSection(currentSection)->AddElement(new CINIProperty(key, value));
-							}
-						}
-					}
-				}
-			}
-		}
+                                if (key != "" && value != "")
+                                    GetSection(currentSection)->AddElement(new CINIProperty(key, value));
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
-		file.close();
-	}
+        file.close();
+    }
 }
 
 /**
@@ -164,12 +151,11 @@ void CINI::Parse(const std::string & filename)
 */
 void CINI::SetValueBool(const std::string & section, const std::string & key, const bool value)
 {
-	if(key != "")
-	{
-		std::ostringstream ss("");
-		ss << value;
-		SetValueString(section, key, ss.str());
-	}
+    if (key != "") {
+        std::ostringstream ss("");
+        ss << value;
+        SetValueString(section, key, ss.str());
+    }
 }
 
 /**
@@ -180,12 +166,11 @@ void CINI::SetValueBool(const std::string & section, const std::string & key, co
 */
 void CINI::SetValueInt(const std::string & section, const std::string & key, const int value)
 {
-	if(key != "")
-	{
-		std::ostringstream ss("");
-		ss << value;
-		SetValueString(section, key, ss.str());
-	}
+    if (key != "") {
+        std::ostringstream ss("");
+        ss << value;
+        SetValueString(section, key, ss.str());
+    }
 }
 
 /**
@@ -196,12 +181,11 @@ void CINI::SetValueInt(const std::string & section, const std::string & key, con
 */
 void CINI::SetValueFloat(const std::string & section, const std::string & key, const float value)
 {
-	if(key != "")
-	{
-		std::ostringstream ss("");
-		ss << value;
-		SetValueString(section, key, ss.str());
-	}
+    if (key != "") {
+        std::ostringstream ss("");
+        ss << value;
+        SetValueString(section, key, ss.str());
+    }
 }
 
 /**
@@ -212,12 +196,11 @@ void CINI::SetValueFloat(const std::string & section, const std::string & key, c
 */
 void CINI::SetValueDouble(const std::string & section, const std::string & key, const double value)
 {
-	if(key != "")
-	{
-		std::ostringstream ss("");
-		ss << value;
-		SetValueString(section, key, ss.str());
-	}
+    if (key != "") {
+        std::ostringstream ss("");
+        ss << value;
+        SetValueString(section, key, ss.str());
+    }
 }
 
 /**
@@ -228,24 +211,22 @@ void CINI::SetValueDouble(const std::string & section, const std::string & key, 
 */
 void CINI::SetValueString(const std::string & section, const std::string & key, const std::string & value)
 {
-	if(key != "")
-	{
-		CINISection * sectionPtr = GetSection(section);
+    if (key != "") {
+        CINISection * sectionPtr = GetSection(section);
 
-		// If the section is not found, it need to be created
-		if(sectionPtr == NULL)
-		{
-			sectionPtr = new CINISection(section);
-			this->m_data.push_back(sectionPtr);
-		}
+        // If the section is not found, it need to be created
+        if (sectionPtr == NULL) {
+            sectionPtr = new CINISection(section);
+            this->m_data.push_back(sectionPtr);
+        }
 
-		// Create or modify the property
-		CINIProperty * data = GetProperty(sectionPtr, key);
-		if(data == NULL)
-			sectionPtr->AddElement(new CINIProperty(key, value));
-		else
-			data->SetValue(value);
-	}
+        // Create or modify the property
+        CINIProperty * data = GetProperty(sectionPtr, key);
+        if (data == NULL)
+            sectionPtr->AddElement(new CINIProperty(key, value));
+        else
+            data->SetValue(value);
+    }
 }
 
 /**
@@ -253,9 +234,9 @@ void CINI::SetValueString(const std::string & section, const std::string & key, 
 */
 void CINI::Clear()
 {
-	for(std::vector<CINISection*>::iterator it = this->m_data.begin() ; it != this->m_data.end() ; ++it)
-		delete *it;
-	this->m_data.clear();
+    for (std::vector<CINISection*>::iterator it = this->m_data.begin() ; it != this->m_data.end() ; ++it)
+        delete *it;
+    this->m_data.clear();
 }
 
 /**
@@ -264,15 +245,13 @@ void CINI::Clear()
 */
 void CINI::RemoveSection(const std::string & section)
 {
-	for(std::vector<CINISection*>::iterator it = this->m_data.begin() ; it != this->m_data.end() ; ++it)
-	{
-		if((*it)->GetName() == section)
-		{
-			delete *it;
-			this->m_data.erase(it);
-			break;
-		}
-	}
+    for (std::vector<CINISection*>::iterator it = this->m_data.begin() ; it != this->m_data.end() ; ++it) {
+        if ((*it)->GetName() == section) {
+            delete *it;
+            this->m_data.erase(it);
+            break;
+        }
+    }
 }
 
 /**
@@ -280,8 +259,8 @@ void CINI::RemoveSection(const std::string & section)
 */
 void CINI::RemoveAllComments()
 {
-	for(std::vector<CINISection*>::iterator it = this->m_data.begin() ; it != this->m_data.end() ; ++it)
-		(*it)->RemoveAllComments();
+    for (std::vector<CINISection*>::iterator it = this->m_data.begin() ; it != this->m_data.end() ; ++it)
+        (*it)->RemoveAllComments();
 }
 
 /**
@@ -290,17 +269,16 @@ void CINI::RemoveAllComments()
 */
 void CINI::Copy(const CINI & sinip)
 {
-	for(std::vector<CINISection*>::const_iterator it = sinip.m_data.begin() ; it != sinip.m_data.end() ; ++it)
-	{
-		CINISection * tmp = GetSection((*it)->GetName());
+    for (std::vector<CINISection*>::const_iterator it = sinip.m_data.begin() ; it != sinip.m_data.end() ; ++it) {
+        CINISection * tmp = GetSection((*it)->GetName());
 
-		// If the section already exists, it need to be modified
-		if(tmp != NULL)
-			tmp->Copy(**it);
-		else
-			// If no section is found, simply create it
-			this->m_data.push_back(new CINISection(**it));
-	}
+        // If the section already exists, it need to be modified
+        if (tmp != NULL)
+            tmp->Copy(**it);
+        else
+            // If no section is found, simply create it
+            this->m_data.push_back(new CINISection(**it));
+    }
 }
 
 /**
@@ -308,7 +286,7 @@ void CINI::Copy(const CINI & sinip)
 */
 void CINI::Save()
 {
-	SaveToFile(this->m_filename);
+    SaveToFile(this->m_filename);
 }
 
 /**
@@ -318,10 +296,10 @@ void CINI::Save()
 void CINI::SaveToFile(const std::string & filename)
 {
 #if 0
-	std::ofstream file(filename);
-	for(std::vector<CINISection*>::const_iterator it = this->m_data.begin() ; it != this->m_data.end() ; ++it)
-		file << (*it)->ToString();
-	file.close();
+    std::ofstream file(filename);
+    for (std::vector<CINISection*>::const_iterator it = this->m_data.begin() ; it != this->m_data.end() ; ++it)
+        file << (*it)->ToString();
+    file.close();
 #endif
 }
 
@@ -332,10 +310,10 @@ void CINI::SaveToFile(const std::string & filename)
 */
 const CINI & CINI::operator=(const CINI & sinip)
 {
-	Clear();
-	Copy(sinip);
+    Clear();
+    Copy(sinip);
 
-	return *this;
+    return *this;
 }
 
 /**
@@ -347,24 +325,20 @@ const CINI & CINI::operator=(const CINI & sinip)
 */
 const bool CINI::GetValueBool(const std::string & section, const std::string & key, const bool defaultValue) const
 {
-	bool result = defaultValue;
-	std::string value = GetValue(section, key);
+    bool result = defaultValue;
+    std::string value = GetValue(section, key);
 
-	if(value != "")
-	{
-		std::transform(value.begin(), value.end(), value.begin(), tolower);
-		if(value == "0" || value == "false")
-		{
-			result = false;
-		}
-		else
-		{
-			if(value == "1" || value == "true")
-				result = true;
-		}
-	}
+    if (value != "") {
+        std::transform(value.begin(), value.end(), value.begin(), tolower);
+        if (value == "0" || value == "false") {
+            result = false;
+        } else {
+            if (value == "1" || value == "true")
+                result = true;
+        }
+    }
 
-	return result;
+    return result;
 }
 
 /**
@@ -376,17 +350,16 @@ const bool CINI::GetValueBool(const std::string & section, const std::string & k
 */
 const int CINI::GetValueInt(const std::string & section, const std::string & key, const int defaultValue) const
 {
-	int result = defaultValue;
-	std::string value = GetValue(section, key);
+    int result = defaultValue;
+    std::string value = GetValue(section, key);
 
-	// Try to convert the data into the wanted format
-	if(value != "")
-	{
-		std::istringstream ss(value);
-		ss >> result;
-	}
+    // Try to convert the data into the wanted format
+    if (value != "") {
+        std::istringstream ss(value);
+        ss >> result;
+    }
 
-	return result;
+    return result;
 }
 
 /**
@@ -398,17 +371,16 @@ const int CINI::GetValueInt(const std::string & section, const std::string & key
 */
 const float CINI::GetValueFloat(const std::string & section, const std::string & key, const float defaultValue) const
 {
-	float result = defaultValue;
-	std::string value = GetValue(section, key);
+    float result = defaultValue;
+    std::string value = GetValue(section, key);
 
-	// Try to convert the data into the wanted format
-	if(value != "")
-	{
-		std::istringstream ss(value);
-		ss >> result;
-	}
+    // Try to convert the data into the wanted format
+    if (value != "") {
+        std::istringstream ss(value);
+        ss >> result;
+    }
 
-	return result;
+    return result;
 }
 
 /**
@@ -420,17 +392,16 @@ const float CINI::GetValueFloat(const std::string & section, const std::string &
 */
 const double CINI::GetValueDouble(const std::string & section, const std::string & key, const double defaultValue) const
 {
-	double result = defaultValue;
-	std::string value = GetValue(section, key);
+    double result = defaultValue;
+    std::string value = GetValue(section, key);
 
-	// Try to convert the data into the wanted format
-	if(value != "")
-	{
-		std::istringstream ss(value);
-		ss >> result;
-	}
+    // Try to convert the data into the wanted format
+    if (value != "") {
+        std::istringstream ss(value);
+        ss >> result;
+    }
 
-	return result;
+    return result;
 }
 
 /**
@@ -442,11 +413,11 @@ const double CINI::GetValueDouble(const std::string & section, const std::string
 */
 const std::string CINI::GetValueString(const std::string & section, const std::string & key, const std::string & defaultValue) const
 {
-	std::string result = GetValue(section, key);
-	if(result == "")
-		result = defaultValue;
+    std::string result = GetValue(section, key);
+    if (result == "")
+        result = defaultValue;
 
-	return result;
+    return result;
 }
 
 /**
@@ -456,19 +427,19 @@ const std::string CINI::GetValueString(const std::string & section, const std::s
 */
 const std::string CINI::Trim(const std::string & text) const
 {
-	std::string result = text;
+    std::string result = text;
 
-	// Trim the beginning of the text
-	std::string::size_type pos = text.find_last_not_of(' ');
-	if(pos != std::string::npos)
-		result.erase(pos + 1);
+    // Trim the beginning of the text
+    std::string::size_type pos = text.find_last_not_of(' ');
+    if (pos != std::string::npos)
+        result.erase(pos + 1);
 
-	// Trim the ending of the text
-	pos = text.find_first_not_of(' ');
-	if(pos != std::string::npos)
-		result.erase(0, pos);
+    // Trim the ending of the text
+    pos = text.find_first_not_of(' ');
+    if (pos != std::string::npos)
+        result.erase(0, pos);
 
-	return result;
+    return result;
 }
 
 /**
@@ -479,28 +450,24 @@ const std::string CINI::Trim(const std::string & text) const
 */
 const std::string CINI::GetValue(const std::string & section, const std::string & key) const
 {
-	std::string result = "";
-	CINISection * sectionPtr = GetSection(section);
+    std::string result = "";
+    CINISection * sectionPtr = GetSection(section);
 
-	// If the section exists
-	if(sectionPtr != NULL)
-	{
-		// Find a property with the given key name
-		for(TSectionElements::const_iterator it = sectionPtr->GetElements().begin() ; it != sectionPtr->GetElements().end() ; ++it)
-		{
-			if((*it)->GetType() == INI_ELEMENT_PROPERTY)
-			{
-				CINIProperty * tmp = (CINIProperty*)(*it);
-				if(tmp->GetKey() == key && tmp->GetValue() != "")
-				{
-					result = tmp->GetValue();
-					break;
-				}
-			}
-		}
-	}
+    // If the section exists
+    if (sectionPtr != NULL) {
+        // Find a property with the given key name
+        for (TSectionElements::const_iterator it = sectionPtr->GetElements().begin() ; it != sectionPtr->GetElements().end() ; ++it) {
+            if ((*it)->GetType() == INI_ELEMENT_PROPERTY) {
+                CINIProperty * tmp = (CINIProperty*)(*it);
+                if (tmp->GetKey() == key && tmp->GetValue() != "") {
+                    result = tmp->GetValue();
+                    break;
+                }
+            }
+        }
+    }
 
-	return result;
+    return result;
 }
 
 /**
@@ -510,17 +477,15 @@ const std::string CINI::GetValue(const std::string & section, const std::string 
 */
 CINISection * CINI::GetSection(const std::string & section) const
 {
-	CINISection * result = NULL;
-	for(unsigned int i = 0 ; i < this->m_data.size() ; ++i)
-	{
-		if(this->m_data.at(i)->GetName() == section)
-		{
-			result = this->m_data.at(i);
-			break;
-		}
-	}
+    CINISection * result = NULL;
+    for (unsigned int i = 0 ; i < this->m_data.size() ; ++i) {
+        if (this->m_data.at(i)->GetName() == section) {
+            result = this->m_data.at(i);
+            break;
+        }
+    }
 
-	return result;
+    return result;
 }
 
 /**
@@ -530,8 +495,8 @@ CINISection * CINI::GetSection(const std::string & section) const
 */
 CINIProperty * CINI::GetProperty(CINISection * section, const std::string & key) const
 {
-	if(section == NULL)
-		return NULL;
+    if (section == NULL)
+        return NULL;
 
-	return section->GetProperty(key);
+    return section->GetProperty(key);
 }

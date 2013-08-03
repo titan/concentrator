@@ -35,5 +35,5 @@ CINIElement::~CINIElement() {}
 */
 INI_element CINIElement::GetType() const
 {
-	return this->m_type;
+    return this->m_type;
 }

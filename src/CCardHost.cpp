@@ -51,15 +51,18 @@ CCardHost * CCardHost::GetInstance()
     return instance;
 }
 
-CCardHost::CCardHost() {
+CCardHost::CCardHost()
+{
     cmdbuf = cbuffer_create(10, PKTLEN);
 }
 
-CCardHost::~CCardHost() {
+CCardHost::~CCardHost()
+{
     cbuffer_free(cmdbuf);
 }
 
-uint32 CCardHost::Run() {
+uint32 CCardHost::Run()
+{
     fd_set rfds, wfds;
     struct timeval tv;
     int retval, r, readed = 0, w, wrote = 0;
@@ -148,7 +151,8 @@ uint32 CCardHost::Run() {
     return 0;
 }
 
-void CCardHost::ParseAndExecute(uint8 *cmd, uint16 length) {
+void CCardHost::ParseAndExecute(uint8 *cmd, uint16 length)
+{
     uint8 * src, * dst, * code, * data, * crc;
     uint16 len;
     uint16 ptr = 0, gcrc;
@@ -226,7 +230,8 @@ void CCardHost::ParseAndExecute(uint8 *cmd, uint16 length) {
     }
 }
 
-void CCardHost::HandleQueryUser(uint8 * buf, uint16 len) {
+void CCardHost::HandleQueryUser(uint8 * buf, uint16 len)
+{
     vector<user_t> users;
     int retry = 3;
     userid_t uid;
@@ -268,7 +273,8 @@ void CCardHost::HandleQueryUser(uint8 * buf, uint16 len) {
     AckQueryUser(uid, NULL, 0);
 }
 
-void CCardHost::HandleRecharge(uint8 * buf, uint16 len) {
+void CCardHost::HandleRecharge(uint8 * buf, uint16 len)
+{
     vector<user_t> users;
     int retry = 3;
     userid_t uid;
@@ -304,7 +310,8 @@ void CCardHost::HandleRecharge(uint8 * buf, uint16 len) {
     AckRecharge(uid, NULL, 0);
 }
 
-void CCardHost::HandleGetTime(uint8 * data, uint16 len) {
+void CCardHost::HandleGetTime(uint8 * data, uint16 len)
+{
     if (len == 0) {
         AckTimeOrRemove(NULL, 0);
     } else {
@@ -313,7 +320,8 @@ void CCardHost::HandleGetTime(uint8 * data, uint16 len) {
     }
 }
 
-void CCardHost::HandleInfo(uint8 * data, uint16 len) {
+void CCardHost::HandleInfo(uint8 * data, uint16 len)
+{
     cardaddr_t addr;
     info.clear();
     for (uint16 i = 0, l = MIN((uint16)(data[0] * sizeof(cardaddr_t)), len - 1); i < l; i += sizeof(cardaddr_t)) {
@@ -324,7 +332,8 @@ void CCardHost::HandleInfo(uint8 * data, uint16 len) {
     infoGotten = true;
 }
 
-void CCardHost::AckQueryUser(userid_t uid, uint8 * data, uint16 len) {
+void CCardHost::AckQueryUser(userid_t uid, uint8 * data, uint16 len)
+{
     uint32 ptr = 0;
     uint16 crc = 0, cmdlen = 0;
     uint8 * buf = (uint8 *)cbuffer_write(cmdbuf);
@@ -334,26 +343,44 @@ void CCardHost::AckQueryUser(userid_t uid, uint8 * data, uint16 len) {
     }
     buf[ptr] = 0xAA;
     // skip cmd length
-    if (len < 255) ptr += 2; else ptr += 4;
-    buf[ptr] = 0xFF; ptr ++;
-    buf[ptr] = 0xFF; ptr ++;
-    buf[ptr] = 0xFF; ptr ++;
-    buf[ptr] = 0xFF; ptr ++;
-    buf[ptr] = 0xFF; ptr ++;
-    buf[ptr] = 0xFF; ptr ++;
-    buf[ptr] = 0x00; ptr ++;
-    buf[ptr] = 0x00; ptr ++;
-    buf[ptr] = 0x00; ptr ++;
-    buf[ptr] = 0x00; ptr ++;
-    buf[ptr] = 0x00; ptr ++;
-    buf[ptr] = 0x00; ptr ++;
+    if (len < 255) ptr += 2;
+    else ptr += 4;
+    buf[ptr] = 0xFF;
+    ptr ++;
+    buf[ptr] = 0xFF;
+    ptr ++;
+    buf[ptr] = 0xFF;
+    ptr ++;
+    buf[ptr] = 0xFF;
+    ptr ++;
+    buf[ptr] = 0xFF;
+    ptr ++;
+    buf[ptr] = 0xFF;
+    ptr ++;
+    buf[ptr] = 0x00;
+    ptr ++;
+    buf[ptr] = 0x00;
+    ptr ++;
+    buf[ptr] = 0x00;
+    ptr ++;
+    buf[ptr] = 0x00;
+    ptr ++;
+    buf[ptr] = 0x00;
+    ptr ++;
+    buf[ptr] = 0x00;
+    ptr ++;
     if (data == NULL && len == 0) {
-        buf[ptr] = 0x81; ptr ++;
-        memcpy(buf + ptr, uid.x, sizeof(userid_t)); ptr += sizeof(userid_t);
+        buf[ptr] = 0x81;
+        ptr ++;
+        memcpy(buf + ptr, uid.x, sizeof(userid_t));
+        ptr += sizeof(userid_t);
     } else {
-        buf[ptr] = 0x01; ptr ++;
-        memcpy(buf + ptr, uid.x, sizeof(userid_t)); ptr += sizeof(userid_t);
-        memcpy(buf + ptr, data, len); ptr += len;
+        buf[ptr] = 0x01;
+        ptr ++;
+        memcpy(buf + ptr, uid.x, sizeof(userid_t));
+        ptr += sizeof(userid_t);
+        memcpy(buf + ptr, data, len);
+        ptr += len;
     }
     // set cmd length
     cmdlen = 1 + sizeof(userid_t) + len + 2; // status + uid + data + crc
@@ -365,14 +392,17 @@ void CCardHost::AckQueryUser(userid_t uid, uint8 * data, uint16 len) {
         buf[3] = cmdlen & 0xFF;
     }
     crc = GenerateCRC(buf, ptr);
-    buf[ptr] = (crc>>8) & 0xFF; ptr ++;
-    buf[ptr] = crc & 0xFF; ptr ++;
+    buf[ptr] = (crc>>8) & 0xFF;
+    ptr ++;
+    buf[ptr] = crc & 0xFF;
+    ptr ++;
     cbuffer_write_done(cmdbuf);
     DEBUG("Response: ");
     hexdump(buf, ptr);
 }
 
-void CCardHost::AckRecharge(userid_t uid, uint8 * data, uint16 len) {
+void CCardHost::AckRecharge(userid_t uid, uint8 * data, uint16 len)
+{
     DEBUG("Get %d bytes: ", len);
     hexdump(data, len);
     uint32 ptr = 0;
@@ -384,26 +414,44 @@ void CCardHost::AckRecharge(userid_t uid, uint8 * data, uint16 len) {
     }
     buf[ptr] = 0xAA;
     // skip cmd length
-    if (len < 255) ptr += 2; else ptr += 4;
-    buf[ptr] = 0xFF; ptr ++;
-    buf[ptr] = 0xFF; ptr ++;
-    buf[ptr] = 0xFF; ptr ++;
-    buf[ptr] = 0xFF; ptr ++;
-    buf[ptr] = 0xFF; ptr ++;
-    buf[ptr] = 0xFF; ptr ++;
-    buf[ptr] = 0x00; ptr ++;
-    buf[ptr] = 0x00; ptr ++;
-    buf[ptr] = 0x00; ptr ++;
-    buf[ptr] = 0x00; ptr ++;
-    buf[ptr] = 0x00; ptr ++;
-    buf[ptr] = 0x00; ptr ++;
+    if (len < 255) ptr += 2;
+    else ptr += 4;
+    buf[ptr] = 0xFF;
+    ptr ++;
+    buf[ptr] = 0xFF;
+    ptr ++;
+    buf[ptr] = 0xFF;
+    ptr ++;
+    buf[ptr] = 0xFF;
+    ptr ++;
+    buf[ptr] = 0xFF;
+    ptr ++;
+    buf[ptr] = 0xFF;
+    ptr ++;
+    buf[ptr] = 0x00;
+    ptr ++;
+    buf[ptr] = 0x00;
+    ptr ++;
+    buf[ptr] = 0x00;
+    ptr ++;
+    buf[ptr] = 0x00;
+    ptr ++;
+    buf[ptr] = 0x00;
+    ptr ++;
+    buf[ptr] = 0x00;
+    ptr ++;
     if (len == 0) {
-        buf[ptr] = 0x82; ptr ++;
-        memcpy(buf + ptr, uid.x, sizeof(userid_t)); ptr += sizeof(userid_t);
+        buf[ptr] = 0x82;
+        ptr ++;
+        memcpy(buf + ptr, uid.x, sizeof(userid_t));
+        ptr += sizeof(userid_t);
     } else {
-        buf[ptr] = 0x02; ptr ++;
-        memcpy(buf + ptr, uid.x, sizeof(userid_t)); ptr += sizeof(userid_t);
-        memcpy(buf + ptr, data, len); ptr += len;
+        buf[ptr] = 0x02;
+        ptr ++;
+        memcpy(buf + ptr, uid.x, sizeof(userid_t));
+        ptr += sizeof(userid_t);
+        memcpy(buf + ptr, data, len);
+        ptr += len;
     }
     // set cmd length
     cmdlen = 1 + sizeof(userid_t) + len + 2; // status + uid + data + crc
@@ -415,14 +463,17 @@ void CCardHost::AckRecharge(userid_t uid, uint8 * data, uint16 len) {
         buf[3] = cmdlen & 0xFF;
     }
     crc = GenerateCRC(buf, ptr);
-    buf[ptr] = (crc>>8) & 0xFF; ptr ++;
-    buf[ptr] = crc & 0xFF; ptr ++;
+    buf[ptr] = (crc>>8) & 0xFF;
+    ptr ++;
+    buf[ptr] = crc & 0xFF;
+    ptr ++;
     cbuffer_write_done(cmdbuf);
     DEBUG("Response: ");
     hexdump(buf, ptr);
 }
 
-void CCardHost::AckTimeOrRemove(uint8 * data, uint16 len) {
+void CCardHost::AckTimeOrRemove(uint8 * data, uint16 len)
+{
     uint32 ptr = 0, now = 0;
     uint16 crc = 0, cmdlen = 0;
     uint8 * buf = (uint8 *)cbuffer_write(cmdbuf);
@@ -440,32 +491,52 @@ void CCardHost::AckTimeOrRemove(uint8 * data, uint16 len) {
     }
     buf[ptr] = 0xAA;
     // skip cmd length
-    if (len < 255) ptr += 2; else ptr += 4;
-    buf[ptr] = 0xFF; ptr ++;
-    buf[ptr] = 0xFF; ptr ++;
-    buf[ptr] = 0xFF; ptr ++;
-    buf[ptr] = 0xFF; ptr ++;
-    buf[ptr] = 0xFF; ptr ++;
-    buf[ptr] = 0xFF; ptr ++;
-    buf[ptr] = 0x00; ptr ++;
-    buf[ptr] = 0x00; ptr ++;
-    buf[ptr] = 0x00; ptr ++;
-    buf[ptr] = 0x00; ptr ++;
-    buf[ptr] = 0x00; ptr ++;
-    buf[ptr] = 0x00; ptr ++;
+    if (len < 255) ptr += 2;
+    else ptr += 4;
+    buf[ptr] = 0xFF;
+    ptr ++;
+    buf[ptr] = 0xFF;
+    ptr ++;
+    buf[ptr] = 0xFF;
+    ptr ++;
+    buf[ptr] = 0xFF;
+    ptr ++;
+    buf[ptr] = 0xFF;
+    ptr ++;
+    buf[ptr] = 0xFF;
+    ptr ++;
+    buf[ptr] = 0x00;
+    ptr ++;
+    buf[ptr] = 0x00;
+    ptr ++;
+    buf[ptr] = 0x00;
+    ptr ++;
+    buf[ptr] = 0x00;
+    ptr ++;
+    buf[ptr] = 0x00;
+    ptr ++;
+    buf[ptr] = 0x00;
+    ptr ++;
     if (len == 0) {
         if (info.size() == 0) {
-            buf[ptr] = 0xf5; ptr ++;
+            buf[ptr] = 0xf5;
+            ptr ++;
         } else {
-            buf[ptr] = 0x05; ptr ++;
+            buf[ptr] = 0x05;
+            ptr ++;
         }
-        buf[ptr] = now & 0xFF; ptr ++;
-        buf[ptr] = (now >> 8) & 0xFF; ptr ++;
-        buf[ptr] = (now >> 16) & 0xFF; ptr ++;
-        buf[ptr] = (now >> 24) & 0xFF; ptr ++;
+        buf[ptr] = now & 0xFF;
+        ptr ++;
+        buf[ptr] = (now >> 8) & 0xFF;
+        ptr ++;
+        buf[ptr] = (now >> 16) & 0xFF;
+        ptr ++;
+        buf[ptr] = (now >> 24) & 0xFF;
+        ptr ++;
         len = 4;
     } else {
-        buf[ptr] = 0x85; ptr ++;
+        buf[ptr] = 0x85;
+        ptr ++;
         for (uint16 i = 0; i < len; i ++) {
             buf[ptr + i] = data[i];
         }
@@ -481,14 +552,17 @@ void CCardHost::AckTimeOrRemove(uint8 * data, uint16 len) {
         buf[3] = cmdlen & 0xFF;
     }
     crc = GenerateCRC(buf, ptr);
-    buf[ptr] = (crc>>8) & 0xFF; ptr ++;
-    buf[ptr] = crc & 0xFF; ptr ++;
+    buf[ptr] = (crc>>8) & 0xFF;
+    ptr ++;
+    buf[ptr] = crc & 0xFF;
+    ptr ++;
     cbuffer_write_done(cmdbuf);
     DEBUG("Response: ");
     hexdump(buf, ptr);
 }
 
-bool CCardHost::GetCardInfo(vector<cardaddr_t>& i) {
+bool CCardHost::GetCardInfo(vector<cardaddr_t>& i)
+{
     if (!infoGotten) {
         return false;
     }

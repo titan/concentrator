@@ -52,7 +52,8 @@ extern bool cardhostEnabled;
 int valveTimeout;
 
 
-static int InitHotplugSock() {
+static int InitHotplugSock()
+{
     struct sockaddr_nl snl;
     const int buffersize = 16 * 1024;
     int retval;
@@ -77,28 +78,32 @@ static int InitHotplugSock() {
     return hotplug_sock;
 }
 
-static void PrintHZ(char x, char y, const char* pHZ, uint8 HZLen) {
-   for(uint8 i = 0; i < HZLen; i++) {
-      lcdwritehz(pHZ[i], y, x+i, 0);
-   }
+static void PrintHZ(char x, char y, const char* pHZ, uint8 HZLen)
+{
+    for (uint8 i = 0; i < HZLen; i++) {
+        lcdwritehz(pHZ[i], y, x+i, 0);
+    }
 }
 
-static void PrintChar(char x, char y, const char * buf) {
+static void PrintChar(char x, char y, const char * buf)
+{
     char dx = x * 2;
-    for(int i = 0, len = strlen(buf); i < len; i ++){
-      lcdwritechar(buf[i], y, dx + i, 0, 0, 0, 0, 0);
-   }
+    for (int i = 0, len = strlen(buf); i < len; i ++) {
+        lcdwritechar(buf[i], y, dx + i, 0, 0, 0, 0, 0);
+    }
 }
 
 CMainLoop * CMainLoop::instance = NULL;
-CMainLoop * CMainLoop::GetInstance() {
+CMainLoop * CMainLoop::GetInstance()
+{
     if (instance == NULL) {
         instance = new CMainLoop();
     }
     return instance;
 }
 
-CMainLoop::CMainLoop() {
+CMainLoop::CMainLoop()
+{
     usbmode = false;
     int len = heatCount + 6;
     borders = new uint8[len];
@@ -123,14 +128,16 @@ CMainLoop::CMainLoop() {
     }
 }
 
-CMainLoop::~CMainLoop() {
+CMainLoop::~CMainLoop()
+{
     delete borders;
     delete checkings;
     if (hotplug != -1)
         close(hotplug);
 }
 
-void CMainLoop::Run() {
+void CMainLoop::Run()
+{
 
     fd_set rfds;
     struct timeval tv;
@@ -299,7 +306,8 @@ void CMainLoop::Run() {
     }
 }
 
-void CMainLoop::Draw() {
+void CMainLoop::Draw()
+{
     if (usbmode) {
         switch (usbstate) {
         case 0:
@@ -341,7 +349,8 @@ void CMainLoop::Draw() {
     }
 }
 
-void CMainLoop::DrawInitial() {
+void CMainLoop::DrawInitial()
+{
     LCDClear();
     char buf[32] = {0};
     bzero(buf, 32);
@@ -358,7 +367,8 @@ void CMainLoop::DrawInitial() {
     }
 }
 
-void CMainLoop::DrawStatus() {
+void CMainLoop::DrawStatus()
+{
     LCDClear();
     bool ok = false;
     Status status = IValveMonitorFactory::GetInstance()->GetStatus();
@@ -412,7 +422,8 @@ void CMainLoop::DrawStatus() {
     checkings[vidx] = ~ok;
 }
 
-void CMainLoop::DrawGPRS() {
+void CMainLoop::DrawGPRS()
+{
     LCDClear();
     uint8 signal = 99;
     char buf[16];
@@ -453,7 +464,8 @@ void CMainLoop::DrawGPRS() {
     }
 }
 
-void CMainLoop::DrawForwarder() {
+void CMainLoop::DrawForwarder()
+{
     LCDClear();
     static ForwarderInfoListT info;
 
@@ -497,7 +509,8 @@ void CMainLoop::DrawForwarder() {
     }
 }
 
-void CMainLoop::DrawValve() {
+void CMainLoop::DrawValve()
+{
     char buf[32];
     LCDClear();
     PrintHZ(0, TL_Y0, "阀控器数量", 5);
@@ -535,7 +548,8 @@ void CMainLoop::DrawValve() {
     }
 }
 
-void CMainLoop::DrawHeat() {
+void CMainLoop::DrawHeat()
+{
     uint8 idx = vidx - 4;
     HeatNodeInfoListT info;
     LCDClear();
@@ -610,7 +624,8 @@ void CMainLoop::DrawHeat() {
     }
 }
 
-void CMainLoop::DrawCardHost() {
+void CMainLoop::DrawCardHost()
+{
     LCDClear();
     PrintHZ(0, TL_Y0, "集中刷卡器状态", 7);
     if (!cardhostEnabled) {
@@ -645,27 +660,31 @@ void CMainLoop::DrawCardHost() {
     }
 }
 
-void CMainLoop::DrawUsbPlugin() {
+void CMainLoop::DrawUsbPlugin()
+{
     LCDClear();
     PrintHZ(0, DL_Y0, "检测到授权磁盘", 7);
     PrintHZ(0, DL_Y1, "是否备份数据", 6);
     PrintChar(6, DL_Y1, "?");
 }
 
-void CMainLoop::DrawUsbBackup() {
+void CMainLoop::DrawUsbBackup()
+{
     LCDClear();
     PrintHZ(0, DL_Y0, "正在备份数据中", 7);
     PrintHZ(0, DL_Y1, "请等待", 3);
     PrintChar(3, DL_Y1, "...");
 }
 
-void CMainLoop::DrawUsbDone() {
+void CMainLoop::DrawUsbDone()
+{
     LCDClear();
     PrintHZ(0, DL_Y0, "数据备份完成", 6);
     PrintHZ(0, DL_Y1, "请拔出磁盘", 5);
 }
 
-void CMainLoop::Write(uint8 * data, uint16 len) {
+void CMainLoop::Write(uint8 * data, uint16 len)
+{
     if (com == -1) return;
     TX_ENABLE(gpio);
     write(com, data, len);

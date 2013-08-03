@@ -31,8 +31,8 @@ along with CINI.  If not, see <http://www.gnu.org/licenses/>.
 */
 CINISection::CINISection(const CINISection & section)
 {
-	this->m_name = section.m_name;
-	Copy(section);
+    this->m_name = section.m_name;
+    Copy(section);
 }
 
 /**
@@ -41,8 +41,8 @@ CINISection::CINISection(const CINISection & section)
 */
 CINISection::CINISection(const std::string & name)
 {
-	this->m_type = INI_ELEMENT_SECTION;
-	SetName(name);
+    this->m_type = INI_ELEMENT_SECTION;
+    SetName(name);
 }
 
 /**
@@ -50,7 +50,7 @@ CINISection::CINISection(const std::string & name)
 */
 CINISection::~CINISection()
 {
-	Clear();
+    Clear();
 }
 
 /**
@@ -59,7 +59,7 @@ CINISection::~CINISection()
 */
 void CINISection::SetName(const std::string & name)
 {
-	this->m_name = name;
+    this->m_name = name;
 }
 
 /**
@@ -68,7 +68,7 @@ void CINISection::SetName(const std::string & name)
 */
 void CINISection::AddElement(CINIElement * element)
 {
-	this->m_data.push_back(element);
+    this->m_data.push_back(element);
 }
 
 /**
@@ -77,41 +77,37 @@ void CINISection::AddElement(CINIElement * element)
 */
 void CINISection::Copy(const CINISection & section)
 {
-	CINIProperty * tmp;
-	CINIProperty * tmp2;
+    CINIProperty * tmp;
+    CINIProperty * tmp2;
 
-	for(TSectionElements::const_iterator it = section.m_data.begin() ; it != section.m_data.end() ; ++it)
-	{
-		switch((*it)->GetType())
-		{
-		case INI_ELEMENT_COMMENT:
-			this->m_data.push_back(new CINIComment((*(CINIComment*)(*it))));
-			break;
+    for (TSectionElements::const_iterator it = section.m_data.begin() ; it != section.m_data.end() ; ++it) {
+        switch ((*it)->GetType()) {
+        case INI_ELEMENT_COMMENT:
+            this->m_data.push_back(new CINIComment((*(CINIComment*)(*it))));
+            break;
 
-		case INI_ELEMENT_PROPERTY:
-			// Get the current and the futur property
-			tmp = (CINIProperty*)(*it);
-			tmp2 = GetProperty(tmp->GetKey());
+        case INI_ELEMENT_PROPERTY:
+            // Get the current and the futur property
+            tmp = (CINIProperty*)(*it);
+            tmp2 = GetProperty(tmp->GetKey());
 
-			// If the property already exists, it need to be modified
-			if(tmp2 != NULL)
-			{
-				tmp2->SetValue(tmp->GetValue());
+            // If the property already exists, it need to be modified
+            if (tmp2 != NULL) {
+                tmp2->SetValue(tmp->GetValue());
 
-				// Only replace when a comment exists in the copied property
-				if(tmp->GetComment() != "")
-					tmp->SetComment(tmp->GetComment());
-			}
-			else
-				// If no property exists, simply create it
-				this->m_data.push_back(new CINIProperty((*(CINIProperty*)(*it))));
+                // Only replace when a comment exists in the copied property
+                if (tmp->GetComment() != "")
+                    tmp->SetComment(tmp->GetComment());
+            } else
+                // If no property exists, simply create it
+                this->m_data.push_back(new CINIProperty((*(CINIProperty*)(*it))));
 
-			break;
+            break;
 
-		default:
-			break;
-		}
-	}
+        default:
+            break;
+        }
+    }
 }
 
 /**
@@ -119,27 +115,25 @@ void CINISection::Copy(const CINISection & section)
 */
 void CINISection::RemoveAllComments()
 {
-	for(TSectionElements::iterator it = this->m_data.begin() ; it != this->m_data.end() ; )
-	{
-		switch((*it)->GetType())
-		{
-		case INI_ELEMENT_COMMENT:
-			// The element is a comment, we remove it
-			delete *it;
-			it = this->m_data.erase(it);
-			break;
+    for (TSectionElements::iterator it = this->m_data.begin() ; it != this->m_data.end() ; ) {
+        switch ((*it)->GetType()) {
+        case INI_ELEMENT_COMMENT:
+            // The element is a comment, we remove it
+            delete *it;
+            it = this->m_data.erase(it);
+            break;
 
-		case INI_ELEMENT_PROPERTY:
-			// The element is a property, we reset the comment
-			static_cast<CINIProperty*>(*it)->SetComment("");
-			++it;
-			break;
+        case INI_ELEMENT_PROPERTY:
+            // The element is a property, we reset the comment
+            static_cast<CINIProperty*>(*it)->SetComment("");
+            ++it;
+            break;
 
-		default:
-			++it;
-			break;
-		}
-	}
+        default:
+            ++it;
+            break;
+        }
+    }
 }
 
 /**
@@ -149,10 +143,10 @@ void CINISection::RemoveAllComments()
 */
 const CINISection & CINISection::operator=(const CINISection & section)
 {
-	Clear();
-	Copy(section);
+    Clear();
+    Copy(section);
 
-	return *this;
+    return *this;
 }
 
 /**
@@ -161,7 +155,7 @@ const CINISection & CINISection::operator=(const CINISection & section)
 */
 const TSectionElements & CINISection::GetElements() const
 {
-	return this->m_data;
+    return this->m_data;
 }
 
 /**
@@ -170,7 +164,7 @@ const TSectionElements & CINISection::GetElements() const
 */
 const std::string & CINISection::GetName() const
 {
-	return this->m_name;
+    return this->m_name;
 }
 
 /**
@@ -179,15 +173,15 @@ const std::string & CINISection::GetName() const
 */
 const std::string CINISection::ToString() const
 {
-	std::string result = "";
-	if(this->m_name != "")
-		result += "[" + this->m_name + "]\n";
+    std::string result = "";
+    if (this->m_name != "")
+        result += "[" + this->m_name + "]\n";
 
-	for(TSectionElements::const_iterator it = this->m_data.begin() ; it != this->m_data.end() ; ++it)
-		result += (*it)->ToString() + "\n";
-	result += "\n";
+    for (TSectionElements::const_iterator it = this->m_data.begin() ; it != this->m_data.end() ; ++it)
+        result += (*it)->ToString() + "\n";
+    result += "\n";
 
-	return result;
+    return result;
 }
 
 /**
@@ -196,23 +190,20 @@ const std::string CINISection::ToString() const
 */
 CINIProperty * CINISection::GetProperty(const std::string & key) const
 {
-	CINIProperty * result = NULL;
+    CINIProperty * result = NULL;
 
-	// Search for the key
-	for(TSectionElements::const_iterator it = this->m_data.begin() ; it != this->m_data.end() ; ++it)
-	{
-		if((*it)->GetType() == INI_ELEMENT_PROPERTY)
-		{
-			CINIProperty * data = (CINIProperty*)(*it);
-			if(data->GetKey() == key)
-			{
-				result = data;
-				break;
-			}
-		}
-	}
+    // Search for the key
+    for (TSectionElements::const_iterator it = this->m_data.begin() ; it != this->m_data.end() ; ++it) {
+        if ((*it)->GetType() == INI_ELEMENT_PROPERTY) {
+            CINIProperty * data = (CINIProperty*)(*it);
+            if (data->GetKey() == key) {
+                result = data;
+                break;
+            }
+        }
+    }
 
-	return result;
+    return result;
 }
 
 /**
@@ -220,7 +211,7 @@ CINIProperty * CINISection::GetProperty(const std::string & key) const
 */
 void CINISection::Clear()
 {
-	for(TSectionElements::iterator it = this->m_data.begin() ; it != this->m_data.end() ; ++it)
-		delete *it;
-	this->m_data.clear();
+    for (TSectionElements::iterator it = this->m_data.begin() ; it != this->m_data.end() ; ++it)
+        delete *it;
+    this->m_data.clear();
 }

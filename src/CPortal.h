@@ -64,7 +64,7 @@ class CPortal:public IThread
 {
 
 public:
-    void SetJZQID(uint8 * id) {bzero(this->m_IMEI, IMEI_LEN); memcpy(this->m_IMEI, id, IMEI_LEN);};
+    void SetJZQID(uint32 id) {this->jzqid = id;};
    public:
       void SetGPRS(CGprs* pGPRS);
       bool Init(uint32 nInterval);
@@ -138,7 +138,7 @@ public:
    protected:
       CGprs* m_pGPRS;
       CLock m_GPRSLock;
-      uint8 m_IMEI[IMEI_LEN];
+      uint32 jzqid;
    private:
       void OnFixTimer();
    private:

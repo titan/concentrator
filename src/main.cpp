@@ -71,7 +71,8 @@ bool cardhostEnabled = false;
 gpio_attr_t gpioattr;
 int id = 0;
 
-int main() {
+int main()
+{
 
     gpioattr.mode = PIO_MODE_OUT;
     gpioattr.resis = PIO_RESISTOR_DOWN;
@@ -122,199 +123,182 @@ int main() {
 
 static void TrimInvalidChar(string& Str)
 {
-   uint32 Begin = 0;
-   for(; Begin<Str.size(); Begin++)
-   {
-      if( IsChar(Str[Begin]) )
-      {
-         break;
-      }
-   }
-   if(Begin >= Str.size())
-   {
-      return;
-   }
+    uint32 Begin = 0;
+    for (; Begin<Str.size(); Begin++) {
+        if ( IsChar(Str[Begin]) ) {
+            break;
+        }
+    }
+    if (Begin >= Str.size()) {
+        return;
+    }
 
-   uint32 End = Str.size()-1;
-   for(; End>Begin; End--)
-   {
-      if( IsChar(Str[End]) )
-      {
-         break;
-      }
-   }
-   if(End<Begin)
-   {
-      return;
-   }
+    uint32 End = Str.size()-1;
+    for (; End>Begin; End--) {
+        if ( IsChar(Str[End]) ) {
+            break;
+        }
+    }
+    if (End<Begin) {
+        return;
+    }
 
-   DEBUG("Str Begin=%d, End=%d\n", Begin, End);
-   Str = Str.substr(Begin, End+1);
+    DEBUG("Str Begin=%d, End=%d\n", Begin, End);
+    Str = Str.substr(Begin, End+1);
 }
 
 void StartForwarder()
 {
-   //config Forwarder
-   CINI ForwardINI("collect_cfg.ini");
-   string SectionStr = FORWARD_SESSION;
-   string Key = COM_ADDRESS_KEY;
-   string KeyValue = ForwardINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
-   TrimInvalidChar(KeyValue);
+    //config Forwarder
+    CINI ForwardINI("collect_cfg.ini");
+    string SectionStr = FORWARD_SESSION;
+    string Key = COM_ADDRESS_KEY;
+    string KeyValue = ForwardINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
+    TrimInvalidChar(KeyValue);
 
-   SetPIOCfg(getGPIO(KeyValue.c_str()), gpioattr);
-   CForwarderMonitor::GetInstance()->SetGPIO(getGPIO(KeyValue.c_str()));
-   DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
-   CSerialComm* pForwarderCom = new CSerialComm(KeyValue);
-   pForwarderCom->Open();
-   Key = COM_CONFIG_KEY;
-   KeyValue = ForwardINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
-   DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
-   pForwarderCom->SetParity( KeyValue.c_str() );
+    SetPIOCfg(getGPIO(KeyValue.c_str()), gpioattr);
+    CForwarderMonitor::GetInstance()->SetGPIO(getGPIO(KeyValue.c_str()));
+    DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
+    CSerialComm* pForwarderCom = new CSerialComm(KeyValue);
+    pForwarderCom->Open();
+    Key = COM_CONFIG_KEY;
+    KeyValue = ForwardINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
+    DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
+    pForwarderCom->SetParity( KeyValue.c_str() );
 
-   string type = ForwardINI.GetValueString(SectionStr, "VALVETYPE", "temperature");
-   if (type == "heat") {
-       CForwarderMonitor::GetInstance()->SetValveDataType(VALVE_DATA_TYPE_HEAT);
-   } else {
-       CForwarderMonitor::GetInstance()->SetValveDataType(VALVE_DATA_TYPE_TEMPERATURE);
-   }
-   CForwarderMonitor::GetInstance()->SetCom(pForwarderCom);
-   for(uint32 i = 0; i < MAX_FORWARDER_COUNT; i++)
-   {
-      char ForwardIDStr[MAX_COUNT_LEN] = {0};;
-      sprintf(ForwardIDStr, ID_ID_FORMAT.c_str(), i);
-      Key = ForwardIDStr;
-      KeyValue = ForwardINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
-      TrimInvalidChar(KeyValue);
-      DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
-      if(INVALID_KEY_VALUE == KeyValue)
-      {
-         break;
-      }
-      uint32 ForwarderID = 0;
-      sscanf(KeyValue.c_str(), FORWARD_ID_FORMAT.c_str(), &ForwarderID);
-      Revert((uint8*)&ForwarderID, sizeof(ForwarderID));
-      CForwarderMonitor::GetInstance()->AddForwareder( ForwarderID );
-   }
-   SectionStr = TIME_SESSION;
-   Key = TIME_START_KEY;
-   int StartTime = ForwardINI.GetValueInt(SectionStr, Key, DefaultStartTime);
-   DEBUG("[%s]%s=%d\n", SectionStr.c_str(), Key.c_str(), StartTime);
-   Key = TIME_INTERVAL_KEY;
-   int IntervalTime = ForwardINI.GetValueInt(SectionStr, Key, DefaultIntervalTime);
-   DEBUG("[%s]%s=%d\n", SectionStr.c_str(), Key.c_str(), IntervalTime);
-   CForwarderMonitor::GetInstance()->Init(StartTime, IntervalTime);
+    string type = ForwardINI.GetValueString(SectionStr, "VALVETYPE", "temperature");
+    if (type == "heat") {
+        CForwarderMonitor::GetInstance()->SetValveDataType(VALVE_DATA_TYPE_HEAT);
+    } else {
+        CForwarderMonitor::GetInstance()->SetValveDataType(VALVE_DATA_TYPE_TEMPERATURE);
+    }
+    CForwarderMonitor::GetInstance()->SetCom(pForwarderCom);
+    for (uint32 i = 0; i < MAX_FORWARDER_COUNT; i++) {
+        char ForwardIDStr[MAX_COUNT_LEN] = {0};;
+        sprintf(ForwardIDStr, ID_ID_FORMAT.c_str(), i);
+        Key = ForwardIDStr;
+        KeyValue = ForwardINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
+        TrimInvalidChar(KeyValue);
+        DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
+        if (INVALID_KEY_VALUE == KeyValue) {
+            break;
+        }
+        uint32 ForwarderID = 0;
+        sscanf(KeyValue.c_str(), FORWARD_ID_FORMAT.c_str(), &ForwarderID);
+        Revert((uint8*)&ForwarderID, sizeof(ForwarderID));
+        CForwarderMonitor::GetInstance()->AddForwareder( ForwarderID );
+    }
+    SectionStr = TIME_SESSION;
+    Key = TIME_START_KEY;
+    int StartTime = ForwardINI.GetValueInt(SectionStr, Key, DefaultStartTime);
+    DEBUG("[%s]%s=%d\n", SectionStr.c_str(), Key.c_str(), StartTime);
+    Key = TIME_INTERVAL_KEY;
+    int IntervalTime = ForwardINI.GetValueInt(SectionStr, Key, DefaultIntervalTime);
+    DEBUG("[%s]%s=%d\n", SectionStr.c_str(), Key.c_str(), IntervalTime);
+    CForwarderMonitor::GetInstance()->Init(StartTime, IntervalTime);
 
-   CForwarderMonitor::GetInstance()->Start();
+    CForwarderMonitor::GetInstance()->Start();
 }
 
 
 void StartGeneralHeat()
 {
-   //config general heat
-   CINI GeneralHeatINI("meter_cfg.ini");
-   string SectionStr = HEAT_SESSION;
-   string Key = COM_ADDRESS_KEY;
-   string KeyValue = GeneralHeatINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
-   TrimInvalidChar(KeyValue);
-   DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
-   CSerialComm* pGeneralHeatCom = new CSerialComm(KeyValue);
-   pGeneralHeatCom->Open();
-   Key = COM_CONFIG_KEY;
-   KeyValue = GeneralHeatINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
-   TrimInvalidChar(KeyValue);
-   DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
-   pGeneralHeatCom->SetParity( KeyValue.c_str() );
+    //config general heat
+    CINI GeneralHeatINI("meter_cfg.ini");
+    string SectionStr = HEAT_SESSION;
+    string Key = COM_ADDRESS_KEY;
+    string KeyValue = GeneralHeatINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
+    TrimInvalidChar(KeyValue);
+    DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
+    CSerialComm* pGeneralHeatCom = new CSerialComm(KeyValue);
+    pGeneralHeatCom->Open();
+    Key = COM_CONFIG_KEY;
+    KeyValue = GeneralHeatINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
+    TrimInvalidChar(KeyValue);
+    DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
+    pGeneralHeatCom->SetParity( KeyValue.c_str() );
 
-   CHeatMonitor::GetInstance()->SetCom(pGeneralHeatCom);
-   for(uint32 i = 0; i < MAX_HEAT_COUNT; i++)
-   {
-      char GeneralHeatAddressFormat[128] = {0};
-      sprintf(GeneralHeatAddressFormat, ID_ID_FORMAT.c_str(), i);
-      Key = GeneralHeatAddressFormat;
-      DEBUG("GeneralHeatAddressFormat=%s\n", GeneralHeatAddressFormat);
-      KeyValue = GeneralHeatINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
-      TrimInvalidChar(KeyValue);
-      DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
-      if(INVALID_KEY_VALUE == KeyValue)
-      {
-         break;
-      }
-      bool Ret = true;
-      uint8 GeneralHeatAddress[MACHINENAME_LEN] = {0};;
-      uint8 LowByte = 0;
-      uint8 HighByte = 0;
-      for(uint8 i = 0; ((i+1) < KeyValue.size()) && ((i/2)<sizeof(GeneralHeatAddress)); i+=2)
-      {
-         if( ( false == Char2Int(KeyValue[KeyValue.size()-i-1], LowByte) ) || ( false == Char2Int(KeyValue[KeyValue.size()-i-2], HighByte) ) )
-         {
-            DEBUG("%s is not a valid heat address\n", KeyValue.c_str());
-            Ret = false;
+    CHeatMonitor::GetInstance()->SetCom(pGeneralHeatCom);
+    for (uint32 i = 0; i < MAX_HEAT_COUNT; i++) {
+        char GeneralHeatAddressFormat[128] = {0};
+        sprintf(GeneralHeatAddressFormat, ID_ID_FORMAT.c_str(), i);
+        Key = GeneralHeatAddressFormat;
+        DEBUG("GeneralHeatAddressFormat=%s\n", GeneralHeatAddressFormat);
+        KeyValue = GeneralHeatINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
+        TrimInvalidChar(KeyValue);
+        DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
+        if (INVALID_KEY_VALUE == KeyValue) {
             break;
-         }
-         GeneralHeatAddress[i/2] = (HighByte<<4)|LowByte;
-      }
-      if(Ret)
-      {
-         DEBUG("Heat node address:");
-         PrintData(GeneralHeatAddress, sizeof(GeneralHeatAddress));
-         CHeatMonitor::GetInstance()->AddGeneralHeat((uint8*)GeneralHeatAddress, sizeof(GeneralHeatAddress));
-         heatCount ++;
-      }
-   }
-   SectionStr = TIME_SESSION;
-   Key = TIME_START_KEY;
-   int StartTime = GeneralHeatINI.GetValueInt(SectionStr, Key, DefaultStartTime);
-   DEBUG("[%s]%s=%d\n", SectionStr.c_str(), Key.c_str(), StartTime);
-   Key = TIME_INTERVAL_KEY;
-   int IntervalTime = GeneralHeatINI.GetValueInt(SectionStr, Key, DefaultIntervalTime);
-   DEBUG("[%s]%s=%d\n", SectionStr.c_str(), Key.c_str(), IntervalTime);
-   CHeatMonitor::GetInstance()->Init(StartTime, IntervalTime);
+        }
+        bool Ret = true;
+        uint8 GeneralHeatAddress[MACHINENAME_LEN] = {0};;
+        uint8 LowByte = 0;
+        uint8 HighByte = 0;
+        for (uint8 i = 0; ((i+1) < KeyValue.size()) && ((i/2)<sizeof(GeneralHeatAddress)); i+=2) {
+            if ( ( false == Char2Int(KeyValue[KeyValue.size()-i-1], LowByte) ) || ( false == Char2Int(KeyValue[KeyValue.size()-i-2], HighByte) ) ) {
+                DEBUG("%s is not a valid heat address\n", KeyValue.c_str());
+                Ret = false;
+                break;
+            }
+            GeneralHeatAddress[i/2] = (HighByte<<4)|LowByte;
+        }
+        if (Ret) {
+            DEBUG("Heat node address:");
+            PrintData(GeneralHeatAddress, sizeof(GeneralHeatAddress));
+            CHeatMonitor::GetInstance()->AddGeneralHeat((uint8*)GeneralHeatAddress, sizeof(GeneralHeatAddress));
+            heatCount ++;
+        }
+    }
+    SectionStr = TIME_SESSION;
+    Key = TIME_START_KEY;
+    int StartTime = GeneralHeatINI.GetValueInt(SectionStr, Key, DefaultStartTime);
+    DEBUG("[%s]%s=%d\n", SectionStr.c_str(), Key.c_str(), StartTime);
+    Key = TIME_INTERVAL_KEY;
+    int IntervalTime = GeneralHeatINI.GetValueInt(SectionStr, Key, DefaultIntervalTime);
+    DEBUG("[%s]%s=%d\n", SectionStr.c_str(), Key.c_str(), IntervalTime);
+    CHeatMonitor::GetInstance()->Init(StartTime, IntervalTime);
 
-   CHeatMonitor::GetInstance()->Start();
+    CHeatMonitor::GetInstance()->Start();
 }
 
 void StartPortal()
 {
-   CINI GPRSINI("gprs_cfg.ini");
-   string SectionStr = GPRS_SESSION ;
-   string Key = COM_ADDRESS_KEY;
-   string KeyValue = GPRSINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
-   TrimInvalidChar(KeyValue);
-   DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
-   CGprs* pGPRS = new CGprs(KeyValue);
-   pGPRS->Open();
-   Key = COM_CONFIG_KEY;
-   KeyValue = GPRSINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
-   TrimInvalidChar(KeyValue);
-   DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
-   pGPRS->SetParity( KeyValue.c_str() );
+    CINI GPRSINI("gprs_cfg.ini");
+    string SectionStr = GPRS_SESSION ;
+    string Key = COM_ADDRESS_KEY;
+    string KeyValue = GPRSINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
+    TrimInvalidChar(KeyValue);
+    DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
+    CGprs* pGPRS = new CGprs(KeyValue);
+    pGPRS->Open();
+    Key = COM_CONFIG_KEY;
+    KeyValue = GPRSINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
+    TrimInvalidChar(KeyValue);
+    DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
+    pGPRS->SetParity( KeyValue.c_str() );
 
-   Key = GPRS_LOCAL_PORT;
-   uint32 LocalPort = GPRSINI.GetValueInt(SectionStr, Key, 0/*default port*/);
-   DEBUG("[%s]%s=%d\n", SectionStr.c_str(), Key.c_str(), LocalPort);
+    Key = GPRS_LOCAL_PORT;
+    uint32 LocalPort = GPRSINI.GetValueInt(SectionStr, Key, 0/*default port*/);
+    DEBUG("[%s]%s=%d\n", SectionStr.c_str(), Key.c_str(), LocalPort);
 
-   Key = GPRS_SERVER_IP;
-   KeyValue = GPRSINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
-   TrimInvalidChar(KeyValue);
-   DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
+    Key = GPRS_SERVER_IP;
+    KeyValue = GPRSINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
+    TrimInvalidChar(KeyValue);
+    DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
 
-   Key = GPRS_SERVER_PORT;
-   uint32 DestPort = GPRSINI.GetValueInt(SectionStr, Key, 0/*default port*/);
-   DEBUG("[%s]%s=%d\n", SectionStr.c_str(), Key.c_str(), DestPort);
-   pGPRS->SetIP(LocalPort, KeyValue.c_str(), DestPort);
+    Key = GPRS_SERVER_PORT;
+    uint32 DestPort = GPRSINI.GetValueInt(SectionStr, Key, 0/*default port*/);
+    DEBUG("[%s]%s=%d\n", SectionStr.c_str(), Key.c_str(), DestPort);
+    pGPRS->SetIP(LocalPort, KeyValue.c_str(), DestPort);
 
-   uint8 jzqid[16];
-   bzero(jzqid, 16);
-   sprintf((char *)jzqid, "%08d", id);
+    CPortal::GetInstance()->SetJZQID((uint32)id);
+    CPortal::GetInstance()->SetGPRS(pGPRS);
+    Key = GPRS_HEART_INTERVAL;
+    int HeartInterval = GPRSINI.GetValueInt(SectionStr, Key, DefaultIntervalTime);
 
-   CPortal::GetInstance()->SetJZQID(jzqid);
-   CPortal::GetInstance()->SetGPRS(pGPRS);
-   Key = GPRS_HEART_INTERVAL;
-   int HeartInterval = GPRSINI.GetValueInt(SectionStr, Key, DefaultIntervalTime);
+    CPortal::GetInstance()->Init(HeartInterval);
 
-   CPortal::GetInstance()->Init(HeartInterval);
-
-   CPortal::GetInstance()->Start();
+    CPortal::GetInstance()->Start();
 }
 
 #ifdef SECKEY
@@ -323,10 +307,17 @@ void StartPortal()
 #else
 #define SECKEY "HOST"
 #endif
-void StartCardHost() {
-    if (access("cardhost_cfg.ini", F_OK) == -1) { DEBUG("Missing cardhost_cfg.ini\n"); return;}
+void StartCardHost()
+{
+    if (access("cardhost_cfg.ini", F_OK) == -1) {
+        DEBUG("Missing cardhost_cfg.ini\n");
+        return;
+    }
     CINI ini("cardhost_cfg.ini");
-    if (!ini.GetValueBool(SECKEY, "RUN", false)) {DEBUG("Forbid card host service\n"); return;}
+    if (!ini.GetValueBool(SECKEY, "RUN", false)) {
+        DEBUG("Forbid card host service\n");
+        return;
+    }
     string name = ini.GetValueString(SECKEY, "DEVICE", "/dev/ttyS4");
     TrimInvalidChar(name);
     string cfg = ini.GetValueString(SECKEY, "DEV_CONFIG", "115200,8,1,N");
@@ -350,8 +341,12 @@ void StartCardHost() {
 #else
 #define SECKEY "VALVE"
 #endif
-void StartValveMonitor() {
-    if (access("valve_cfg.ini", F_OK) == -1) { DEBUG("Missing valve_cfg.ini\n"); return;}
+void StartValveMonitor()
+{
+    if (access("valve_cfg.ini", F_OK) == -1) {
+        DEBUG("Missing valve_cfg.ini\n");
+        return;
+    }
     CINI ini("valve_cfg.ini");
     string name = ini.GetValueString(SECKEY, "DEVICE", "/dev/ttyS5");
     TrimInvalidChar(name);

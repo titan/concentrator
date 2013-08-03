@@ -31,9 +31,9 @@ along with CINI.  If not, see <http://www.gnu.org/licenses/>.
 */
 CINIProperty::CINIProperty(const std::string & key, const std::string & value)
 {
-	this->m_type = INI_ELEMENT_PROPERTY;
-	this->m_key = key;
-	SetValue(value);
+    this->m_type = INI_ELEMENT_PROPERTY;
+    this->m_key = key;
+    SetValue(value);
 }
 
 /**
@@ -44,10 +44,10 @@ CINIProperty::CINIProperty(const std::string & key, const std::string & value)
 */
 CINIProperty::CINIProperty(const std::string & key, const std::string & value, const std::string & comment)
 {
-	this->m_type = INI_ELEMENT_PROPERTY;
-	this->m_key = key;
-	SetValue(value);
-	SetComment(comment);
+    this->m_type = INI_ELEMENT_PROPERTY;
+    this->m_key = key;
+    SetValue(value);
+    SetComment(comment);
 }
 
 /**
@@ -56,7 +56,7 @@ CINIProperty::CINIProperty(const std::string & key, const std::string & value, c
 */
 void CINIProperty::SetValue(const std::string & value)
 {
-	this->m_value = value;
+    this->m_value = value;
 }
 
 /**
@@ -65,7 +65,7 @@ void CINIProperty::SetValue(const std::string & value)
 */
 void CINIProperty::SetComment(const std::string & comment)
 {
-	this->m_comment = comment;
+    this->m_comment = comment;
 }
 
 /**
@@ -74,7 +74,7 @@ void CINIProperty::SetComment(const std::string & comment)
 */
 const std::string & CINIProperty::GetKey() const
 {
-	return this->m_key;
+    return this->m_key;
 }
 
 /**
@@ -83,7 +83,7 @@ const std::string & CINIProperty::GetKey() const
 */
 const std::string & CINIProperty::GetValue() const
 {
-	return this->m_value;
+    return this->m_value;
 }
 
 /**
@@ -92,7 +92,7 @@ const std::string & CINIProperty::GetValue() const
 */
 const std::string & CINIProperty::GetComment() const
 {
-	return this->m_comment;
+    return this->m_comment;
 }
 
 /**
@@ -101,13 +101,12 @@ const std::string & CINIProperty::GetComment() const
 */
 const std::string CINIProperty::ToString() const
 {
-	std::string result = "";
-	if(this->m_value != "")
-	{
-		result = this->m_key + " = " + this->m_value;
-		if(this->m_comment != "")
-			result += " " + this->m_comment;
-	}
+    std::string result = "";
+    if (this->m_value != "") {
+        result = this->m_key + " = " + this->m_value;
+        if (this->m_comment != "")
+            result += " " + this->m_comment;
+    }
 
-	return result;
+    return result;
 }

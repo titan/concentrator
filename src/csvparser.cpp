@@ -9,44 +9,31 @@ void csvline_populate(vector<string> &record, const string& line, char delimiter
     string curstring;
     record.clear();
 
-    while(line[linepos]!=0 && linepos < linemax)
-    {
+    while (line[linepos]!=0 && linepos < linemax) {
 
         c = line[linepos];
 
-        if (!inquotes && curstring.length()==0 && c=='"')
-        {
+        if (!inquotes && curstring.length()==0 && c=='"') {
             //beginquotechar
             inquotes=true;
-        }
-        else if (inquotes && c=='"')
-        {
+        } else if (inquotes && c=='"') {
             //quotechar
-            if ( (linepos+1 <linemax) && (line[linepos+1]=='"') )
-            {
+            if ( (linepos+1 <linemax) && (line[linepos+1]=='"') ) {
                 //encountered 2 double quotes in a row (resolves to 1 double quote)
                 curstring.push_back(c);
                 linepos++;
-            }
-            else
-            {
+            } else {
                 //endquotechar
                 inquotes=false;
             }
-        }
-        else if (!inquotes && c==delimiter)
-        {
+        } else if (!inquotes && c==delimiter) {
             //end of field
             record.push_back( curstring );
             curstring="";
-        }
-        else if (!inquotes && (c=='\r' || c=='\n') )
-        {
+        } else if (!inquotes && (c=='\r' || c=='\n') ) {
             record.push_back( curstring );
             return;
-        }
-        else
-        {
+        } else {
             curstring.push_back(c);
         }
         linepos++;

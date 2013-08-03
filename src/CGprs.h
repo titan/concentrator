@@ -9,7 +9,7 @@ using namespace std;
 #define LINE_REAL_LEN   64
 #define RX_TIMEOUT      450 // ms
 #define SIM_TIMEOUT     4005 // ms
-#define NETREG_TIMEOUT  20007 // ms
+#define NETREG_TIMEOUT  30007 // ms
 #define SMS_TIMEOUT     18000 // ms
 #define HTTP_TIMEOUT    180000 // ms
 
@@ -20,7 +20,7 @@ enum GPRSWorkMode {
 
 const uint8 UNKNOWN_SIGNAL_INTESITY = 99;
 const uint8 IP_MAX_LEN = 128;
-const uint8 IMEI_LEN = 15;
+const uint8 IMEI_LEN = 4;
 const uint32 MAX_GPRS_PACKET_LEN = 1024;
 const uint32 GPRS_PACKET_LEN_LEN = 2;//each GPRS packet length is 2 bytes
 class CGprs:public CSerialComm
@@ -35,7 +35,7 @@ class CGprs:public CSerialComm
      bool IsConnected(){return m_IsConnected;};
      bool GetSignalIntesity(uint8& nSignalIntesity);
      void Disconnect();
-     bool GetIMEI(uint8* pIMEI, uint32& IMEILen);
+     //bool GetIMEI(uint8* pIMEI, uint32& IMEILen);
 //*: <timesout>[in]   指定最大的阻塞读取等待间隔，单位: useconds(微秒)
 //*:当timesout<=0，阻塞读模式，即直到读够指定数据个数后函数返回
      ECommError HttpGet(const char * url, uint8 * buf, uint32 * len);
@@ -61,7 +61,8 @@ class CGprs:public CSerialComm
      uint32 m_SrcPort;
      char m_DestIP[IP_MAX_LEN];
      uint32 m_DestPort;
-     char m_IMEI[IMEI_LEN];
+     //char m_IMEI[IMEI_LEN];
      enum GPRSWorkMode mode;
+     int cops; // 0 for china unicom, 1 for china mobile
 };
 #endif

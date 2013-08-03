@@ -61,91 +61,83 @@ const uint32 PACKET_SERIAL_POS = PACKET_FUNCTION_CODE_POS+PACKET_FUNCTION_CODE_L
 const uint32 PACKET_CTRL_POS = PACKET_SERIAL_POS+PACKET_SERIAL_INDEX_LEN;
 
 //down packet
-const uint32 PACKET_DOWN_UTC_POS = 23;
+const uint32 PACKET_DOWN_UTC_POS = 12;
 
 const uint32 PACKET_SUBPACKET_COUNT_POS = sizeof(PACKET_HEADER_FLAG)
-                                         +PACKET_LEN_LEN
-                                         +IMEI_LEN
-                                         +PACKET_FUNCTION_CODE_LEN
-                                         +PACKET_SERIAL_INDEX_LEN;
+        +PACKET_LEN_LEN
+        +IMEI_LEN
+        +PACKET_FUNCTION_CODE_LEN
+        +PACKET_SERIAL_INDEX_LEN;
 /*********************************Utils function*********************************************/
-static uint32 CreatePacketHeader(uint8* pData, uint32 DataLen, uint8* pIMEI, uint32 IMEILen, uint16 FunCode, uint16 SerialIndex)
+static uint32 CreatePacketHeader(uint8* pData, uint32 DataLen, uint32 id, uint16 FunCode, uint16 SerialIndex)
 {
-   if( (NULL==pData) || (DataLen<PACKET_HEADER_LEN) || (NULL==pIMEI) || (IMEI_LEN!=IMEILen) )
-   {
-      return -1;
-   }
+    if ((NULL==pData) || (DataLen<PACKET_HEADER_LEN)) {
+        return -1;
+    }
 
-   memset(pData, 0, DataLen);
-   uint32 Pos = 0;
-   memcpy(pData+Pos, PACKET_HEADER_FLAG, sizeof(PACKET_HEADER_FLAG));
-   Pos += sizeof(PACKET_HEADER_FLAG);
+    memset(pData, 0, DataLen);
+    uint32 Pos = 0;
+    memcpy(pData+Pos, PACKET_HEADER_FLAG, sizeof(PACKET_HEADER_FLAG));
+    Pos += sizeof(PACKET_HEADER_FLAG);
 
-   Pos += PACKET_LEN_LEN;
+    Pos += PACKET_LEN_LEN;
 
-   memcpy(pData+Pos, pIMEI, IMEILen);
-   Pos += IMEILen;
+    memcpy(pData+Pos, &id, sizeof(uint32));
+    Pos += sizeof(uint32);
 
-   const uint16 FunctionCode = FunCode;
-   memcpy(pData+Pos, &FunctionCode, sizeof(FunctionCode));
-   Pos += sizeof(FunctionCode);
+    const uint16 FunctionCode = FunCode;
+    memcpy(pData+Pos, &FunctionCode, sizeof(FunctionCode));
+    Pos += sizeof(FunctionCode);
 
-   memcpy(pData+Pos, &SerialIndex, sizeof(SerialIndex));
-   Pos += sizeof(SerialIndex);
+    memcpy(pData+Pos, &SerialIndex, sizeof(SerialIndex));
+    Pos += sizeof(SerialIndex);
 
-   assert(Pos == PACKET_HEADER_LEN);
+    assert(Pos == PACKET_HEADER_LEN);
 
-   return Pos;
+    return Pos;
 }
 
-static uint32 CreateCtrlPacket(uint8* pPacketBuffer, uint32 pPacketBufferLen, uint8* pIMEI, uint32 IMEILen, uint16 FunCode, uint16 SerialIndex, uint8* pUserData=NULL, uint32 UserDataLen=0)
+static uint32 CreateCtrlPacket(uint8* pPacketBuffer, uint32 pPacketBufferLen, uint32 id, uint16 FunCode, uint16 SerialIndex, uint8* pUserData=NULL, uint32 UserDataLen=0)
 {
-   if( pPacketBufferLen < (PACKET_CTRL_POS+UserDataLen+PACKET_UTC_LEN+PACKET_CRC_LEN) )
-   {
-      return -1;
-   }
+    if (pPacketBufferLen < (PACKET_CTRL_POS+UserDataLen+PACKET_UTC_LEN+PACKET_CRC_LEN)) {
+        return -1;
+    }
 
-   uint32 Pos = CreatePacketHeader(pPacketBuffer, pPacketBufferLen, pIMEI, IMEILen, FunCode, SerialIndex);
-   if(PACKET_CTRL_POS != Pos)
-   {
-      DEBUG("fail to create parcket header Pos(%d)!=%d\n", Pos, PACKET_CTRL_POS);
-      return -1;
-   }
+    uint32 Pos = CreatePacketHeader(pPacketBuffer, pPacketBufferLen, id, FunCode, SerialIndex);
+    if (PACKET_CTRL_POS != Pos) {
+        DEBUG("fail to create parcket header Pos(%d)!=%d\n", Pos, PACKET_CTRL_POS);
+        return -1;
+    }
 
-   if( pUserData && (UserDataLen > 0) )
-   {
-      memcpy(pPacketBuffer+Pos, pUserData, UserDataLen);
-      Pos += UserDataLen;
-   }
+    if (pUserData && (UserDataLen > 0)) {
+        memcpy(pPacketBuffer+Pos, pUserData, UserDataLen);
+        Pos += UserDataLen;
+    }
 
-   uint32 UTCTime = 0;
-   if( false == GetLocalTimeStamp(UTCTime) )
-   {
-      if(FUNCTION_CODE_REGISTER_UP != FunCode)
-      {
-         return -1;
-      }
-   }
-   memcpy(pPacketBuffer+Pos, &UTCTime, sizeof(UTCTime));
-   Pos += sizeof(UTCTime);
+    uint32 UTCTime = 0;
+    if (false == GetLocalTimeStamp(UTCTime)) {
+        if (FUNCTION_CODE_REGISTER_UP != FunCode) {
+            return -1;
+        }
+    }
+    memcpy(pPacketBuffer+Pos, &UTCTime, sizeof(UTCTime));
+    Pos += sizeof(UTCTime);
 
-   uint16 PacketLen = Pos+PACKET_CRC_LEN-4;//exclude the header and CRC, 4 bytes
-   DEBUG("PacketLen=%d\n", PacketLen);
-   memcpy(pPacketBuffer+PACKET_LEN_POS, &PacketLen, sizeof(PacketLen));
+    uint16 PacketLen = Pos+PACKET_CRC_LEN-4;//exclude the header and CRC, 4 bytes
+    DEBUG("PacketLen=%d\n", PacketLen);
+    memcpy(pPacketBuffer+PACKET_LEN_POS, &PacketLen, sizeof(PacketLen));
 
-   uint16 CRC16 = GenerateCRC(pPacketBuffer, Pos);
-   memcpy(pPacketBuffer+Pos, &CRC16, sizeof(CRC16));
-   Pos += sizeof(CRC16);
+    uint16 CRC16 = GenerateCRC(pPacketBuffer, Pos);
+    memcpy(pPacketBuffer+Pos, &CRC16, sizeof(CRC16));
+    Pos += sizeof(CRC16);
 
-   assert(Pos == (PACKET_CTRL_POS+UserDataLen+PACKET_UTC_LEN+PACKET_CRC_LEN));
-   if(Pos == (PACKET_CTRL_POS+UserDataLen+PACKET_UTC_LEN+PACKET_CRC_LEN))
-   {
-      return Pos;
-   }else
-   {
-      DEBUG( "CreateCtrlPacket()--Pos NOT correct--Pos(%d)!=%d\n", Pos, (PACKET_CTRL_POS+UserDataLen+PACKET_UTC_LEN+PACKET_CRC_LEN) );
-      return -1;
-   }
+    assert(Pos == (PACKET_CTRL_POS+UserDataLen+PACKET_UTC_LEN+PACKET_CRC_LEN));
+    if (Pos == (PACKET_CTRL_POS+UserDataLen+PACKET_UTC_LEN+PACKET_CRC_LEN)) {
+        return Pos;
+    } else {
+        DEBUG("CreateCtrlPacket()--Pos NOT correct--Pos(%d)!=%d\n", Pos, (PACKET_CTRL_POS+UserDataLen+PACKET_UTC_LEN+PACKET_CRC_LEN));
+        return -1;
+    }
 }
 /********************************************************************************************/
 CPortal* CPortal::m_Instance = NULL;
@@ -153,167 +145,152 @@ CLock CPortal::m_PortalLock;
 
 CPortal* CPortal::GetInstance()
 {
-   if( NULL == m_Instance )
-   {
-      m_PortalLock.Lock();
-      if( NULL == m_Instance )
-      {
-         m_Instance = new CPortal();
-      }
-      m_PortalLock.UnLock();
-   }
-   return m_Instance;
+    if (NULL == m_Instance) {
+        m_PortalLock.Lock();
+        if (NULL == m_Instance) {
+            m_Instance = new CPortal();
+        }
+        m_PortalLock.UnLock();
+    }
+    return m_Instance;
 }
 
 
 CPortal::CPortal(): timeReady(false)
-                    , m_GetGPRSInforTaskActive(false)
-                    , m_IsGPRSInfoReady(false)
-                    , m_SentLog(NULL)
-                    , m_SerialIndex(0)
-                    , m_IsRegistered(false)
-                    , m_pGPRS(NULL)
-                    // , m_FixHourTimer(MINUTE_TYPE)//just for test
-                    , m_FixHourTimer(HOUR_TYPE)
+    , m_GetGPRSInforTaskActive(false)
+    , m_IsGPRSInfoReady(false)
+    , m_SentLog(NULL)
+    , m_SerialIndex(0)
+    , m_IsRegistered(false)
+    , m_pGPRS(NULL)
+    , m_FixHourTimer(HOUR_TYPE)
 {
-   if (access("queues/", F_OK) == -1) {
-       mkdir("queues", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
-   }
-   heatQueue = lqopen("queues/heat");
-   valveQueue = lqopen("queues/valve");
-   chargeQueue = lqopen("queues/charge");
-   consumeQueue = lqopen("queues/consume");
+    if (access("queues/", F_OK) == -1) {
+        mkdir("queues", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+    }
+    heatQueue = lqopen("queues/heat");
+    valveQueue = lqopen("queues/valve");
+    chargeQueue = lqopen("queues/charge");
+    consumeQueue = lqopen("queues/consume");
 }
 
 bool CPortal::Init(uint32 nInterval)
 {
-   if( (NULL==m_pGPRS) || (false==m_pGPRS->Open()) )
-   {
-      return false;
-   }
-   DEBUG("JZQID=%s\n", m_IMEI);
-   m_FixHourTimer.Start();
-   DEBUG("nInterval=%u\n", nInterval);
-   m_HeartBeatTimer.Start(nInterval);
+    if ((NULL==m_pGPRS) || (false==m_pGPRS->Open())) {
+        return false;
+    }
+    DEBUG("JZQID=%d\n", jzqid);
+    m_FixHourTimer.Start();
+    DEBUG("nInterval=%u\n", nInterval);
+    m_HeartBeatTimer.Start(nInterval);
 
-   if( false == CreateLogFile() )
-   {
-      DEBUG("fail to create log\n");
-   }
-   DEBUG("end\n");
-   return true;
+    if (false == CreateLogFile()) {
+        DEBUG("fail to create log\n");
+    }
+    DEBUG("end\n");
+    return true;
 }
 
 void CPortal::SetGPRS(CGprs* pGPRS)
 {
-   if( (NULL == pGPRS) || (m_pGPRS == pGPRS) )
-   {
-      return;
-   }
+    if ((NULL == pGPRS) || (m_pGPRS == pGPRS)) {
+        return;
+    }
 
-   m_pGPRS = pGPRS;
+    m_pGPRS = pGPRS;
 }
 
 void CPortal::Start()
 {
-   IThread::Start();
+    IThread::Start();
 }
 
 void CPortal::HeartBeat()
 {
-   DEBUG("CPortal::HeartBeat()\n");
-   if( m_HeartBeatTimer.Done() )
-   {
-      SendHeartBeat();
-   }
+    if ( m_HeartBeatTimer.Done() ) {
+        DEBUG("HeartBeat\n");
+        SendHeartBeat();
+    }
 }
 
 void CPortal::OnFixTimer()
 {
-   DEBUG("CPortal::OnFixTimer()\n");
-   if( m_FixHourTimer.Done() )
-   {
-      CHeatMonitor::GetInstance()->SendHeatData();
-      SendGeneralHeatData();
-      // CForwarderMonitor::GetInstance()->SendValveData();
-      SendValveData();
-   }
+    DEBUG("CPortal::OnFixTimer()\n");
+    if ( m_FixHourTimer.Done() ) {
+        CHeatMonitor::GetInstance()->SendHeatData();
+        SendGeneralHeatData();
+        // CForwarderMonitor::GetInstance()->SendValveData();
+        SendValveData();
+    }
 }
 
 uint32 CPortal::Run()
 {
-   DEBUG("CPortal::Run()\n");
-   m_GPRSLock.Lock();
-   if(NULL == m_pGPRS)
-   {
-      m_GPRSLock.UnLock();
-      return 1;
-   }
-   m_GPRSLock.UnLock();
+    DEBUG("CPortal::Run()\n");
+    m_GPRSLock.Lock();
+    if (NULL == m_pGPRS) {
+        m_GPRSLock.UnLock();
+        return 1;
+    }
+    m_GPRSLock.UnLock();
 
-   while(1)
-   {
-      m_GPRSLock.Lock();
-      if( false == m_pGPRS->IsConnected() )
-      {
-         SetLight(LIGHT_GPRS, true);//turn on GPRS light
-         m_pGPRS->Connect();
-         //uint32 IMEILen = sizeof(m_IMEI);
-         //m_pGPRS->GetIMEI(m_IMEI, IMEILen);
-         m_IsRegistered = false;
-         //DEBUG("Connected-IMEI=%s\n", m_IMEI);
-      }
-      m_GPRSLock.UnLock();
+    while (1) {
+        m_GPRSLock.Lock();
+        if ( false == m_pGPRS->IsConnected() ) {
+            SetLight(LIGHT_GPRS, true);//turn on GPRS light
+            m_pGPRS->Connect();
+            //uint32 IMEILen = sizeof(m_IMEI);
+            //m_pGPRS->GetIMEI(m_IMEI, IMEILen);
+            m_IsRegistered = false;
+            //DEBUG("Connected-IMEI=%s\n", m_IMEI);
+        }
+        m_GPRSLock.UnLock();
 
-      if( IsRegistered() )
-      {
-         SetLight(LIGHT_GPRS, false);//turn off GPRS light
+        if ( IsRegistered() ) {
+            SetLight(LIGHT_GPRS, false);//turn off GPRS light
 
-         HeartBeat();
+            HeartBeat();
 
-         GPRS_Receive();
-         //CheckNewVersion();
-      }else
-      {
-         SetLight(LIGHT_GPRS, true);//turn on GPRS light
-         m_GPRSLock.Lock();
-         m_pGPRS->Disconnect();
-         m_GPRSLock.UnLock();
-      }
+            GPRS_Receive();
+            //CheckNewVersion();
+        } else {
+            SetLight(LIGHT_GPRS, true);//turn on GPRS light
+            m_GPRSLock.Lock();
+            m_pGPRS->Disconnect();
+            m_GPRSLock.UnLock();
+        }
 
-      OnFixTimer(); // insert fixed time packet into NotSentList
-      SendChargeData();
-      SendConsumeData();
-      GetGPRSInfoTask();
+        OnFixTimer(); // insert fixed time packet into NotSentList
+        SendChargeData();
+        SendConsumeData();
+        GetGPRSInfoTask();
 
-      sleep(1);
-   }
+        sleep(1);
+    }
 
-   return 0;
+    return 0;
 }
 
 bool CPortal::IsRegistered()
 {
-   DEBUG("CPortal::IsRegistered()\n");
-   m_GPRSLock.Lock();
-   bool IsGPRSConnected = m_pGPRS->IsConnected();
-   m_GPRSLock.UnLock();
-   DEBUG("IsGPRSConnected=%s\n", IsGPRSConnected?"true":"false");
-   if( IsGPRSConnected && (false == m_IsRegistered) )
-   {
-      uint8 PacketData[MAX_GPRS_PACKET_LEN] = {0};
-      uint32 Pos = CreateCtrlPacket(PacketData, sizeof(PacketData), m_IMEI, sizeof(m_IMEI), FUNCTION_CODE_REGISTER_UP, m_SerialIndex);
-      DEBUG("Pos=%d\n", Pos);
-      if(Pos < sizeof(PacketData))
-      {
-         m_IsRegistered = GPRS_Send(PacketData, Pos);
-      }
-      DEBUG("Register %s\n", m_IsRegistered?"true":"false");
-   }
-   return m_IsRegistered;
+    m_GPRSLock.Lock();
+    bool IsGPRSConnected = m_pGPRS->IsConnected();
+    m_GPRSLock.UnLock();
+    DEBUG("IsGPRSConnected=%s\n", IsGPRSConnected? "true": "false");
+    if ( IsGPRSConnected && (false == m_IsRegistered) ) {
+        uint8 PacketData[MAX_GPRS_PACKET_LEN] = {0};
+        uint32 Pos = CreateCtrlPacket(PacketData, sizeof(PacketData), jzqid, FUNCTION_CODE_REGISTER_UP, m_SerialIndex);
+        DEBUG("Pos=%d\n", Pos);
+        if (Pos < sizeof(PacketData)) {
+            m_IsRegistered = GPRS_Send(PacketData, Pos);
+        }
+        DEBUG("Register? %s\n", m_IsRegistered? "true": "false");
+    }
+    return m_IsRegistered;
 }
 
-void CPortal::InsertGeneralHeatData(uint8 * data, uint32 len) {
+void CPortal::InsertGeneralHeatData(uint8 * data, uint32 len)
+{
     DEBUG("Insert general heat data: ");
     hexdump(data, len);
     heatQueueLock.Lock();
@@ -321,12 +298,13 @@ void CPortal::InsertGeneralHeatData(uint8 * data, uint32 len) {
     heatQueueLock.UnLock();
 }
 
-void CPortal::SendGeneralHeatData() {
+void CPortal::SendGeneralHeatData()
+{
     heatQueueLock.Lock();
     //DEBUG("PacketCount=%d\n", m_HeatPacketList.size());
     uint8 SentPacketBuffer[MAX_GPRS_PACKET_LEN] = {0};
     while (!lqempty(heatQueue)) {
-        uint32 Pos = CreatePacketHeader(SentPacketBuffer, sizeof(SentPacketBuffer), m_IMEI, sizeof(m_IMEI), FUNCTION_CODE_GENERAL_UP, m_SerialIndex);
+        uint32 Pos = CreatePacketHeader(SentPacketBuffer, sizeof(SentPacketBuffer), jzqid, FUNCTION_CODE_GENERAL_UP, m_SerialIndex);
         if (Pos > sizeof(SentPacketBuffer)) {
             DEBUG("Buffer NOT enought\n");
             heatQueueLock.UnLock();
@@ -376,7 +354,8 @@ void CPortal::SendGeneralHeatData() {
     heatQueueLock.UnLock();
 }
 
-void CPortal::InsertValveData(uint8 * data, uint32 len) {
+void CPortal::InsertValveData(uint8 * data, uint32 len)
+{
     DEBUG("Insert valve data: ");
     hexdump(data, len);
     valveQueueLock.Lock();
@@ -384,16 +363,17 @@ void CPortal::InsertValveData(uint8 * data, uint32 len) {
     valveQueueLock.UnLock();
 }
 
-void CPortal::SendValveData() {
+void CPortal::SendValveData()
+{
     valveQueueLock.Lock();
     //DEBUG("PacketCount=%d\n", m_ForwarderPacketList.size());
     uint8 SentPacketBuffer[MAX_GPRS_PACKET_LEN] = {0};
     while (!lqempty(valveQueue)) {
         uint32 Pos = 0;
         if (VALVE_DATA_TYPE_HEAT == IValveMonitorFactory::GetInstance()->GetValveDataType()) {
-            Pos = CreatePacketHeader(SentPacketBuffer, sizeof(SentPacketBuffer), m_IMEI, sizeof(m_IMEI), FUNCTION_CODE_FORWARDER_HEAT_UP, m_SerialIndex);
+            Pos = CreatePacketHeader(SentPacketBuffer, sizeof(SentPacketBuffer), jzqid, FUNCTION_CODE_FORWARDER_HEAT_UP, m_SerialIndex);
         } else {
-            Pos = CreatePacketHeader(SentPacketBuffer, sizeof(SentPacketBuffer), m_IMEI, sizeof(m_IMEI), FUNCTION_CODE_FORWARDER_TEMPERATURE_UP, m_SerialIndex);
+            Pos = CreatePacketHeader(SentPacketBuffer, sizeof(SentPacketBuffer), jzqid, FUNCTION_CODE_FORWARDER_TEMPERATURE_UP, m_SerialIndex);
         }
         if (Pos > sizeof(SentPacketBuffer)) {
             DEBUG("Buffer NOT enought\n");
@@ -434,7 +414,7 @@ void CPortal::SendValveData() {
         CRC16 = GenerateCRC(SentPacketBuffer, Pos);
         memcpy(SentPacketBuffer+Pos, &CRC16, sizeof(CRC16));
         Pos += sizeof(CRC16);
-        if(false == GPRS_Send(SentPacketBuffer, Pos)) {
+        if (false == GPRS_Send(SentPacketBuffer, Pos)) {
             DEBUG("fail\n");
             valveQueueLock.UnLock();
             return;
@@ -447,347 +427,309 @@ void CPortal::SendValveData() {
 
 void CPortal::SendHeartBeat()
 {
-   uint8 SentPacketBuffer[MAX_GPRS_PACKET_LEN] = {0};
-   uint32 Pos = CreatePacketHeader(SentPacketBuffer, sizeof(SentPacketBuffer), m_IMEI, sizeof(m_IMEI), FUNCTION_CODE_HEART_BEAT_UP, m_SerialIndex);
-   if(Pos > sizeof(SentPacketBuffer))
-   {
-      DEBUG("Buffer NOT enought\n");
-      return;
-   }
+    uint8 SentPacketBuffer[MAX_GPRS_PACKET_LEN] = {0};
+    uint32 Pos = CreatePacketHeader(SentPacketBuffer, sizeof(SentPacketBuffer), jzqid, FUNCTION_CODE_HEART_BEAT_UP, m_SerialIndex);
+    if (Pos > sizeof(SentPacketBuffer)) {
+        DEBUG("Buffer NOT enought\n");
+        return;
+    }
 
-   uint32 UTCTime = 0;
-   if( false == GetLocalTimeStamp(UTCTime) )
-   {
-      return;
-   }
-   memcpy(SentPacketBuffer+Pos, &UTCTime, sizeof(UTCTime));
-   Pos += sizeof(UTCTime);
+    uint32 UTCTime = 0;
+    if ( false == GetLocalTimeStamp(UTCTime) ) {
+        return;
+    }
+    memcpy(SentPacketBuffer+Pos, &UTCTime, sizeof(UTCTime));
+    Pos += sizeof(UTCTime);
 
-   uint16 PacketLen = Pos-sizeof(PACKET_HEADER_FLAG);
-   memcpy(SentPacketBuffer+PACKET_LEN_POS, &PacketLen, sizeof(PacketLen));
+    uint16 PacketLen = Pos-sizeof(PACKET_HEADER_FLAG);
+    memcpy(SentPacketBuffer+PACKET_LEN_POS, &PacketLen, sizeof(PacketLen));
 
-   uint16 CRC16 = GenerateCRC(SentPacketBuffer, Pos);
-   memcpy(SentPacketBuffer+Pos, &CRC16, sizeof(CRC16));
-   Pos += sizeof(CRC16);
+    uint16 CRC16 = GenerateCRC(SentPacketBuffer, Pos);
+    memcpy(SentPacketBuffer+Pos, &CRC16, sizeof(CRC16));
+    Pos += sizeof(CRC16);
 
-   GPRS_Send(SentPacketBuffer, Pos);
+    GPRS_Send(SentPacketBuffer, Pos);
 }
 
 bool CPortal::ParseData(uint8* pData, uint32 DataLen)
 {
-   DEBUG("DataLen=%d\n", DataLen);
-   if(0 == DataLen)
-   {
-      return false;
-   }
+    DEBUG("DataLen=%d\n", DataLen);
+    if (0 == DataLen) {
+        return false;
+    }
 
-   uint16 FunctionCode = 0;
-   memcpy( &FunctionCode, &(pData[PACKET_FUNCTION_CODE_POS]), sizeof(FunctionCode) );
-   DEBUG("FunctionCode=%d\n", FunctionCode);
+    uint16 FunctionCode = 0;
+    memcpy( &FunctionCode, &(pData[PACKET_FUNCTION_CODE_POS]), sizeof(FunctionCode) );
+    DEBUG("FunctionCode=%d\n", FunctionCode);
 
-   uint32 UTCTime = 0;
-   memcpy( &UTCTime, pData+PACKET_DOWN_UTC_POS, sizeof(UTCTime) );
-   uint32 DateTime[DATETIME_LEN] = {0};
-   if( TimeStamp2TimeStr(UTCTime, DateTime, sizeof(DateTime)/sizeof(DateTime[0])) )
-   {
-      DEBUG( "ACK time--%04d-%02d-%02d %02d:%02d:%02d\n", DateTime[0], DateTime[1], DateTime[2], DateTime[3], DateTime[4], DateTime[5] );
-      const uint32 MAX_TIME_DIFFERENCE = 30*60;//30 minutes
-      uint32 CurrentTimeUTC = 0;
-      GetLocalTimeStamp(CurrentTimeUTC);
-      uint32 Difference = CurrentTimeUTC>UTCTime? CurrentTimeUTC-UTCTime:UTCTime-CurrentTimeUTC;
-      if( Difference > MAX_TIME_DIFFERENCE )
-      {
-         if( 0 == SetDateTime(DateTime, 0) )
-         {
-            DEBUG("adjust time OK\n");
-            timeReady = true;
-         }
-      }
-   }
+    uint32 UTCTime = 0;
+    memcpy( &UTCTime, pData+PACKET_DOWN_UTC_POS, sizeof(UTCTime) );
+    uint32 DateTime[DATETIME_LEN] = {0};
+    if ( TimeStamp2TimeStr(UTCTime, DateTime, sizeof(DateTime)/sizeof(DateTime[0])) ) {
+        DEBUG( "ACK time--%04d-%02d-%02d %02d:%02d:%02d\n", DateTime[0], DateTime[1], DateTime[2], DateTime[3], DateTime[4], DateTime[5] );
+        const uint32 MAX_TIME_DIFFERENCE = 30*60;//30 minutes
+        uint32 CurrentTimeUTC = 0;
+        GetLocalTimeStamp(CurrentTimeUTC);
+        uint32 Difference = CurrentTimeUTC>UTCTime? CurrentTimeUTC-UTCTime:UTCTime-CurrentTimeUTC;
+        if ( Difference > MAX_TIME_DIFFERENCE ) {
+            if ( 0 == SetDateTime(DateTime, 0) ) {
+                DEBUG("adjust time OK\n");
+                timeReady = true;
+            }
+        }
+    }
 
-   return true;
+    return true;
 }
 
 bool CPortal::ParseHeartBeatAck(uint8* pData, uint32 DataLen)
 {
-   DEBUG("Data\n");
-   PrintData(pData, DataLen);
-   if( (NULL == pData) || (sizeof(uint32) != DataLen) )
-   {
-      return false;
-   }
-   uint32 UTCTime = 0;
-   memcpy( &UTCTime, pData, sizeof(UTCTime) );
-   uint32 DateTime[6] = {0};
-   if(false == TimeStamp2TimeStr(UTCTime, DateTime, sizeof(DateTime)/sizeof(DateTime[0])))
-   {
-      return false;
-   }
-   if( 0 != SetDateTime(DateTime, 0) )
-   {
-      DEBUG("Set DateTime=%04d-%02d-%02d %02d:%02d:%02d\n", DateTime[0], DateTime[1], DateTime[2], DateTime[3], DateTime[4], DateTime[5]);
-      timeReady = false;
-      return false;
-   }
-   timeReady = true;
-   return true;
+    DEBUG("Data ");
+    hexdump(pData, DataLen);
+    if ( (NULL == pData) || (sizeof(uint32) != DataLen) ) {
+        return false;
+    }
+    uint32 UTCTime = 0;
+    memcpy( &UTCTime, pData, sizeof(UTCTime) );
+    uint32 DateTime[6] = {0};
+    if (false == TimeStamp2TimeStr(UTCTime, DateTime, sizeof(DateTime)/sizeof(DateTime[0]))) {
+        return false;
+    }
+    if ( 0 != SetDateTime(DateTime, 0) ) {
+        DEBUG("Set DateTime=%04d-%02d-%02d %02d:%02d:%02d\n", DateTime[0], DateTime[1], DateTime[2], DateTime[3], DateTime[4], DateTime[5]);
+        timeReady = false;
+        return false;
+    }
+    timeReady = true;
+    return true;
 }
 
 void CPortal::IncSerialIndex()
 {
-   m_SerialIndex++;
-   if(m_SerialIndex > MAX_SERIAL_INDEX)
-   {
-      m_SerialIndex = 0;
-   }
+    m_SerialIndex++;
+    if (m_SerialIndex > MAX_SERIAL_INDEX) {
+        m_SerialIndex = 0;
+    }
 }
 
 bool CPortal::GPRS_Send(uint8* pData, uint32 DataLen)
 {
-   LogSentData(pData, DataLen);
+    LogSentData(pData, DataLen);
 
-   uint16 FunCode = 0;
-   memcpy( &FunCode, pData+PACKET_FUNCTION_CODE_POS, sizeof(FunCode) );
-   DEBUG("0x%02X\n", FunCode);
-   if( (false == m_IsRegistered) && (FUNCTION_CODE_REGISTER_UP != FunCode) )
-   {
-      DEBUG("NOT Register\n");
-      return false;
-   }
+    uint16 FunCode = 0;
+    memcpy( &FunCode, pData+PACKET_FUNCTION_CODE_POS, sizeof(FunCode) );
+    DEBUG("funcode 0x%02X\n", FunCode);
+    if ( (false == m_IsRegistered) && (FUNCTION_CODE_REGISTER_UP != FunCode) ) {
+        DEBUG("NOT Register\n");
+        return false;
+    }
 
-   if( NULL == pData || 0 == DataLen )
-   {
-      return false;
-   }
+    if ( NULL == pData || 0 == DataLen ) {
+        return false;
+    }
 
-   uint16 SentSerialIndex = 0;
-   memcpy( &SentSerialIndex, pData+PACKET_SERIAL_POS, sizeof(SentSerialIndex));
-   DEBUG("SentSerialIndex=%u\n", SentSerialIndex);
-   PrintData(pData, DataLen);
-   bool Ret = false;
-   m_GPRSLock.Lock();
-   if(m_pGPRS)
-   {
-      for(uint32 i = 0; i < MAX_GPRS_RETRY_COUNT; i++)
-      {
-         //send data
-         FlashLight(LIGHT_GPRS);
-         if(COMM_OK != m_pGPRS->SendData(pData, DataLen, GPRS_TIMEOUT))
-         {
-            DEBUG("Send error\n");
-            continue;
-         }
 
-         //receive data
-         for(uint32 j = 0; j < MAX_GPRS_RETRY_COUNT; j++)
-         {
-            uint8 AckBuffer[MAX_GPRS_PACKET_LEN] = {0};
-            uint32 AckBufferLen = sizeof(AckBuffer);
-            if(COMM_OK == m_pGPRS->ReceiveData(AckBuffer, AckBufferLen, PACKET_HEADER_FLAG, sizeof(PACKET_HEADER_FLAG), PACKET_LEN_POS, GPRS_TIMEOUT))
-            {
-               DEBUG("receive OK--AckBufferLen=%u\n", AckBufferLen);
-               FlashLight(LIGHT_GPRS);
-               if(0 == AckBufferLen)
-               {
-                  continue;
-               }
-               if( 0 != memcmp( pData+PACKET_IMEI_POS, AckBuffer+PACKET_IMEI_POS, IMEI_LEN) )
-               {
-                  PrintData(AckBuffer+PACKET_IMEI_POS, PACKET_HEADER_LEN);
-                  DEBUG("IMEI NOT match\n");
-                  continue;
-               }
-
-               uint16 ReceFunCode = 0;
-               memcpy(&ReceFunCode, AckBuffer+PACKET_FUNCTION_CODE_POS, sizeof(ReceFunCode));
-
-               uint16 SentFunCode = 0;
-               memcpy(&SentFunCode, pData+PACKET_FUNCTION_CODE_POS, sizeof(SentFunCode));
-               if( (SentFunCode+1) != ReceFunCode )
-               {
-                  DEBUG("Sent FunCode(0x%X):get a new FunCode(0x%X)\n", SentFunCode, ReceFunCode);
-
-                  PacketDataT TempPacketData;
-                  memset( &TempPacketData, 0, sizeof(TempPacketData) );
-                  memcpy( TempPacketData.PacketData, AckBuffer, AckBufferLen );
-                  PacketMapT::value_type TempPacketElement(ReceFunCode, TempPacketData);
-                  m_ReceivePacketMap.insert(TempPacketElement);
-
-                  j=0;//get a valid data but NOT wanted means server is live, retry again
-                  continue;
-               }
-               if( 0 != memcmp( pData+PACKET_SERIAL_POS, AckBuffer+PACKET_SERIAL_POS, PACKET_SERIAL_INDEX_LEN ) )
-               {
-                  uint16 SentSerialIndex = 0;;
-                  memcpy(&SentSerialIndex, pData+PACKET_SERIAL_POS, sizeof(SentSerialIndex));
-                  uint16 ReceSerialIndex = 0;;
-                  memcpy(&ReceSerialIndex, AckBuffer+PACKET_SERIAL_POS, sizeof(ReceSerialIndex));
-                  DEBUG("Serial index NOT match:SentIndex(%u):ReceIndex(%u)\n", SentSerialIndex, ReceSerialIndex);
-                  continue;
-               }
-
-               if( ParseData(AckBuffer, AckBufferLen) )
-               {
-                  Ret = true;
-                  break;
-               }
-            }else
-            {
-               DEBUG("receive Error--AckBufferLen=%u\n", AckBufferLen);
+    uint16 SentSerialIndex = 0;
+    memcpy( &SentSerialIndex, pData+PACKET_SERIAL_POS, sizeof(SentSerialIndex));
+    DEBUG("SentSerialIndex=%u\n", SentSerialIndex);
+    bool Ret = false;
+    m_GPRSLock.Lock();
+    if (m_pGPRS) {
+        for (uint32 i = 0; i < MAX_GPRS_RETRY_COUNT; i++) {
+            //send data
+            FlashLight(LIGHT_GPRS);
+            DEBUG("Send data ");
+            hexdump(pData, DataLen);
+            if (COMM_OK != m_pGPRS->SendData(pData, DataLen, GPRS_TIMEOUT)) {
+                DEBUG("Send error\n");
+                continue;
             }
-         }
 
-         if(true == Ret)
-         {
-            DEBUG("end--SentSerialIndex=%u OK\n", SentSerialIndex);
-            break;
-         }
-         myusleep(200 * 1000);//AT module sends data one UDP packet per time
-      }
-      if(false == Ret)
-      {
-         DEBUG("connection is down\n");
-         m_pGPRS->Disconnect();
-      }
-   }
-   m_GPRSLock.UnLock();
-   IncSerialIndex();
-   return Ret;
+            //receive data
+            for (uint32 j = 0; j < MAX_GPRS_RETRY_COUNT; j++) {
+                uint8 AckBuffer[MAX_GPRS_PACKET_LEN] = {0};
+                uint32 AckBufferLen = sizeof(AckBuffer);
+                if (COMM_OK == m_pGPRS->ReceiveData(AckBuffer, AckBufferLen, PACKET_HEADER_FLAG, sizeof(PACKET_HEADER_FLAG), PACKET_LEN_POS, GPRS_TIMEOUT)) {
+                    DEBUG("receive OK--AckBufferLen=%u ", AckBufferLen);
+                    hexdump(AckBuffer, AckBufferLen);
+                    FlashLight(LIGHT_GPRS);
+                    if (0 == AckBufferLen) {
+                        continue;
+                    }
+                    if ( 0 != memcmp( pData+PACKET_IMEI_POS, AckBuffer+PACKET_IMEI_POS, IMEI_LEN) ) {
+                        DEBUG("Ack IMEI: ");
+                        hexdump(AckBuffer + PACKET_IMEI_POS, PACKET_HEADER_LEN);
+
+                        DEBUG("IMEI NOT match\n");
+                        continue;
+                    }
+
+                    uint16 ReceFunCode = 0;
+                    memcpy(&ReceFunCode, AckBuffer+PACKET_FUNCTION_CODE_POS, sizeof(ReceFunCode));
+
+                    uint16 SentFunCode = 0;
+                    memcpy(&SentFunCode, pData+PACKET_FUNCTION_CODE_POS, sizeof(SentFunCode));
+                    if ( (SentFunCode+1) != ReceFunCode ) {
+                        DEBUG("Sent FunCode(0x%X):get a new FunCode(0x%X)\n", SentFunCode, ReceFunCode);
+
+                        PacketDataT TempPacketData;
+                        memset( &TempPacketData, 0, sizeof(TempPacketData) );
+                        memcpy( TempPacketData.PacketData, AckBuffer, AckBufferLen );
+                        PacketMapT::value_type TempPacketElement(ReceFunCode, TempPacketData);
+                        m_ReceivePacketMap.insert(TempPacketElement);
+
+                        j=0;//get a valid data but NOT wanted means server is live, retry again
+                        continue;
+                    }
+                    if ( 0 != memcmp( pData+PACKET_SERIAL_POS, AckBuffer+PACKET_SERIAL_POS, PACKET_SERIAL_INDEX_LEN ) ) {
+                        uint16 SentSerialIndex = 0;;
+                        memcpy(&SentSerialIndex, pData+PACKET_SERIAL_POS, sizeof(SentSerialIndex));
+                        uint16 ReceSerialIndex = 0;;
+                        memcpy(&ReceSerialIndex, AckBuffer+PACKET_SERIAL_POS, sizeof(ReceSerialIndex));
+                        DEBUG("Serial index NOT match:SentIndex(%u):ReceIndex(%u)\n", SentSerialIndex, ReceSerialIndex);
+                        continue;
+                    }
+
+                    if ( ParseData(AckBuffer, AckBufferLen) ) {
+                        Ret = true;
+                        break;
+                    }
+                } else {
+                    DEBUG("receive Error--AckBufferLen=%u\n", AckBufferLen);
+                }
+            }
+
+            if (true == Ret) {
+                DEBUG("end--SentSerialIndex=%u OK\n", SentSerialIndex);
+                break;
+            }
+            sleep(3);//AT module sends data one UDP packet per time
+        }
+        if (false == Ret) {
+            DEBUG("connection is down\n");
+            m_pGPRS->Disconnect();
+        }
+    }
+    m_GPRSLock.UnLock();
+    IncSerialIndex();
+    return Ret;
 }
 
 bool CPortal::GetStatus(Status& Status)
 {
-   if( m_PortalLock.TryLock() )
-   {
-      if( false == IsStarted() )
-      {
-         Status = STATUS_ERROR;
-      }else
-      {
-         Status = STATUS_OK;
-      }
-      m_PortalLock.UnLock();
-      return true;
-   }
-   return false;
+    if ( m_PortalLock.TryLock() ) {
+        if ( false == IsStarted() ) {
+            Status = STATUS_ERROR;
+        } else {
+            Status = STATUS_OK;
+        }
+        m_PortalLock.UnLock();
+        return true;
+    }
+    return false;
 }
 
 bool CPortal::GetGPRSStatus(Status& Status)
 {
-   if( m_GPRSLock.TryLock() )
-   {
-      if( m_pGPRS && m_pGPRS->IsConnected() )
-      {
-         Status = STATUS_OK;
-      }else
-      {
-         Status = STATUS_ERROR;
-      }
-      m_GPRSLock.UnLock();
-      return true;
-   }
-   return false;
+    if ( m_GPRSLock.TryLock() ) {
+        if ( m_pGPRS && m_pGPRS->IsConnected() ) {
+            Status = STATUS_OK;
+        } else {
+            Status = STATUS_ERROR;
+        }
+        m_GPRSLock.UnLock();
+        return true;
+    }
+    return false;
 }
 
 bool CPortal::GetGPRSConnected(bool& IsConnected)
 {
-   bool Ret = false;
-   if( m_GPRSLock.TryLock() )
-   {
-      if(m_pGPRS)
-      {
-         IsConnected = m_pGPRS->IsConnected();
-         Ret = true;
-      }
-      m_GPRSLock.UnLock();
-   }
-   return Ret;
+    bool Ret = false;
+    if ( m_GPRSLock.TryLock() ) {
+        if (m_pGPRS) {
+            IsConnected = m_pGPRS->IsConnected();
+            Ret = true;
+        }
+        m_GPRSLock.UnLock();
+    }
+    return Ret;
 }
 
 bool CPortal::GetGPRSSignalIntesity(uint8& nSignalIntesity)
 {
-   DEBUG("CPortal::GetGPRSSignalIntesity()\n");
-   bool Ret = false;
-   if( m_GPRSLock.TryLock() )
-   {
-      if(m_IsGPRSInfoReady)
-      {
-         nSignalIntesity = m_nSignalIntesity;
-         Ret = true;
-      }else
-      {
-         m_GetGPRSInforTaskActive = true;
-      }
-      m_GPRSLock.UnLock();
-   }
-   return Ret;
+    DEBUG("CPortal::GetGPRSSignalIntesity()\n");
+    bool Ret = false;
+    if ( m_GPRSLock.TryLock() ) {
+        if (m_IsGPRSInfoReady) {
+            nSignalIntesity = m_nSignalIntesity;
+            Ret = true;
+        } else {
+            m_GetGPRSInforTaskActive = true;
+        }
+        m_GPRSLock.UnLock();
+    }
+    return Ret;
 }
 
 bool CPortal::CreateLogFile()
 {
-   m_SentLogLock.Lock();
-   if(m_SentLog)
-   {
-      fclose(m_SentLog);
-      m_SentLog = NULL;
-   }
-   m_SentLog = fopen(SENT_DATA_FILE_NAME, "a+");
-   if(NULL == m_SentLog)
-   {
-      m_SentLogLock.UnLock();
-      return false;
-   }
-   m_SentLogLock.UnLock();
+    m_SentLogLock.Lock();
+    if (m_SentLog) {
+        fclose(m_SentLog);
+        m_SentLog = NULL;
+    }
+    m_SentLog = fopen(SENT_DATA_FILE_NAME, "a+");
+    if (NULL == m_SentLog) {
+        m_SentLogLock.UnLock();
+        return false;
+    }
+    m_SentLogLock.UnLock();
 
-   return true;
+    return true;
 }
 
 void CPortal::LogSentData(const uint8* pData, uint32 DataLen)
 {
-   DEBUG("CPortal::LogSentData()\n");
-   if(NULL == pData || 0 == DataLen || DataLen > MAX_GPRS_PACKET_LEN)
-   {
-      assert(0);
-      return;
-   }
-   uint16 FunCode = 0;
-   memcpy( &FunCode, pData+PACKET_FUNCTION_CODE_POS, sizeof(FunCode) );
+    DEBUG("CPortal::LogSentData()\n");
+    if (NULL == pData || 0 == DataLen || DataLen > MAX_GPRS_PACKET_LEN) {
+        assert(0);
+        return;
+    }
+    uint16 FunCode = 0;
+    memcpy( &FunCode, pData+PACKET_FUNCTION_CODE_POS, sizeof(FunCode) );
 
-   const uint16 FunList[] = { FUNCTION_CODE_FORWARDER_HEAT_UP
-                              , FUNCTION_CODE_FORWARDER_TEMPERATURE_UP
-                              , FUNCTION_CODE_GENERAL_UP
-                              , FUNCTION_CODE_CONSUME_DATA_UP
-                              , FUNCTION_CODE_CHARGE_DATA_UP};
-   uint32 i = 0;
-   for(; i < sizeof(FunList)/sizeof(FunList[0]); i++)
-   {
-      if(FunList[i] == FunCode)
-      {
-         break;
-      }
-   }
-   if( i >= sizeof(FunList)/sizeof(FunList[0]) )
-   {
-      DEBUG("LogSentData function code=0x%02X should not be resent\n", FunCode);
-      return;
-   }
+    const uint16 FunList[] = { FUNCTION_CODE_FORWARDER_HEAT_UP
+                               , FUNCTION_CODE_FORWARDER_TEMPERATURE_UP
+                               , FUNCTION_CODE_GENERAL_UP
+                               , FUNCTION_CODE_CONSUME_DATA_UP
+                               , FUNCTION_CODE_CHARGE_DATA_UP
+                             };
+    uint32 i = 0;
+    for (; i < sizeof(FunList)/sizeof(FunList[0]); i++) {
+        if (FunList[i] == FunCode) {
+            break;
+        }
+    }
+    if ( i >= sizeof(FunList)/sizeof(FunList[0]) ) {
+        DEBUG("LogSentData function code=0x%02X should not be resent\n", FunCode);
+        return;
+    }
 
-   m_SentLogLock.Lock();
+    m_SentLogLock.Lock();
 
-   if(NULL == m_SentLog)
-   {
-      m_SentLog = fopen(SENT_DATA_FILE_NAME, "a+");
-   }
-   if(NULL == m_SentLog)
-   {
-      m_SentLogLock.UnLock();
-      return;
-   }
-   PrintData(pData, DataLen);
-   fwrite(pData, DataLen, 1, m_SentLog);
-   fflush(m_SentLog);
+    if (NULL == m_SentLog) {
+        m_SentLog = fopen(SENT_DATA_FILE_NAME, "a+");
+    }
+    if (NULL == m_SentLog) {
+        m_SentLogLock.UnLock();
+        return;
+    }
+    hexdump(pData, DataLen);
+    fwrite(pData, DataLen, 1, m_SentLog);
+    fflush(m_SentLog);
 
-   m_SentLogLock.UnLock();
+    m_SentLogLock.UnLock();
 }
 
 bool CPortal::CopyLogData()
@@ -797,136 +739,121 @@ bool CPortal::CopyLogData()
 
 void CPortal::GetGPRSInfoTask()
 {
-   DEBUG("m_GetGPRSInforTaskActive=%d, m_IsGPRSInfoReady=%d\n", m_GetGPRSInforTaskActive, m_IsGPRSInfoReady);
-   m_GPRSLock.Lock();
-   if( m_GetGPRSInforTaskActive )
-   {
-      if( false == m_IsGPRSInfoReady )
-      {
-         m_nSignalIntesity = UNKNOWN_SIGNAL_INTESITY;
-         for(uint32 i = 0; i < MAX_GET_GPRSINFO_RETRY_COUNT; i++)
-         {
-            if( m_pGPRS->GetSignalIntesity(m_nSignalIntesity) )
-            {
-               break;
+    DEBUG("m_GetGPRSInforTaskActive=%d, m_IsGPRSInfoReady=%d\n", m_GetGPRSInforTaskActive, m_IsGPRSInfoReady);
+    m_GPRSLock.Lock();
+    if ( m_GetGPRSInforTaskActive ) {
+        if ( false == m_IsGPRSInfoReady ) {
+            m_nSignalIntesity = UNKNOWN_SIGNAL_INTESITY;
+            for (uint32 i = 0; i < MAX_GET_GPRSINFO_RETRY_COUNT; i++) {
+                if ( m_pGPRS->GetSignalIntesity(m_nSignalIntesity) ) {
+                    break;
+                }
             }
-         }
-         m_IsGPRSInfoReady = true;
-         m_GPRSInfoTimer.StartTimer(GPRS_INFO_TIMEOUT);
-      }
+            m_IsGPRSInfoReady = true;
+            m_GPRSInfoTimer.StartTimer(GPRS_INFO_TIMEOUT);
+        }
 
-      if( m_IsGPRSInfoReady )
-      {
-         m_GetGPRSInforTaskActive = false;
-      }
-   }
+        if ( m_IsGPRSInfoReady ) {
+            m_GetGPRSInforTaskActive = false;
+        }
+    }
 
-   if( m_GPRSInfoTimer.Done() )
-   {
-      DEBUG("GPRSInfo NOT ready\n");
-      m_IsGPRSInfoReady = false;
-   }
-   m_GPRSLock.UnLock();
+    if ( m_GPRSInfoTimer.Done() ) {
+        DEBUG("GPRSInfo NOT ready\n");
+        m_IsGPRSInfoReady = false;
+    }
+    m_GPRSLock.UnLock();
 }
 
 void CPortal::GPRS_Receive()
 {
-   if(false == m_IsRegistered)
-   {
-      DEBUG("NOT Register\n");
-      return;
-   }
+    if (false == m_IsRegistered) {
+        DEBUG("NOT Register\n");
+        return;
+    }
 
-   DEBUG("CPortal::GPRS_Receive()\n");
-   m_GPRSLock.Lock();
-   if(m_pGPRS)
-   {
-      uint8 RecePacketBuffer[MAX_GPRS_PACKET_LEN] = {0};
-      uint32 ReceBufferLen = sizeof(RecePacketBuffer);
-      if( (COMM_OK == m_pGPRS->ReceiveData(RecePacketBuffer, ReceBufferLen, PACKET_HEADER_FLAG, sizeof(PACKET_HEADER_FLAG), PACKET_LEN_POS, GPRS_TIMEOUT)) && (ReceBufferLen > 0) )
-      {
-         DEBUG("CPortal::GPRS_Receive()\n");
-         FlashLight(LIGHT_GPRS);
-         PrintData(RecePacketBuffer, ReceBufferLen);
-         if( 0 == memcmp( RecePacketBuffer+PACKET_IMEI_POS, m_IMEI, sizeof(m_IMEI)) )
-         {
-             //bool Ret = false;
+    DEBUG("CPortal::GPRS_Receive()\n");
+    m_GPRSLock.Lock();
+    if (m_pGPRS) {
+        uint8 RecePacketBuffer[MAX_GPRS_PACKET_LEN] = {0};
+        uint32 ReceBufferLen = sizeof(RecePacketBuffer);
+        if ( (COMM_OK == m_pGPRS->ReceiveData(RecePacketBuffer, ReceBufferLen, PACKET_HEADER_FLAG, sizeof(PACKET_HEADER_FLAG), PACKET_LEN_POS, GPRS_TIMEOUT)) && (ReceBufferLen > 0) ) {
+            DEBUG("CPortal::GPRS_Receive()\n");
+            FlashLight(LIGHT_GPRS);
+            hexdump(RecePacketBuffer, ReceBufferLen);
+            if (0 == memcmp(RecePacketBuffer + PACKET_IMEI_POS, &jzqid, sizeof(uint32))) {
+                //bool Ret = false;
 
-            uint16 FunCode = 0;
-            memcpy( &FunCode, RecePacketBuffer+PACKET_FUNCTION_CODE_POS, sizeof(FunCode) );
-            DEBUG("FunCode=0x%04X\n", FunCode);
+                uint16 FunCode = 0;
+                memcpy(&FunCode, RecePacketBuffer+PACKET_FUNCTION_CODE_POS, sizeof(FunCode));
+                DEBUG("FunCode=0x%04X\n", FunCode);
 
-            PacketDataT TempPacketData;
-            memset( &TempPacketData, 0, sizeof(TempPacketData) );
-            memcpy( TempPacketData.PacketData, RecePacketBuffer, ReceBufferLen);
-            PacketMapT::value_type TempPacketElement(FunCode, TempPacketData);
-            m_ReceivePacketMap.insert(TempPacketElement);
-         }else
-         {
-            DEBUG("IMEI NOT match\n");
-         }
-
-         const uint16 FunList[] = { FUNCTION_CODE_SWITCH_VALVE_DOWN, FUNCTION_CODE_VALVE_SET_HEAT_TIME_DOWN, FUNCTION_CODE_VALVE_CONFIG_DOWN };
-         for(uint32 i = 0; i < sizeof(FunList)/sizeof(FunList[0]);i += 2)
-         {
-            const uint32 MAX_RETURN_DATA_LEN = 128;
-            uint8 ReturnData[MAX_RETURN_DATA_LEN] = {0};
-            uint32 ReturnDataLen = 0;
-
-            PacketMapT::iterator PacketIter = m_ReceivePacketMap.find(FunList[i]);
-            if( PacketIter == m_ReceivePacketMap.end() )
-            {
-               DEBUG("NO FunCode(0x%04X) data\n", FunList[i]);
-               continue;
+                PacketDataT TempPacketData;
+                memset( &TempPacketData, 0, sizeof(TempPacketData) );
+                memcpy( TempPacketData.PacketData, RecePacketBuffer, ReceBufferLen);
+                PacketMapT::value_type TempPacketElement(FunCode, TempPacketData);
+                m_ReceivePacketMap.insert(TempPacketElement);
+            } else {
+                DEBUG("IMEI NOT match\n");
             }
 
-            uint16 PacketLen = 0;
-            memcpy( &PacketLen, PacketIter->second.PacketData+PACKET_LEN_POS, sizeof(PacketLen) );
-            switch( FunList[i] )
-            {
-               case FUNCTION_CODE_SWITCH_VALVE_DOWN:
-                  ReturnData[0] = IValveMonitorFactory::GetInstance()->ConfigValve(VALVE_SWITCH_VALVE,PacketIter->second.PacketData+PACKET_CTRL_POS, PacketLen-PACKET_CTRL_POS);
-                  ReturnDataLen = 1;
-                  break;
+            const uint16 FunList[] = { FUNCTION_CODE_SWITCH_VALVE_DOWN, FUNCTION_CODE_VALVE_SET_HEAT_TIME_DOWN, FUNCTION_CODE_VALVE_CONFIG_DOWN };
+            for (uint32 i = 0; i < sizeof(FunList)/sizeof(FunList[0]); i += 2) {
+                const uint32 MAX_RETURN_DATA_LEN = 128;
+                uint8 ReturnData[MAX_RETURN_DATA_LEN] = {0};
+                uint32 ReturnDataLen = 0;
 
-               case FUNCTION_CODE_VALVE_SET_HEAT_TIME_DOWN:
-                  ReturnData[0] = IValveMonitorFactory::GetInstance()->ConfigValve(VALVE_SET_HEAT_TIME, PacketIter->second.PacketData+PACKET_CTRL_POS, PacketLen-PACKET_CTRL_POS);
-                  ReturnDataLen = 1;
-                  break;
+                PacketMapT::iterator PacketIter = m_ReceivePacketMap.find(FunList[i]);
+                if ( PacketIter == m_ReceivePacketMap.end() ) {
+                    DEBUG("NO FunCode(0x%04X) data\n", FunList[i]);
+                    continue;
+                }
 
-               case FUNCTION_CODE_VALVE_CONFIG_DOWN:
-                  ReturnData[0] = IValveMonitorFactory::GetInstance()->ConfigValve(VALVE_CONFIG, PacketIter->second.PacketData+PACKET_CTRL_POS, PacketLen-PACKET_CTRL_POS);
-                  ReturnDataLen = 1;
-                  break;
+                uint16 PacketLen = 0;
+                memcpy( &PacketLen, PacketIter->second.PacketData+PACKET_LEN_POS, sizeof(PacketLen) );
+                switch ( FunList[i] ) {
+                case FUNCTION_CODE_SWITCH_VALVE_DOWN:
+                    ReturnData[0] = IValveMonitorFactory::GetInstance()->ConfigValve(VALVE_SWITCH_VALVE,PacketIter->second.PacketData+PACKET_CTRL_POS, PacketLen-PACKET_CTRL_POS);
+                    ReturnDataLen = 1;
+                    break;
 
-               default:
-                  break;
+                case FUNCTION_CODE_VALVE_SET_HEAT_TIME_DOWN:
+                    ReturnData[0] = IValveMonitorFactory::GetInstance()->ConfigValve(VALVE_SET_HEAT_TIME, PacketIter->second.PacketData+PACKET_CTRL_POS, PacketLen-PACKET_CTRL_POS);
+                    ReturnDataLen = 1;
+                    break;
+
+                case FUNCTION_CODE_VALVE_CONFIG_DOWN:
+                    ReturnData[0] = IValveMonitorFactory::GetInstance()->ConfigValve(VALVE_CONFIG, PacketIter->second.PacketData+PACKET_CTRL_POS, PacketLen-PACKET_CTRL_POS);
+                    ReturnDataLen = 1;
+                    break;
+
+                default:
+                    break;
+                }
+
+                uint16 SerialIndex = 0;
+                memcpy( &SerialIndex, PacketIter->second.PacketData+PACKET_SERIAL_POS, sizeof(SerialIndex) );
+                uint8 SendPacketData[MAX_GPRS_PACKET_LEN] = {0};
+                // uint32 SendPacketLen = CreateCtrlPacket(SendPacketData, sizeof(SendPacketData), jzqid, sizeof(uint32), FunList[i+1], SerialIndex, ReturnData, ReturnDataLen);
+                uint32 SendPacketLen = CreateCtrlPacket(SendPacketData, sizeof(SendPacketData), jzqid, FunList[i]+1, SerialIndex, ReturnData, ReturnDataLen);
+                if ( SendPacketLen <= sizeof(SendPacketData) ) {
+                    //get a correct packet
+                    for (uint32 j = 0; j < MAX_GPRS_RETRY_COUNT; j++) {
+                        if (COMM_OK == m_pGPRS->SendData(SendPacketData, SendPacketLen, GPRS_TIMEOUT)) {
+                            m_ReceivePacketMap.erase(PacketIter);
+                            DEBUG("OK\n");
+                            break;
+                        }
+                    }
+                }
             }
-
-            uint16 SerialIndex = 0;
-            memcpy( &SerialIndex, PacketIter->second.PacketData+PACKET_SERIAL_POS, sizeof(SerialIndex) );
-            uint8 SendPacketData[MAX_GPRS_PACKET_LEN] = {0};
-            // uint32 SendPacketLen = CreateCtrlPacket(SendPacketData, sizeof(SendPacketData), m_IMEI, sizeof(m_IMEI), FunList[i+1], SerialIndex, ReturnData, ReturnDataLen);
-            uint32 SendPacketLen = CreateCtrlPacket(SendPacketData, sizeof(SendPacketData), m_IMEI, sizeof(m_IMEI), FunList[i]+1, SerialIndex, ReturnData, ReturnDataLen);
-            if( SendPacketLen <= sizeof(SendPacketData) )
-            {//get a correct packet
-               for(uint32 j = 0; j < MAX_GPRS_RETRY_COUNT; j++)
-               {
-                  if(COMM_OK == m_pGPRS->SendData(SendPacketData, SendPacketLen, GPRS_TIMEOUT))
-                  {
-                     m_ReceivePacketMap.erase(PacketIter);
-                     DEBUG("OK\n");
-                     break;
-                  }
-               }
-            }
-         }
-      }
-   }
-   m_GPRSLock.UnLock();
+        }
+    }
+    m_GPRSLock.UnLock();
 }
 
-void CPortal::InsertChargeData(uint8 * data, uint32 len) {
+void CPortal::InsertChargeData(uint8 * data, uint32 len)
+{
     DEBUG("Insert charge data: ");
     hexdump(data, len);
     chargeQueueLock.Lock();
@@ -934,13 +861,14 @@ void CPortal::InsertChargeData(uint8 * data, uint32 len) {
     chargeQueueLock.UnLock();
 }
 
-void CPortal::SendChargeData() {
+void CPortal::SendChargeData()
+{
     chargeQueueLock.Lock();
     // DEBUG("PacketCount = %d\n", m_ChargePacketList.size());
     uint8 SentPacketBuffer[MAX_GPRS_PACKET_LEN] = {0};
     while (!lqempty(chargeQueue)) {
-        uint32 Pos = CreatePacketHeader(SentPacketBuffer, sizeof(SentPacketBuffer), m_IMEI, sizeof(m_IMEI), FUNCTION_CODE_CHARGE_DATA_UP, m_SerialIndex);
-        if(Pos > sizeof(SentPacketBuffer)) {
+        uint32 Pos = CreatePacketHeader(SentPacketBuffer, sizeof(SentPacketBuffer), jzqid, FUNCTION_CODE_CHARGE_DATA_UP, m_SerialIndex);
+        if (Pos > sizeof(SentPacketBuffer)) {
             DEBUG("Buffer NOT enought\n");
             chargeQueueLock.UnLock();
             return;
@@ -980,7 +908,7 @@ void CPortal::SendChargeData() {
         CRC16 = GenerateCRC(SentPacketBuffer, Pos);
         memcpy(SentPacketBuffer+Pos, &CRC16, sizeof(CRC16));
         Pos += sizeof(CRC16);
-        if(false == GPRS_Send(SentPacketBuffer, Pos)) {
+        if (false == GPRS_Send(SentPacketBuffer, Pos)) {
             DEBUG("fail\n");
             chargeQueueLock.UnLock();
             return;
@@ -991,7 +919,8 @@ void CPortal::SendChargeData() {
     chargeQueueLock.UnLock();
 }
 
-void CPortal::InsertConsumeData(uint8 * data, uint32 len) {
+void CPortal::InsertConsumeData(uint8 * data, uint32 len)
+{
     DEBUG("Insert consume data: ");
     hexdump(data, len);
     consumeQueueLock.Lock();
@@ -999,12 +928,13 @@ void CPortal::InsertConsumeData(uint8 * data, uint32 len) {
     consumeQueueLock.UnLock();
 }
 
-void CPortal::SendConsumeData() {
+void CPortal::SendConsumeData()
+{
     consumeQueueLock.Lock();
     // DEBUG("PacketCount=%d\n", m_ConsumePacketList.size());
     uint8 SentPacketBuffer[MAX_GPRS_PACKET_LEN] = {0};
     while (!lqempty(consumeQueue)) {
-        uint32 Pos = CreatePacketHeader(SentPacketBuffer, sizeof(SentPacketBuffer), m_IMEI, sizeof(m_IMEI), FUNCTION_CODE_CONSUME_DATA_UP, m_SerialIndex);
+        uint32 Pos = CreatePacketHeader(SentPacketBuffer, sizeof(SentPacketBuffer), jzqid, FUNCTION_CODE_CONSUME_DATA_UP, m_SerialIndex);
         if (Pos > sizeof(SentPacketBuffer)) {
             DEBUG("Buffer NOT enought\n");
             consumeQueueLock.UnLock();
@@ -1058,7 +988,8 @@ void CPortal::SendConsumeData() {
 
 #define SECKEY "CONCENTRATOR"
 #define PKGKEY "PACKAGE"
-void CPortal::CheckNewVersion() {
+void CPortal::CheckNewVersion()
+{
     if (access("./download", F_OK) == -1) {
         if (mkdir("./download", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == -1) {
             DEBUG("Cannot make download dir\n");
