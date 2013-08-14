@@ -73,17 +73,22 @@ static const uint32 kCrc32Table[256] = {
 class Crc32
 {
 public:
-    Crc32() { Reset(); }
+    Crc32() {
+        Reset();
+    }
     ~Crc32() throw() {}
-    void Reset() { _crc = (uint32)~0; }
-    void AddData(const uint8* pData, const uint32 length)
-    {
+    void Reset() {
+        _crc = (uint32)~0;
+    }
+    void AddData(const uint8* pData, const uint32 length) {
         uint8* pCur = (uint8*)pData;
         uint32 remaining = length;
         for (; remaining--; ++pCur)
             _crc = ( _crc >> 8 ) ^ kCrc32Table[(_crc ^ *pCur) & 0xff];
     }
-    const uint32 GetCrc32() { return ~_crc; }
+    const uint32 GetCrc32() {
+        return ~_crc;
+    }
 
 private:
     uint32 _crc;

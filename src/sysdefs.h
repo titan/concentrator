@@ -11,8 +11,6 @@
 #define MAX(a,b) (a) > (b)? (a) : (b)
 #endif
 
-// #define CHINA_MOBILE
-#define CHINA_UNION
 typedef signed char    		int8;
 typedef signed short   		int16;
 typedef int int32;
@@ -39,21 +37,20 @@ const uint8 FORWARDER_CONSUME_PACKET_LEN = 42;
 const uint8 MAX_RETRY_COUNT = 3;
 const uint32 MAX_BUFFER_LEN = 1024;
 const uint32 MAX_PACKET_LEN = 2048;
-enum ErrorCodeE
-{
-   ERROR_OK = 0,
-   ERROR_USER_CANCEL,
-   ERROR_TIMER_INIT_FAIL,
-   ERROR_TIMER_SET_TIMER_FAIL,
-   ERROR_COMM,
-   ERROR_COUNT//never delete this
+enum ErrorCodeE {
+    ERROR_OK = 0,
+    ERROR_USER_CANCEL,
+    ERROR_TIMER_INIT_FAIL,
+    ERROR_TIMER_SET_TIMER_FAIL,
+    ERROR_COMM,
+    ERROR_COUNT//never delete this
 };
 enum Status {
-   STATUS_OK,
-   STATUS_CHECKING,
-   STATUS_ERROR,
-   STATUS_OFFLINE,
-   STATUS_MAX
+    STATUS_OK,
+    STATUS_CHECKING,
+    STATUS_ERROR,
+    STATUS_OFFLINE,
+    STATUS_MAX
 };
 
 #define USERID_LEN 8
@@ -68,16 +65,17 @@ typedef struct {
     uint32 vmac;
 } user_t;
 
-inline size_t genuserkey(void * key, size_t len) {
+inline size_t genuserkey(void * key, size_t len)
+{
     size_t i = 0;
-	size_t seed = 131; // 31 131 1313 13131 131313 etc..
-	size_t hash = 0;
+    size_t seed = 131; // 31 131 1313 13131 131313 etc..
+    size_t hash = 0;
 
     for (; i < len; i ++) {
-		hash = hash * seed + ((unsigned char *) key)[i];
-	}
+        hash = hash * seed + ((unsigned char *) key)[i];
+    }
 
-	return hash;
+    return hash;
 }
 
 typedef struct {
@@ -91,7 +89,8 @@ typedef struct {
     uint8 sentStatus;
 } record_t;
 
-inline size_t genrecordkey(void * key, size_t len) {
+inline size_t genrecordkey(void * key, size_t len)
+{
     size_t r = 0, i;
     if (len < sizeof(size_t)) {
         for (i = 0; i < len; i ++) {
@@ -119,7 +118,8 @@ inline size_t genrecordkey(void * key, size_t len) {
 #define TX_ENABLE(gpio) PIOOutValue(gpio, 0)
 #define RX_ENABLE(gpio) PIOOutValue(gpio, 1)
 
-inline gpio_name_t getGPIO(const char * device) {
+inline gpio_name_t getGPIO(const char * device)
+{
     if (strcmp(device, "/dev/ttyS4") == 0) {
         return PA18;
     } else if (strcmp(device, "/dev/ttyS5") == 0) {
@@ -133,7 +133,8 @@ inline gpio_name_t getGPIO(const char * device) {
     }
 }
 
-inline int myusleep(unsigned long usec) {
+inline int myusleep(unsigned long usec)
+{
     struct timespec tv;
     tv.tv_sec = usec / 1000000;
     tv.tv_nsec = (usec % 1000000) * 1000 ;

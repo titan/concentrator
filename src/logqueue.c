@@ -7,14 +7,14 @@
 #include "logqueue.h"
 
 typedef struct {
-    off_t offset;
-    size_t length;
+    unsigned int offset;
+    unsigned int length;
 } LQIDX;
 
 LOGQUEUE * lqopen(const char * name) {
     char df[1024], idf[1204], pf[1024];
     LOGQUEUE * q = (LOGQUEUE *) malloc(sizeof(LOGQUEUE));
-    off_t offset;
+    unsigned int offset;
     if (q != NULL) {
         bzero(q, sizeof(LOGQUEUE));
         bzero(df, 1024);
@@ -27,8 +27,8 @@ LOGQUEUE * lqopen(const char * name) {
         q->ifd = open(idf, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
         q->pfd = open(pf, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
         if (q->pfd != -1 && q->ifd != -1) {
-            if (-1 != lseek(q->pfd, 0 - sizeof(off_t), SEEK_END)) {
-                if (read(q->pfd, &offset, sizeof(off_t)) > 0) {
+            if (-1 != lseek(q->pfd, 0 - sizeof(unsigned int), SEEK_END)) {
+                if (read(q->pfd, &offset, sizeof(unsigned int)) > 0) {
                     lseek(q->ifd, offset, SEEK_SET);
                 }
             }
@@ -56,7 +56,12 @@ void lqclose(LOGQUEUE * q) {
 }
 
 int lqempty(LOGQUEUE * q) {
-    off_t offset = lseek(q->ifd, 0, SEEK_CUR);
+    unsigned int offset;
+    if (lseek(q->pfd, 0 - sizeof(unsigned int), SEEK_END) == -1) {
+        offset = 0;
+    } else if (read(q->pfd, &offset, sizeof(unsigned int)) != sizeof(unsigned int)) {
+        offset = 0;
+    }
     if (lseek(q->ifd, 0, SEEK_END) == offset) {
         return 1; // true
     } else {
@@ -65,7 +70,7 @@ int lqempty(LOGQUEUE * q) {
     }
 }
 
-int lqenqueue(LOGQUEUE * q, void * data, size_t len) {
+int lqenqueue(LOGQUEUE * q, void * data, unsigned int len) {
     LQIDX idx;
     idx.offset = lseek(q->dfd, 0, SEEK_END);
     idx.length = len;
@@ -79,12 +84,12 @@ int lqenqueue(LOGQUEUE * q, void * data, size_t len) {
     return 0; // false
 }
 
-int lqdequeue(LOGQUEUE * q, void * data, size_t * len) {
+int lqdequeue(LOGQUEUE * q, void * data, unsigned int * len) {
     LQIDX idx;
-    off_t offset;
-    if (lseek(q->pfd, 0 - sizeof(off_t), SEEK_END) == -1) {
+    unsigned int offset;
+    if (lseek(q->pfd, 0 - sizeof(unsigned int), SEEK_END) == -1) {
         offset = 0;
-    } else if (read(q->pfd, &offset, sizeof(off_t)) != sizeof(off_t)) {
+    } else if (read(q->pfd, &offset, sizeof(unsigned int)) != sizeof(unsigned int)) {
         return 0; // false
     }
     if (lseek(q->ifd, offset, SEEK_SET) != -1) {
@@ -93,8 +98,8 @@ int lqdequeue(LOGQUEUE * q, void * data, size_t * len) {
                 if (read(q->dfd, data, idx.length) == (ssize_t)idx.length) {
                     lseek(q->pfd, 0, SEEK_END);
                     offset = lseek(q->ifd, 0, SEEK_CUR);
-                    if (offset != -1) {
-                        if (write(q->pfd, &offset, sizeof(off_t)) == sizeof(off_t)) {
+                    if (offset != (unsigned int)-1) {
+                        if (write(q->pfd, &offset, sizeof(unsigned int)) == sizeof(unsigned int)) {
                             * len = idx.length;
                             return 1;
                         }
@@ -111,12 +116,12 @@ int lqdequeue(LOGQUEUE * q, void * data, size_t * len) {
     return 0; // false
 }
 
-int lqfront(LOGQUEUE * q, void * data, size_t * len) {
+int lqfront(LOGQUEUE * q, void * data, unsigned int * len) {
     LQIDX idx;
-    off_t offset;
-    if (lseek(q->pfd, 0 - sizeof(off_t), SEEK_END) == -1) {
+    unsigned int offset;
+    if (lseek(q->pfd, 0 - sizeof(unsigned int), SEEK_END) == -1) {
         offset = 0;
-    } else if (read(q->pfd, &offset, sizeof(off_t)) != sizeof(off_t)) {
+    } else if (read(q->pfd, &offset, sizeof(unsigned int)) != sizeof(unsigned int)) {
         return 0; // false
     }
     if (lseek(q->ifd, offset, SEEK_SET) != -1) {

@@ -54,21 +54,32 @@ typedef struct {
 
 #endif
 
-class CValveMonitor: public IThread, public IValveMonitor {
+class CValveMonitor: public IThread, public IValveMonitor
+{
 public:
     static CValveMonitor * GetInstance();
     bool Init(uint32 startTime, uint32 interval);
-    void SetCom(int com) {this->com = com;};
-    void SetValveDataType(ValveDataType type){ valveDataType = type;};
-    ValveDataType GetValveDataType(){return valveDataType;};
+    void SetCom(int com) {
+        this->com = com;
+    };
+    void SetValveDataType(ValveDataType type) {
+        valveDataType = type;
+    };
+    ValveDataType GetValveDataType() {
+        return valveDataType;
+    };
     void QueryUser(userid_t uid, uint8 * data, uint16 len);
     void Recharge(userid_t uid, uint8 * data, uint16 len);
     uint16 ConfigValve(ValveCtrlType cmd, uint8 * data, uint16 len);
     Status GetStatus();
     void Broadcast(uint8 counter);
     bool GetUserList(vector<user_t>& user);
-    void SetGPIO(gpio_name_t gpio) {this->gpio = gpio;};
-    void SetValveCount(int count) {this->valveCount = count;};
+    void SetGPIO(gpio_name_t gpio) {
+        this->gpio = gpio;
+    };
+    void SetValveCount(int count) {
+        this->valveCount = count;
+    };
 
 private:
     CValveMonitor();
@@ -102,6 +113,7 @@ private:
     void SetValveTime(uint32 vmac, tm * time);
     void SyncValveTime();
     void SendErrorValves();
+    bool SetUID(uint32 vmac, userid_t uid);
 
     static CValveMonitor * instance;
     int com;
@@ -121,7 +133,7 @@ private:
     gpio_name_t gpio;
     uint32 sid; // session id
     uint8 counter; // broadcase counter
-    int valveCount;
+    unsigned int valveCount;
     cbuffer_t rx; // received valve macs
     int unregisteredCounter; // unregistered valve counter
 #ifdef DEBUG_VALVE_TRACE_RECHARGE

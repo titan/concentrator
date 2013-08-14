@@ -8,9 +8,9 @@
 #define SBTREE_SIZE(t) ((t)->size)
 
 typedef struct _sbtree {
-  struct _sbtree *left;
-  struct _sbtree *right;
-  size_t size;
+    struct _sbtree *left;
+    struct _sbtree *right;
+    size_t size;
 } sbtree_t;
 
 typedef size_t sbtidx_t;

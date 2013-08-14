@@ -543,6 +543,7 @@ ECommError CGprs::ReceiveData(uint8* pBuffer, uint32& BufferLen, const uint8* pB
             return Ret;
         }
         nTotalReadBytes += nReadBytes;
+        hexdump(ReadBuffer, nTotalReadBytes);
 
         if (IsBufferLenFound && (nTotalReadBytes >= PacketLen)) {
             break;

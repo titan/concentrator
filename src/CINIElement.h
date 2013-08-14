@@ -27,11 +27,10 @@ along with CINI.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <string>
 
-enum INI_element
-{
-	INI_ELEMENT_COMMENT,
-	INI_ELEMENT_SECTION,
-	INI_ELEMENT_PROPERTY
+enum INI_element {
+    INI_ELEMENT_COMMENT,
+    INI_ELEMENT_SECTION,
+    INI_ELEMENT_PROPERTY
 };
 
 /**
@@ -40,12 +39,12 @@ enum INI_element
 class CINIElement
 {
 protected:
-	INI_element m_type;
+    INI_element m_type;
 
 public:
-	virtual ~CINIElement();
-	INI_element GetType() const;
-	virtual const std::string ToString() const = 0;
+    virtual ~CINIElement();
+    INI_element GetType() const;
+    virtual const std::string ToString() const = 0;
 };
 
 #endif

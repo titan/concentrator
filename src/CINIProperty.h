@@ -38,19 +38,19 @@ along with CINI.  If not, see <http://www.gnu.org/licenses/>.
 class CINIProperty : public CINIElement
 {
 protected:
-	std::string m_key;
-	std::string m_value;
-	std::string m_comment;
+    std::string m_key;
+    std::string m_value;
+    std::string m_comment;
 
 public:
-	CINIProperty(const std::string & key, const std::string & value);
-	CINIProperty(const std::string & key, const std::string & value, const std::string & comment);
-	void SetValue(const std::string & value);
-	void SetComment(const std::string & comment);
-	const std::string & GetKey() const;
-	const std::string & GetValue() const;
-	const std::string & GetComment() const;
-	const std::string ToString() const;
+    CINIProperty(const std::string & key, const std::string & value);
+    CINIProperty(const std::string & key, const std::string & value, const std::string & comment);
+    void SetValue(const std::string & value);
+    void SetComment(const std::string & comment);
+    const std::string & GetKey() const;
+    const std::string & GetValue() const;
+    const std::string & GetComment() const;
+    const std::string ToString() const;
 };
 
 #endif

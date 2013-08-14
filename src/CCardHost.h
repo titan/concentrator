@@ -11,16 +11,21 @@ typedef struct {
     uint8 x[6];
 } cardaddr_t;
 
-class CCardHost: public IThread {
+class CCardHost: public IThread
+{
 
 public:
     static CCardHost * GetInstance();
-    void SetCom(int com) {this->com = com;};
+    void SetCom(int com) {
+        this->com = com;
+    };
     void AckQueryUser(userid_t uid, uint8 * data, uint16 len); // called by IValveMonitor
     void AckRecharge(userid_t uid, uint8 * data, uint16 len); // called by IValveMonitor
     void AckTimeOrRemove(uint8 * data, uint16 len);
     bool GetCardInfo(vector<cardaddr_t> &);
-    void SetGPIO(gpio_name_t gpio) {this->gpio = gpio;};
+    void SetGPIO(gpio_name_t gpio) {
+        this->gpio = gpio;
+    };
 
 private:
     CCardHost();

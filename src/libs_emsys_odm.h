@@ -62,31 +62,32 @@ extern "C" {
 
 //读写宽度
 typedef enum {
-	PORT_WIDTH_8 = 0,
-	PORT_WIDTH_16,
-	PORT_WIDTH_32
-} port_wid_t;
+    PORT_WIDTH_8 = 0,
+    PORT_WIDTH_16,
+    PORT_WIDTH_32
+}
+port_wid_t;
 
 //合法的BANK编号
 typedef enum {
-	PORT_BANK_2 = 0,
-	PORT_BANK_4,
-	PORT_BANK_5,
-	PORT_BANK_6,
-	PORT_BANK_7,
+    PORT_BANK_2 = 0,
+    PORT_BANK_4,
+    PORT_BANK_5,
+    PORT_BANK_6,
+    PORT_BANK_7,
 } port_bank_t;
 
 //BANK属性
 typedef struct {
-	port_bank_t bank;
-	port_wid_t width;
-	short reserved;
+    port_bank_t bank;
+    port_wid_t width;
+    short reserved;
 } port_attr_t;
 
 //
 typedef struct {
-	int regAddr;
-	int regData;
+    int regAddr;
+    int regData;
 } port_data_t;
 
 //*------------------------------------------------------------------------------------------------
@@ -199,53 +200,53 @@ extern int ClosePortDev(int fd);
 //************************************************************
 //GPIO端口结构
 typedef enum {
-        PA0, PA1, PA2, PA3, PA4, PA5, PA6, PA7, PA8, PA9, PA10, PA11, PA12, PA13, PA14, PA15,
-        PA16, PA17, PA18, PA19, PA20, PA21, PA22, PA23, PA24, PA25, PA26, PA27, PA28, PA29, PA30, PA31,
-        PB0, PB1, PB2, PB3, PB4, PB5, PB6, PB7, PB8, PB9, PB10, PB11, PB12, PB13, PB14, PB15,
-        PB16, PB17, PB18, PB19, PB20, PB21, PB22, PB23, PB24, PB25, PB26, PB27, PB28, PB29, PB30, PB31,
-        PC0, PC1, PC2, PC3, PC4, PC5, PC6, PC7, PC8, PC9, PC10, PC11, PC12, PC13, PC14, PC15,
-        PC16, PC17, PC18, PC19, PC20, PC21, PC22, PC23, PC24, PC25, PC26, PC27, PC28, PC29, PC30, PC31,
-        PD0, PD1, PD2, PD3, PD4, PD5, PD6, PD7, PD8, PD9, PD10, PD11, PD12, PD13, PD14, PD15,
-        PD16, PD17, PD18, PD19, PD20, PD21, PD22, PD23, PD24, PD25, PD26, PD27, PD28, PD29, PD30, PD31,
-        PE0, PE1, PE2, PE3, PE4, PE5,PE6, PE7,PE8,PE9,PE10,PE11,PE12,PE13, PE14, PE15,
-        PE16, PE17, PE18, PE19, PE20, PE21, PE22, PE23, PE24, PE25, PE26, PE27, PE28, PE29, PE30, PE31
-}gpio_name_t;
+    PA0, PA1, PA2, PA3, PA4, PA5, PA6, PA7, PA8, PA9, PA10, PA11, PA12, PA13, PA14, PA15,
+    PA16, PA17, PA18, PA19, PA20, PA21, PA22, PA23, PA24, PA25, PA26, PA27, PA28, PA29, PA30, PA31,
+    PB0, PB1, PB2, PB3, PB4, PB5, PB6, PB7, PB8, PB9, PB10, PB11, PB12, PB13, PB14, PB15,
+    PB16, PB17, PB18, PB19, PB20, PB21, PB22, PB23, PB24, PB25, PB26, PB27, PB28, PB29, PB30, PB31,
+    PC0, PC1, PC2, PC3, PC4, PC5, PC6, PC7, PC8, PC9, PC10, PC11, PC12, PC13, PC14, PC15,
+    PC16, PC17, PC18, PC19, PC20, PC21, PC22, PC23, PC24, PC25, PC26, PC27, PC28, PC29, PC30, PC31,
+    PD0, PD1, PD2, PD3, PD4, PD5, PD6, PD7, PD8, PD9, PD10, PD11, PD12, PD13, PD14, PD15,
+    PD16, PD17, PD18, PD19, PD20, PD21, PD22, PD23, PD24, PD25, PD26, PD27, PD28, PD29, PD30, PD31,
+    PE0, PE1, PE2, PE3, PE4, PE5,PE6, PE7,PE8,PE9,PE10,PE11,PE12,PE13, PE14, PE15,
+    PE16, PE17, PE18, PE19, PE20, PE21, PE22, PE23, PE24, PE25, PE26, PE27, PE28, PE29, PE30, PE31
+} gpio_name_t;
 
 //端口类型
 typedef enum {
-	PIO_MODE_OUT = 0,
-	PIO_MODE_IN,
-	PIO_MODE_A,
-	PIO_MODE_B,
+    PIO_MODE_OUT = 0,
+    PIO_MODE_IN,
+    PIO_MODE_A,
+    PIO_MODE_B,
 } gpio_mode_t;
 
 //内部电阻使能
 typedef enum {
-	PIO_RESISTOR_NOEFFECT = 0,
-	PIO_RESISTOR_DOWN,
-	PIO_RESISTOR_PULLUP,
+    PIO_RESISTOR_NOEFFECT = 0,
+    PIO_RESISTOR_DOWN,
+    PIO_RESISTOR_PULLUP,
 } gpio_resis_t;
 
 //输入滤波
 typedef enum {
-	PIO_FILTER_NOEFFECT = 0,
-	PIO_FILTER_DISABLED,
-	PIO_FILTER_ENABLED,
+    PIO_FILTER_NOEFFECT = 0,
+    PIO_FILTER_DISABLED,
+    PIO_FILTER_ENABLED,
 } gpio_fiter_t;
 
 //漏极开路
 typedef enum {
-	PIO_MULDRIVER_NOEFFECT = 0,
-	PIO_MULDRIVER_DISABLED,
-	PIO_MULDRIVER_ENABLED,
+    PIO_MULDRIVER_NOEFFECT = 0,
+    PIO_MULDRIVER_DISABLED,
+    PIO_MULDRIVER_ENABLED,
 } gpio_muldriver_t;
 
 //GPIO端口属性
 typedef struct {
-	gpio_mode_t mode;
-	gpio_resis_t resis;
-	gpio_fiter_t filter;
-	gpio_muldriver_t multer;
+    gpio_mode_t mode;
+    gpio_resis_t resis;
+    gpio_fiter_t filter;
+    gpio_muldriver_t multer;
 } gpio_attr_t;
 
 //*------------------------------------------------------------------------------------------------
@@ -354,7 +355,7 @@ extern int ReadCom(int fd, char *buffer, unsigned int *len, int timesout);
 //*------------------------------------------------------------------------------------------------
 
 extern int WriteCom(int fd, char *buffer, unsigned int *len,
-			  int timesout);
+                    int timesout);
 
 //*------------------------------------------------------------------------------------------------
 //* 函数名称 ：CloseCom
@@ -400,8 +401,8 @@ typedef unsigned short cyg_adc_sample;
 
 //AD采样值变换结构(cyg_adc_sample -> float)
 struct __sampl_to_float {
-	cyg_adc_sample ivalue;
-	float fvalue;
+    cyg_adc_sample ivalue;
+    float fvalue;
 };
 
 //*------------------------------------------------------------------------------------------------
@@ -445,7 +446,7 @@ extern int CloseAdc(int fd);
 //*------------------------------------------------------------------------------------------------
 
 extern int SetAdcCfg(int fd, unsigned int cmd, char *buffer,
-			   unsigned int len);
+                     unsigned int len);
 
 //*------------------------------------------------------------------------------------------------
 //* 函数名称 ： GetAdcCfg
@@ -461,7 +462,7 @@ extern int SetAdcCfg(int fd, unsigned int cmd, char *buffer,
 //* 备  注 ：   当前版本函数为空函数，均返回0
 //*------------------------------------------------------------------------------------------------
 extern int GetAdcCfg(int fd, unsigned int cmd, char *buffer,
-			   unsigned int *len);
+                     unsigned int *len);
 
 //*------------------------------------------------------------------------------------------------
 //* 函数名称 ： ReadAdcSampling
@@ -482,8 +483,8 @@ extern int GetAdcCfg(int fd, unsigned int cmd, char *buffer,
 //*     :              读取所有通道时： 缓冲区大小 >=  TOTALCHAN * len * sizeof(cyg_adc_sample)
 //*------------------------------------------------------------------------------------------------
 extern int ReadAdcSampling(int fd, unsigned int channel,
-				 cyg_adc_sample * buffer, unsigned int *len,
-				 int timesout);
+                           cyg_adc_sample * buffer, unsigned int *len,
+                           int timesout);
 
 //*------------------------------------------------------------------------------------------------
 //* 函数名称 ： ConvAdcValue
@@ -500,7 +501,7 @@ extern int ReadAdcSampling(int fd, unsigned int channel,
 //*             上述数组为两组数字量与相对应模拟量数值，需根据实际测量进行设定
 //*------------------------------------------------------------------------------------------------
 extern int ConvAdcValue(cyg_adc_sample * buffer, unsigned int len,
-			      float *values, struct __sampl_to_float *keys);
+                        float *values, struct __sampl_to_float *keys);
 
 
 #endif
@@ -519,8 +520,8 @@ typedef unsigned short cyg_dac_out;
 
 //AD采样值变换结构(float -> cyg_dac_out)
 struct __float_to_dacout {
-	float fvalue;
-	cyg_dac_out ivalue;
+    float fvalue;
+    cyg_dac_out ivalue;
 };
 
 #define TOTALDACCHAN	(4)
@@ -555,7 +556,7 @@ extern int OpenDac(char *dev, int mode);
 //*------------------------------------------------------------------------------------------------
 
 extern int WriteDacVal(int fd, unsigned char chan, float value,
-			     struct __float_to_dacout *keys);
+                       struct __float_to_dacout *keys);
 
 //*------------------------------------------------------------------------------------------------
 //* 函数名称 ：CloseDac
@@ -701,7 +702,7 @@ typedef void (*FUNC) (int sig);
 //*     备  注 ：   无
 //*------------------------------------------------------------------------------------------------
 extern int CreateTimer(FUNC handler, void *args, unsigned int usecs,
-			     unsigned char mode);
+                       unsigned char mode);
 
 //*------------------------------------------------------------------------------------------------
 //*     函数名称  ：Usermsdelay；
@@ -743,7 +744,7 @@ typedef void (*HFUNC) (int sig, siginfo_t *extra, void *args);
 //*     备  注 ：   无
 //*------------------------------------------------------------------------------------------------
 extern int GreateHighResTimer(HFUNC handler, timer_t *timerid, unsigned int nsecs,
-		unsigned char mode);
+                              unsigned char mode);
 
 //*------------------------------------------------------------------------------------------------
 //*     函数名称  ：DelHighResTimer；
@@ -894,7 +895,7 @@ extern int OpenThermometer(char *dev, int mode);
 //* 备  注 ：   无
 //*------------------------------------------------------------------------------------------------
 extern int SetTemperatureCfg(int fd, unsigned int cmd, char *buf,
-		   unsigned int* len);
+                             unsigned int* len);
 
 //*------------------------------------------------------------------------------------------------
 //* 函数名称 : ReadTemperature
@@ -968,7 +969,7 @@ extern int FlushKbd(int fd);
 //*------------------------------------------------------------------------------------------------
 
 extern int GetKeyValue(int fd, unsigned short *keyValue,
-			     unsigned char *status);
+                       unsigned char *status);
 
 //*------------------------------------------------------------------------------------------------
 //* 函数名称 ：CloseKbd

@@ -12,9 +12,9 @@ typedef struct {
 LOGQUEUE * lqopen(const char * name);
 void lqclose(LOGQUEUE * q);
 int lqempty(LOGQUEUE * q);
-int lqenqueue(LOGQUEUE * q, void * data, size_t len);
-int lqdequeue(LOGQUEUE * q, void * data, size_t * len);
-int lqfront(LOGQUEUE * q, void * data, size_t * len);
+int lqenqueue(LOGQUEUE * q, void * data, unsigned int len);
+int lqdequeue(LOGQUEUE * q, void * data, unsigned int * len);
+int lqfront(LOGQUEUE * q, void * data, unsigned int * len);
 #ifdef __cplusplus
 }
 #endif

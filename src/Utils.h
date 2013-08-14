@@ -18,13 +18,12 @@ bool TimeStamp2TimeStr(uint32 UTCTime, uint32* pDateTime, uint32 DateTimeLen);
 const char* GetLocalTimeStr();
 bool GetLocalTimeStamp(uint32& UTCTime);
 bool GetLocalTime(tm & t, uint32 utc);
-enum LightE
-{
-   LIGHT_FORWARD=PB16,
-   LIGHT_GENERAL_HEAT=PA12,
-   LIGHT_GPRS=PB18,
-   LIGHT_WARNING=PE10,
-   LIGHT_MAX//never delete this
+enum LightE {
+    LIGHT_FORWARD=PB16,
+    LIGHT_GENERAL_HEAT=PA12,
+    LIGHT_GPRS=PB18,
+    LIGHT_WARNING=PE10,
+    LIGHT_MAX//never delete this
 };
 void FlashLight(LightE Light);
 void SetLight(LightE Light, bool On);

@@ -14,10 +14,10 @@ RM = rm
 CC = $(BASE)arm-none-linux-gnueabi-gcc
 STRIP = $(BASE)arm-none-linux-gnueabi-strip
 CPPFLAGS += -Wall -g -O2 -lpthread -lstdc++ -fomit-frame-pointer
-PREDEFINES = -DLINUX -D__OS__=LINUX -DNDEBUG -DDEBUG_MAIN -DDEBUG_MAINLOOP -DDEBUG_FORWARDER -DDEBUG_VALVE -DDEBUG_VALVE_TRACE_RECHARGE -DDEBUG_CARDHOST -DDEBUG_PORTAL -DDEBUG_GPRS
+PREDEFINES = -DLINUX -D__OS__=LINUX -DNDEBUG -DDEBUG_MAIN -DDEBUG_MAINLOOP -DDEBUG_PORTAL -DDEBUG_GPRS -DDEBUG_HEAT # -DDEBUG_FORWARDER -DDEBUG_VALVE -DDEBUG_VALVE_TRACE_RECHARGE -DDEBUG_CARDHOST
 CFLAGS += -Wextra $(CPPFLAGS) $(PREDEFINES)
 LDFLAGS =  -L../lib/libs_emsys_odm -l EMZY_ARM_ODM -L../lib/protobuf -l protobuf-lite
-INCLUDE = -I. -I../lib/protobuf
+INCLUDE = -I. -I../lib/protobuf -I../lib/zlib/
 TRANS-HZ = ../util/trans-hz.py
 PROTOC = protoc
 
@@ -45,14 +45,14 @@ clean:
 
 # Generate dependencies for all files in project
 %.d: %.c
-	@ $(CC) $(CPPFLAGS) -MM $< | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' | sed -e 's/\.o: /\.o: Makefile /g' > $@
+	@ $(CC) $(CFLAGS) $(INCLUDE) -MM $< | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' | sed -e 's/\.o: /\.o: Makefile /g' > $@
 %.d: %.cpp
-	@ $(CC) $(CPPFLAGS) -MM $< | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' | sed -e 's/\.o: /\.o: Makefile /g' > $@
+	@ $(CC) $(CFLAGS) $(INCLUDE) -MM $< | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' | sed -e 's/\.o: /\.o: Makefile /g' > $@
 
 clean_list += ${program_OBJS:.o=.d}
 
 $(program_NAME): $(protobuf_OBJS) $(program_OBJS) $(progens_OBJS)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(program_OBJS) $(progens_OBJS) $(protobuf_OBJS) -o $(program_NAME)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(program_OBJS) $(progens_OBJS) $(protobuf_OBJS) ../lib/zlib/libz.a -o $(program_NAME)
 	$(STRIP) $(program_NAME)
 
 ifneq "$(MAKECMDGOALS)" "clean"

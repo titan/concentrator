@@ -21,9 +21,16 @@
 
 #ifdef DEBUG_MAIN
 #include <time.h>
-#define DEBUG(...) do {printf("%ld %s::%s %d ----", time(NULL), __FILE__, __func__, __LINE__);printf(__VA_ARGS__);} while(false)
+#define DEBUG(...) do {printf("%ld %s::%s %d ---- ", time(NULL), __FILE__, __func__, __LINE__);printf(__VA_ARGS__);} while(false)
+#ifndef hexdump
+#include <strings.h>
+#define hexdump(data, len) do { if (len < 1024) { char hexdumpbuf[3072]; bzero(hexdumpbuf, 3072); for (uint32 i = 0; i < (uint32)len; i ++) { sprintf(hexdumpbuf + i * 3, "%02x ", *(uint8 *)(data + i));} puts(hexdumpbuf);} else { char * hexdumpbuf = (char *) malloc(len * 3 + 1); if (hexdumpbuf != NULL) {bzero(hexdumpbuf, len * 3 + 1); for (uint32 i = 0; i < (uint32)len; i ++) { sprintf(hexdumpbuf + i * 3, "%02x ", *(uint8 *)(data + i));} puts(hexdumpbuf); free(hexdumpbuf);} else puts("Too long, ignoring");}} while(0)
+#endif
 #else
 #define DEBUG(...)
+#ifndef hexdump
+#define hexdump(data, len)
+#endif
 #endif
 
 using namespace std;
@@ -69,7 +76,7 @@ bool wireless = true;
 int heatCount = 0;
 bool cardhostEnabled = false;
 gpio_attr_t gpioattr;
-int id = 0;
+int jzqid = 0;
 
 int main()
 {
@@ -103,7 +110,18 @@ int main()
         TrimInvalidChar(device);
         cfg = ini.GetValueString("DEFAULT", "DEVCFG", "2400,8,1,N");
         TrimInvalidChar(cfg);
-        id = ini.GetValueInt("DEFAULT", "JZQID", 0);
+        string id = ini.GetValueString("DEFAULT", "JZQID", INVALID_KEY_VALUE);
+        if (id == INVALID_KEY_VALUE) {
+            jzqid = 0;
+        } else {
+            TrimInvalidChar(id);
+            uint8 tmp[4];
+            tmp[0] = DEC2BCD(atoi(id.substr(0, 2).c_str()));
+            tmp[1] = DEC2BCD(atoi(id.substr(2, 2).c_str()));
+            tmp[2] = atoi(id.substr(4,2).c_str());
+            tmp[3] = atoi(id.substr(6,2).c_str());
+            memcpy(&jzqid, tmp, 4);
+        }
     }
     StartPortal();
     StartCardHost();
@@ -200,62 +218,73 @@ void StartForwarder()
     CForwarderMonitor::GetInstance()->Start();
 }
 
+#ifdef SECKEY
+#undef SECKEY
+#define SECKEY "METERS"
+#else
+#define SECKEY "METERS"
+#endif
 
 void StartGeneralHeat()
 {
     //config general heat
-    CINI GeneralHeatINI("meter_cfg.ini");
-    string SectionStr = HEAT_SESSION;
-    string Key = COM_ADDRESS_KEY;
-    string KeyValue = GeneralHeatINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
-    TrimInvalidChar(KeyValue);
-    DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
-    CSerialComm* pGeneralHeatCom = new CSerialComm(KeyValue);
-    pGeneralHeatCom->Open();
-    Key = COM_CONFIG_KEY;
-    KeyValue = GeneralHeatINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
-    TrimInvalidChar(KeyValue);
-    DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
-    pGeneralHeatCom->SetParity( KeyValue.c_str() );
+    CINI ini("meter_cfg.ini");
 
-    CHeatMonitor::GetInstance()->SetCom(pGeneralHeatCom);
+    string name = ini.GetValueString(SECKEY, "DEVICE", "/dev/ttyS4");
+    TrimInvalidChar(name);
+    string cfg = ini.GetValueString(SECKEY, "DEV_CONFIG", "115200,8,1,N");
+    TrimInvalidChar(cfg);
+    int com = OpenCom((char *)name.c_str(), (char *)cfg.c_str(), O_RDWR | O_NOCTTY);
+    if (com == -1) {
+        DEBUG("Initilize %s with %s failed!\n", name.c_str(), cfg.c_str());
+        return;
+    }
+    DEBUG("Initilize heat servcie with %s(%s)\n", name.c_str(), cfg.c_str());
+    CHeatMonitor::GetInstance()->SetCom(com);
+
+    char format[128];
     for (uint32 i = 0; i < MAX_HEAT_COUNT; i++) {
-        char GeneralHeatAddressFormat[128] = {0};
-        sprintf(GeneralHeatAddressFormat, ID_ID_FORMAT.c_str(), i);
-        Key = GeneralHeatAddressFormat;
-        DEBUG("GeneralHeatAddressFormat=%s\n", GeneralHeatAddressFormat);
-        KeyValue = GeneralHeatINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
-        TrimInvalidChar(KeyValue);
-        DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
-        if (INVALID_KEY_VALUE == KeyValue) {
+        bzero(format, 128);
+        sprintf(format, "DEV_ID%d", i);
+        string id = ini.GetValueString(SECKEY, format, INVALID_KEY_VALUE);
+        if (id == INVALID_KEY_VALUE) {
             break;
         }
-        bool Ret = true;
-        uint8 GeneralHeatAddress[MACHINENAME_LEN] = {0};;
-        uint8 LowByte = 0;
-        uint8 HighByte = 0;
-        for (uint8 i = 0; ((i+1) < KeyValue.size()) && ((i/2)<sizeof(GeneralHeatAddress)); i+=2) {
-            if ( ( false == Char2Int(KeyValue[KeyValue.size()-i-1], LowByte) ) || ( false == Char2Int(KeyValue[KeyValue.size()-i-2], HighByte) ) ) {
-                DEBUG("%s is not a valid heat address\n", KeyValue.c_str());
-                Ret = false;
-                break;
-            }
-            GeneralHeatAddress[i/2] = (HighByte<<4)|LowByte;
+        TrimInvalidChar(id);
+        if (id.length() != 12) {
+            DEBUG("%s is not a valid heat address\n", id.c_str());
+            continue;
         }
-        if (Ret) {
-            DEBUG("Heat node address:");
-            PrintData(GeneralHeatAddress, sizeof(GeneralHeatAddress));
-            CHeatMonitor::GetInstance()->AddGeneralHeat((uint8*)GeneralHeatAddress, sizeof(GeneralHeatAddress));
-            heatCount ++;
+
+        uint8 addr[MACHINENAME_LEN] = {0};
+        uint32 no = atoi(id.substr(9, 3).c_str());
+        if (no > 255) {
+            DEBUG("%s is not a valid heat address\n", id.c_str());
+            continue;
         }
+        addr[0] = (uint8)(no & 0x000000FF);
+        addr[1] = (uint8)(i + 1);
+        addr[2] = DEC2BCD(atoi(id.substr(0, 2).c_str()));
+        addr[3] = DEC2BCD(atoi(id.substr(2, 2).c_str()));
+        addr[4] = DEC2BCD(atoi(id.substr(4, 2).c_str()));
+        addr[5] = DEC2BCD(atoi(id.substr(6, 2).c_str()));
+        DEBUG("Heat node address:");
+        hexdump(addr, sizeof(addr));
+        CHeatMonitor::GetInstance()->AddGeneralHeat((uint8*)addr, sizeof(addr));
+        heatCount ++;
     }
-    SectionStr = TIME_SESSION;
-    Key = TIME_START_KEY;
-    int StartTime = GeneralHeatINI.GetValueInt(SectionStr, Key, DefaultStartTime);
-    DEBUG("[%s]%s=%d\n", SectionStr.c_str(), Key.c_str(), StartTime);
-    Key = TIME_INTERVAL_KEY;
-    int IntervalTime = GeneralHeatINI.GetValueInt(SectionStr, Key, DefaultIntervalTime);
-    DEBUG("[%s]%s=%d\n", SectionStr.c_str(), Key.c_str(), IntervalTime);
+
+#ifdef SECKEY
+#undef SECKEY
+#define SECKEY "TIMER"
+#else
+#define SECKEY "TIMER"
+#endif
+
+    int StartTime = ini.GetValueInt(SECKEY, "STIM", DefaultStartTime);
+    DEBUG("STIM=%d\n", StartTime);
+    int IntervalTime = ini.GetValueInt(SECKEY, "ITIM", DefaultIntervalTime);
+    DEBUG("ITIM=%d\n", IntervalTime);
     CHeatMonitor::GetInstance()->Init(StartTime, IntervalTime);
 
     CHeatMonitor::GetInstance()->Start();
@@ -291,7 +320,7 @@ void StartPortal()
     DEBUG("[%s]%s=%d\n", SectionStr.c_str(), Key.c_str(), DestPort);
     pGPRS->SetIP(LocalPort, KeyValue.c_str(), DestPort);
 
-    CPortal::GetInstance()->SetJZQID((uint32)id);
+    CPortal::GetInstance()->SetJZQID((uint32)jzqid);
     CPortal::GetInstance()->SetGPRS(pGPRS);
     Key = GPRS_HEART_INTERVAL;
     int HeartInterval = GPRSINI.GetValueInt(SectionStr, Key, DefaultIntervalTime);

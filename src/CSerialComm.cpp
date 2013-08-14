@@ -127,8 +127,6 @@ void CSerialComm::Close()
 //*                     :        当timesout<=0，阻塞读模式，即直到读够指定数据个数后函数返回
 ECommError CSerialComm::WriteBuf(uint8* pBuffer, uint32& BufferLen, int32 TimeOut)
 {
-    DEBUG("CSerialComm::WriteBuf()\n");
-    PrintData(pBuffer, BufferLen);
 
     //write data
     uint32 TotalWritedBytes = 0;
@@ -136,8 +134,9 @@ ECommError CSerialComm::WriteBuf(uint8* pBuffer, uint32& BufferLen, int32 TimeOu
     while (TotalWritedBytes < BufferLen) {
         uint32 WritedBytes = BufferLen-TotalWritedBytes;
         int32 Ret = WriteCom(m_hComm, (char*)(pBuffer+TotalWritedBytes), &WritedBytes, TimeOut);
-        DEBUG("fd: 0x%x Ret=%d, WritedBytes=%d\n", m_hComm, Ret, WritedBytes);
-        if ( (-1 == Ret) || (WriteCount > MAX_WRITEREAD_COUNT) ) {
+        DEBUG("Write %d bytes: ", WritedBytes);
+        hexdump(pBuffer + TotalWritedBytes, WritedBytes);
+        if ((-1 == Ret) || (WriteCount > MAX_WRITEREAD_COUNT)) {
             return COMM_FAIL;
         }
         WriteCount++;
@@ -148,13 +147,17 @@ ECommError CSerialComm::WriteBuf(uint8* pBuffer, uint32& BufferLen, int32 TimeOu
 
 ECommError CSerialComm::ReadBuf(uint8* pBuffer, uint32& BufferLen, int32 TimeOut)
 {
-    DEBUG("BufferLen(read)=%d\n", m_hComm, BufferLen);
     int32 Ret = ReadCom(m_hComm, (char*)pBuffer, &BufferLen, TimeOut);
-    DEBUG("Ret=%d, BufferLen=%d\n", m_hComm, Ret, BufferLen);
     if (Ret != 0) {
+        DEBUG("Read buffer error\n");
         return COMM_FAIL;
     }
-    PrintData(pBuffer, BufferLen);
+    if (BufferLen > 0) {
+        DEBUG("Read %d bytes: ", BufferLen);
+        hexdump(pBuffer, BufferLen);
+    } else {
+        DEBUG("Read zero bytes\n");
+    }
     return COMM_OK;
 }
 
@@ -251,7 +254,7 @@ ECommError CSerialComm::ReadMinByte(uint8* pBuffer, uint32& BufferLen, const uin
         uint32 j = 0;
         for (; j < MAX_WRITEREAD_COUNT; j++) {
             Ret = ReadBuf(ReadBuffer+nTotalReadBytes, nReadBytes, TimeOut);
-            DEBUG("fd: 0x%x Retry %d-read j=%d Result = %d, readbytes=%d-nTotalReadBytes=%d\n", m_hComm, i, j, Ret, nReadBytes, nTotalReadBytes);
+            DEBUG("fd: 0x%x Retry %d-read j=%d Result = %d, readbytes=%d, -nTotalReadBytes=%d\n", m_hComm, i, j, Ret, nReadBytes, nTotalReadBytes);
             if (COMM_OK != Ret) {
                 return Ret;
             }

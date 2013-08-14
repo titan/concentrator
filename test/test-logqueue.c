@@ -4,7 +4,7 @@
 
 int main(int argc, char ** argv) {
     int i;
-    size_t len;
+    unsigned int len;
     LOGQUEUE * q = lqopen("testqueue");
     printf("isempty? %d\n", lqempty(q));
     printf("start to enqueue\n");

@@ -41,25 +41,25 @@ typedef std::vector<CINIElement*> TSectionElements;
 class CINISection : public CINIElement
 {
 protected:
-	std::string m_name;
-	TSectionElements m_data;
+    std::string m_name;
+    TSectionElements m_data;
 
 public:
-	CINISection(const CINISection & section);
-	CINISection(const std::string & name);
-	~CINISection();
-	void SetName(const std::string & name);
-	void AddElement(CINIElement * element);
-	void Copy(const CINISection & section);
-	void RemoveAllComments();
-	const CINISection & operator=(const CINISection & section);
-	const TSectionElements & GetElements() const;
-	const std::string & GetName() const;
-	const std::string ToString() const;
-	CINIProperty * GetProperty(const std::string & key) const;
+    CINISection(const CINISection & section);
+    CINISection(const std::string & name);
+    ~CINISection();
+    void SetName(const std::string & name);
+    void AddElement(CINIElement * element);
+    void Copy(const CINISection & section);
+    void RemoveAllComments();
+    const CINISection & operator=(const CINISection & section);
+    const TSectionElements & GetElements() const;
+    const std::string & GetName() const;
+    const std::string ToString() const;
+    CINIProperty * GetProperty(const std::string & key) const;
 
 protected:
-	void Clear();
+    void Clear();
 };
 
 #endif

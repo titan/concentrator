@@ -2,13 +2,20 @@
 #define _CMAINLOOP_H
 #include "sysdefs.h"
 
-class CMainLoop {
+class CMainLoop
+{
 public:
     static CMainLoop * GetInstance();
     void Run();
-    void SetCom(int com) {this->com = com;};
-    void SetValveCount(int count) {this->valveCount = count;};
-    void SetGPIO(gpio_name_t gpio) {this->gpio = gpio;};
+    void SetCom(int com) {
+        this->com = com;
+    };
+    void SetValveCount(int count) {
+        this->valveCount = count;
+    };
+    void SetGPIO(gpio_name_t gpio) {
+        this->gpio = gpio;
+    };
 private:
     CMainLoop();
     ~CMainLoop();

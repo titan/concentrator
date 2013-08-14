@@ -41,38 +41,38 @@ class CINIProperty;
 class CINI
 {
 protected:
-	std::string m_filename;
-	std::vector<CINISection*> m_data;
+    std::string m_filename;
+    std::vector<CINISection*> m_data;
 
 public:
-	CINI();
-	CINI(const CINI & sinip);
-	CINI(const std::string & filename);
-	~CINI();
-	void Parse(const std::string & filename);
-	void SetValueBool(const std::string & section, const std::string & key, const bool value);
-	void SetValueInt(const std::string & section, const std::string & key, const int value);
-	void SetValueFloat(const std::string & section, const std::string & key, const float value);
-	void SetValueDouble(const std::string & section, const std::string & key, const double value);
-	void SetValueString(const std::string & section, const std::string & key, const std::string & value);
-	void Clear();
-	void RemoveSection(const std::string & section);
-	void RemoveAllComments();
-	void Copy(const CINI & sinip);
-	void Save();
-	void SaveToFile(const std::string & filename);
-	const CINI & operator=(const CINI & sinip);
-	const bool GetValueBool(const std::string & section, const std::string & key, const bool defaultValue) const;
-	const int GetValueInt(const std::string & section, const std::string & key, const int defaultValue) const;
-	const float GetValueFloat(const std::string & section, const std::string & key, const float defaultValue) const;
-	const double GetValueDouble(const std::string & section, const std::string & key, const double defaultValue) const;
-	const std::string GetValueString(const std::string & section, const std::string & key, const std::string & defaultValue) const;
+    CINI();
+    CINI(const CINI & sinip);
+    CINI(const std::string & filename);
+    ~CINI();
+    void Parse(const std::string & filename);
+    void SetValueBool(const std::string & section, const std::string & key, const bool value);
+    void SetValueInt(const std::string & section, const std::string & key, const int value);
+    void SetValueFloat(const std::string & section, const std::string & key, const float value);
+    void SetValueDouble(const std::string & section, const std::string & key, const double value);
+    void SetValueString(const std::string & section, const std::string & key, const std::string & value);
+    void Clear();
+    void RemoveSection(const std::string & section);
+    void RemoveAllComments();
+    void Copy(const CINI & sinip);
+    void Save();
+    void SaveToFile(const std::string & filename);
+    const CINI & operator=(const CINI & sinip);
+    const bool GetValueBool(const std::string & section, const std::string & key, const bool defaultValue) const;
+    const int GetValueInt(const std::string & section, const std::string & key, const int defaultValue) const;
+    const float GetValueFloat(const std::string & section, const std::string & key, const float defaultValue) const;
+    const double GetValueDouble(const std::string & section, const std::string & key, const double defaultValue) const;
+    const std::string GetValueString(const std::string & section, const std::string & key, const std::string & defaultValue) const;
 
 protected:
-	const std::string Trim(const std::string & text) const;
-	const std::string GetValue(const std::string & section, const std::string & key) const;
-	CINISection * GetSection(const std::string & section) const;
-	CINIProperty * GetProperty(CINISection * section, const std::string & key) const;
+    const std::string Trim(const std::string & text) const;
+    const std::string GetValue(const std::string & section, const std::string & key) const;
+    CINISection * GetSection(const std::string & section) const;
+    CINIProperty * GetProperty(CINISection * section, const std::string & key) const;
 };
 
 #endif

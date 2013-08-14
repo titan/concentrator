@@ -10,7 +10,8 @@ typedef enum {
     DB_NEW,
     DB_APPEND,
     DB_RDONLY
-} DBFLAG;
+}
+DBFLAG;
 
 typedef sbtidx_t (* genkeyfun)(void * key, size_t len);
 typedef void (* dbseqfun)(void * key, size_t klen, void * data, size_t dlen, void * params, size_t plen);

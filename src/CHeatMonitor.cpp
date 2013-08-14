@@ -17,7 +17,7 @@
 #endif
 
 const int32 HEAT_TIMEOUT =  10*1000*1000;//10 second
-const uint32 GENERAL_HEAT_COMMAND_ACK_LEN = 154;
+const uint32 GENERAL_HEAT_COMMAND_ACK_LEN = 253;
 const uint32 HEATINFO_TIMEOUT = 300;//s
 const uint8 ERROR_FLAG[] = {0xBD, 0xEB};
 
@@ -38,15 +38,6 @@ CHeatMonitor* CHeatMonitor::GetInstance()
 bool CHeatMonitor::Init(uint32 nStartTime, uint32 nInterval)
 {
     return m_RepeatTimer.Start( nInterval*60 );/*unit:s*/
-}
-
-void CHeatMonitor::SetCom(CSerialComm* pCom)
-{
-    if ( (NULL == pCom) || (m_pCommController == pCom) ) {
-        return;
-    }
-
-    m_pCommController = pCom;
 }
 
 void CHeatMonitor::AddGeneralHeat(uint8* pGeneralHeatMacAddress, uint32 Len)
@@ -82,41 +73,34 @@ uint32 CHeatMonitor::Run()
 
 void CHeatMonitor::GetHeatData()
 {
-    if (NULL == m_pCommController) {
-        DEBUG("COMM is NULL\n");
-        return;
-    }
-
     const uint8 COMMAND_HEAT_NODE_ADDRESS_INDEX = 2;
     const uint8 COMMAND_CHECKSUM_INDEX = 3;
     uint8 SendData[] = {0x10, 0x5B, 0xFE/*heat node address*/, 0x59/*check sum*/, 0x16};//Boardcast heat
-    for (HeatNodeVectorT::iterator HeatNodeIter = m_HeatNodeVector.begin(); HeatNodeIter != m_HeatNodeVector.end(); HeatNodeIter++) {
-        //right now only one heat meter attached, use Boardcast message to get data
-        //so comment the following data
-        if ( (HeatNodeIter->MacAddress[0]+10*HeatNodeIter->MacAddress[1]) >= 0xFF ) {
-            continue;
-        }
-        //uint8 MacAddress = HeatNodeIter->MacAddress[0]+10*HeatNodeIter->MacAddress[1];
-        SendData[COMMAND_HEAT_NODE_ADDRESS_INDEX] = HeatNodeIter->MacAddress[0];
+    for (HeatNodeVectorT::iterator iter = m_HeatNodeVector.begin(); iter != m_HeatNodeVector.end(); iter++) {
+        SendData[COMMAND_HEAT_NODE_ADDRESS_INDEX] = iter->MacAddress[0];
         SendData[COMMAND_CHECKSUM_INDEX] = GetCheckSum(SendData+1, COMMAND_HEAT_NODE_ADDRESS_INDEX);
+        DEBUG("Write to heat ");
         hexdump(SendData, sizeof(SendData));
 
         uint32 SendDataLen = sizeof(SendData);
         FlashLight(LIGHT_GENERAL_HEAT);
-        if (COMM_OK != m_pCommController->WriteBuf(SendData, SendDataLen, HEAT_TIMEOUT)) {
+        if (!SendCommand(SendData, SendDataLen)) {
             DEBUG("WriteError\n");
             return;
         }
-
-        uint8 Buffer[MAX_BUFFER_LEN] = {0};
-        uint32 BufferCount = sizeof(Buffer);
+        uint8 buf[256];
+        bzero(buf, 256);
+        uint16 len = 256;
         FlashLight(LIGHT_GENERAL_HEAT);
-        if (COMM_OK == m_pCommController->ReadMinByte(Buffer, BufferCount, GENERAL_HEAT_COMMAND_ACK_LEN, 0x68, 0x16, HEAT_TIMEOUT) ) {
-            hexdump(Buffer, BufferCount);
-            if (ParseData(Buffer, BufferCount, HeatNodeIter)) {
-                HeatNodeIter->IsOffline = false;
+        if (WaitCmdAck(buf, &len)) {
+            DEBUG("Read from heat ");
+            hexdump(buf, len);
+            if (ParseData(buf, len, iter)) {
+                iter->IsOffline = false;
                 continue;
             }
+        } else {
+            DEBUG("Read from heat error\n");
         }
     }
 
@@ -125,137 +109,103 @@ void CHeatMonitor::GetHeatData()
     m_HeatInfoTimeOut.StartTimer(HEATINFO_TIMEOUT);
 }
 
-bool CHeatMonitor::ParseData(const uint8* pData, uint32 DataLen, HeatNodeVectorT::iterator HeatNodeIter)
+bool CHeatMonitor::ParseData(const uint8* pData, uint32 DataLen, HeatNodeVectorT::iterator iter)
 {
-    if (GENERAL_HEAT_COMMAND_ACK_LEN != DataLen) {
-        DEBUG("DataLen(%d) NOT match\n", DataLen);
-        assert(GENERAL_HEAT_COMMAND_ACK_LEN == DataLen);
-        return false;
-    }
-    assert(HeatNodeIter != m_HeatNodeVector.end());
-    if (HeatNodeIter == m_HeatNodeVector.end()) {
+    assert(iter != m_HeatNodeVector.end());
+    if (iter == m_HeatNodeVector.end()) {
         DEBUG("Invalid node iterator\n");
         return false;
     }
 
-
     const uint32 SUPPLY_WATER_TEMPERATURE_INDEX = 45; // 0x38; // 56
-    memcpy(HeatNodeIter->SupplyWaterTemperature, pData+SUPPLY_WATER_TEMPERATURE_INDEX, sizeof(HeatNodeIter->SupplyWaterTemperature));
+    memcpy(iter->SupplyWaterTemperature, pData+SUPPLY_WATER_TEMPERATURE_INDEX, sizeof(iter->SupplyWaterTemperature));
+    DEBUG("SupplyWaterTemperature ");
+    hexdump(iter->SupplyWaterTemperature, GENERALHEAT_TEMPERATURE_LEN);
+    iter->SupplyWaterTemperatureDIF = pData[SUPPLY_WATER_TEMPERATURE_INDEX - 2];
 
     const uint32 RETURN_WATER_TEMPERATURE_INDEX = 51; // 0x3C; // 60
-    memcpy(HeatNodeIter->ReturnWaterTemperature, pData+RETURN_WATER_TEMPERATURE_INDEX, sizeof(HeatNodeIter->ReturnWaterTemperature));
+    memcpy(iter->ReturnWaterTemperature, pData+RETURN_WATER_TEMPERATURE_INDEX, sizeof(iter->ReturnWaterTemperature));
+    DEBUG("ReturnWaterTemperature ");
+    hexdump(iter->ReturnWaterTemperature, GENERALHEAT_TEMPERATURE_LEN);
+    iter->ReturnWaterTemperatureDIF = pData[RETURN_WATER_TEMPERATURE_INDEX - 2];
 
     const uint32 CURRENT_FLOW_VELOCITY_INDEX = 75; // 0x35; // 53
-    memcpy(HeatNodeIter->CurrentFlowVelocity, pData+CURRENT_FLOW_VELOCITY_INDEX , sizeof(HeatNodeIter->CurrentFlowVelocity)-1);//current flow only has three bytes
-    // memcpy(HeatNodeIter->CurrentFlowVelocity, pData+CURRENT_FLOW_VELOCITY_INDEX , sizeof(HeatNodeIter->CurrentFlowVelocity));
+    memcpy(iter->CurrentFlowVelocity, pData+CURRENT_FLOW_VELOCITY_INDEX , sizeof(iter->CurrentFlowVelocity)-1);//current flow only has three bytes
+    DEBUG("CurrentFlowVelocity ");
+    hexdump(iter->CurrentFlowVelocity, VELOCITY_LEN);
+    iter->CurrentFlowVelocityDIF = pData[CURRENT_FLOW_VELOCITY_INDEX - 2];
+    // memcpy(iter->CurrentFlowVelocity, pData+CURRENT_FLOW_VELOCITY_INDEX , sizeof(iter->CurrentFlowVelocity));
 
     const uint32 CURRENT_HEAT_VELOCITY_INDEX = 63;// 0x2F; // 47
-    memcpy(HeatNodeIter->CurrentHeatVelocity, pData+CURRENT_HEAT_VELOCITY_INDEX, sizeof(HeatNodeIter->CurrentHeatVelocity));
+    memcpy(iter->CurrentHeatVelocity, pData+CURRENT_HEAT_VELOCITY_INDEX, sizeof(iter->CurrentHeatVelocity));
+    DEBUG("CurrentHeatVelocity ");
+    hexdump(iter->CurrentHeatVelocity, VELOCITY_LEN);
+    iter->CurrentHeatVelocityDIF = pData[CURRENT_HEAT_VELOCITY_INDEX - 2];
 
     const uint32 TOTAL_FLOW_CAPACITY_INDEX = 33; // 0x28; // 40
-    memcpy(HeatNodeIter->TotalFlow, pData+TOTAL_FLOW_CAPACITY_INDEX, sizeof(HeatNodeIter->TotalFlow));
+    memcpy(iter->TotalFlow, pData+TOTAL_FLOW_CAPACITY_INDEX, sizeof(iter->TotalFlow));
+    DEBUG("TotalFlow ");
+    hexdump(iter->TotalFlow, CAPACITY_LEN);
+    iter->TotalFlowDIF = pData[TOTAL_FLOW_CAPACITY_INDEX - 2];
 
     const uint32 TOTAL_HEAT_CAPACITY_INDEX = 27; // 0x14; // 20
-    memcpy(HeatNodeIter->TotalHeat, pData+TOTAL_HEAT_CAPACITY_INDEX, sizeof(HeatNodeIter->TotalHeat));
+    memcpy(iter->TotalHeat, pData+TOTAL_HEAT_CAPACITY_INDEX, sizeof(iter->TotalHeat));
+    DEBUG("TotalHeat ");
+    hexdump(iter->TotalHeat, CAPACITY_LEN);
+    iter->TotalHeatDIF = pData[TOTAL_HEAT_CAPACITY_INDEX - 2];
 
     // const uint32 TOTAL_WORK_HOURS_INDEX = 39;
-    // memcpy(HeatNodeIter->TotalWorkHours, pData+TOTAL_WORK_HOURS_INDEX, sizeof(HeatNodeIter->TotalWorkHours));
-    memset(HeatNodeIter->TotalWorkHours, 0, sizeof(HeatNodeIter->TotalWorkHours));//don't need work hours
+    // memcpy(iter->TotalWorkHours, pData+TOTAL_WORK_HOURS_INDEX, sizeof(iter->TotalWorkHours));
+    memset(iter->TotalWorkHours, 0, sizeof(iter->TotalWorkHours));//don't need work hours
 
     // const uint32 UTCTIME_INDEX = 124;
-    // memcpy(&(HeatNodeIter->CurrentTime), pData+UTCTIME_INDEX,  sizeof(HeatNodeIter->CurrentTime));
-    memset(&(HeatNodeIter->CurrentTime), 0, sizeof(HeatNodeIter->CurrentTime));
+    // memcpy(&(iter->CurrentTime), pData+UTCTIME_INDEX,  sizeof(iter->CurrentTime));
+    memset(&(iter->CurrentTime), 0, sizeof(iter->CurrentTime));
 
     return true;
 }
 
 void CHeatMonitor::SendHeatData()
 {
-    const uint8 GeneralLeaderCharacter = 0xF1;
-    const uint8 GeneralHeatLen = GENERAL_HEAT_DATA_PACKET_LEN-sizeof(GeneralLeaderCharacter)-sizeof(GeneralHeatLen);
-    uint8 GeneralHeatData[GENERAL_HEAT_DATA_PACKET_LEN] = {0};
-    GeneralHeatData[0] = GeneralLeaderCharacter;
-    GeneralHeatData[sizeof(GeneralLeaderCharacter)] = GeneralHeatLen;
-    m_HeatLock.Lock();
     if (m_HeatNodeVector.size() > 0) {
-        HeatNodeVectorT::iterator Iter = m_HeatNodeVector.begin();
-        for (; Iter != m_HeatNodeVector.end(); Iter++) {
-            if (Iter->IsOffline) {
+        uint8 data[1024];
+        uint8 ptr = 2; // skip node count
+        uint16 count = 0;
+        bzero(data, 1024);
+        m_HeatLock.Lock();
+        for (HeatNodeVectorT::iterator iter = m_HeatNodeVector.begin(); iter != m_HeatNodeVector.end(); iter++) {
+            if (iter->IsOffline) {
                 continue;
             }
-            DEBUG("HeatData:");
-            hexdump(Iter->MacAddress, sizeof(HeatNodeDataT));
-            memcpy(GeneralHeatData+sizeof(GeneralLeaderCharacter)+sizeof(GeneralHeatLen), Iter->MacAddress, GeneralHeatLen);
+            count ++;
 
-            //adjust the data
-            //adjust the SupplyWaterTemperature
-            const uint8 SUPPLY_WATERT_EMPERATURE_POS = sizeof(GeneralLeaderCharacter)+sizeof(GeneralHeatLen)+MACHINENAME_LEN;
-            uint32 SupplyWaterTemperature = 0;
-            hexdump(GeneralHeatData+SUPPLY_WATERT_EMPERATURE_POS, sizeof(ERROR_FLAG));
-            if ( memcmp(ERROR_FLAG, GeneralHeatData+SUPPLY_WATERT_EMPERATURE_POS, sizeof(ERROR_FLAG)) ) {
-                SupplyWaterTemperature = 10*((GeneralHeatData[SUPPLY_WATERT_EMPERATURE_POS+GENERALHEAT_TEMPERATURE_LEN-1]>>4)&0x0F)
-                                         + ((GeneralHeatData[SUPPLY_WATERT_EMPERATURE_POS+GENERALHEAT_TEMPERATURE_LEN-1]&0x0F));
-                SupplyWaterTemperature = 100*SupplyWaterTemperature
-                                         + 10*((GeneralHeatData[SUPPLY_WATERT_EMPERATURE_POS+GENERALHEAT_TEMPERATURE_LEN-2]>>4)&0x0F)
-                                         + (GeneralHeatData[SUPPLY_WATERT_EMPERATURE_POS+GENERALHEAT_TEMPERATURE_LEN-2]&0x0F);
-            }
-            GeneralHeatData[SUPPLY_WATERT_EMPERATURE_POS] = 0x01;//unit
+            data[ptr] = 0xF1; ptr ++;
+            data[ptr] = 35; ptr ++; // data len
 
-            DEBUG("SupplyWaterTemperature=%u\n", SupplyWaterTemperature);
-            GeneralHeatData[SUPPLY_WATERT_EMPERATURE_POS+1] = (SupplyWaterTemperature%10)<<4;
-            SupplyWaterTemperature /= 10;
-            GeneralHeatData[SUPPLY_WATERT_EMPERATURE_POS+2] = (((SupplyWaterTemperature%100)/10)<<4)|((SupplyWaterTemperature%100)%10);
-            SupplyWaterTemperature /= 100;
-            GeneralHeatData[SUPPLY_WATERT_EMPERATURE_POS+3] = (SupplyWaterTemperature%100)<<4;
-            //adjust the ReturnWaterTemperature
-            const uint8 RETURN_WATERT_EMPERATURE_POS = SUPPLY_WATERT_EMPERATURE_POS+GENERALHEAT_TEMPERATURE_LEN;
-            uint32 ReturnWaterTemperature = 0;
-            hexdump(GeneralHeatData+RETURN_WATERT_EMPERATURE_POS, sizeof(ERROR_FLAG));
-            if ( memcmp(ERROR_FLAG, GeneralHeatData+RETURN_WATERT_EMPERATURE_POS, sizeof(ERROR_FLAG)) ) {
-                ReturnWaterTemperature = 10*((GeneralHeatData[RETURN_WATERT_EMPERATURE_POS+GENERALHEAT_TEMPERATURE_LEN-1]>>4)&0x0F)
-                                         + ((GeneralHeatData[RETURN_WATERT_EMPERATURE_POS+GENERALHEAT_TEMPERATURE_LEN-1]&0x0F));
-                ReturnWaterTemperature = 100*ReturnWaterTemperature
-                                         + 10*((GeneralHeatData[RETURN_WATERT_EMPERATURE_POS+GENERALHEAT_TEMPERATURE_LEN-2]>>4)&0x0F)
-                                         + (GeneralHeatData[RETURN_WATERT_EMPERATURE_POS+GENERALHEAT_TEMPERATURE_LEN-2]&0x0F);
-            }
-            GeneralHeatData[RETURN_WATERT_EMPERATURE_POS] = 0x01;//unit
+            DEBUG("HeatData: ");
+            hexdump(iter->MacAddress, sizeof(HeatNodeDataT));
+            memcpy(data + ptr, iter->MacAddress + 2, sizeof(iter->MacAddress) - 2); ptr += sizeof(iter->MacAddress) - 2;
+            data[ptr] = iter->MacAddress[1]; ptr ++;
+            memcpy(data + ptr, iter->SupplyWaterTemperature, GENERALHEAT_TEMPERATURE_LEN); ptr += GENERALHEAT_TEMPERATURE_LEN;
+            data[ptr] = iter->SupplyWaterTemperatureDIF; ptr ++; // error code?
+            memcpy(data + ptr, iter->ReturnWaterTemperature, GENERALHEAT_TEMPERATURE_LEN); ptr += GENERALHEAT_TEMPERATURE_LEN;
+            data[ptr] = iter->ReturnWaterTemperatureDIF; ptr ++; // error code?
+            memcpy(data + ptr, iter->CurrentFlowVelocity, VELOCITY_LEN); ptr += VELOCITY_LEN;
+            data[ptr] = iter->CurrentFlowVelocityDIF; ptr ++; // error code?
 
-            DEBUG("ReturnWaterTemperature=%u\n", ReturnWaterTemperature);
-            GeneralHeatData[RETURN_WATERT_EMPERATURE_POS+1] = (ReturnWaterTemperature%10)<<4;
-            ReturnWaterTemperature /= 10;
-            GeneralHeatData[RETURN_WATERT_EMPERATURE_POS+2] = (((ReturnWaterTemperature%100)/10)<<4)|((ReturnWaterTemperature%100)%10);
-            ReturnWaterTemperature /= 100;
-            GeneralHeatData[RETURN_WATERT_EMPERATURE_POS+3] = (ReturnWaterTemperature%100)<<4;
-            //adjust CurrentFlowVelocity
-            const uint8 CURRENT_FLOW_VELOCITY_POS = RETURN_WATERT_EMPERATURE_POS+GENERALHEAT_TEMPERATURE_LEN;
-            hexdump(GeneralHeatData+CURRENT_FLOW_VELOCITY_POS, sizeof(ERROR_FLAG));
-            if ( 0 == memcmp(ERROR_FLAG, GeneralHeatData+CURRENT_FLOW_VELOCITY_POS, sizeof(ERROR_FLAG)) ) {
-                memset(GeneralHeatData+CURRENT_FLOW_VELOCITY_POS+1, 0, VELOCITY_LEN-1);
-            }
-            GeneralHeatData[CURRENT_FLOW_VELOCITY_POS] = 0x01;//unit
-            //adjust CurrentHeatVelocity
-            const uint8 CURRENT_HEAT_VELOCITY_POS = CURRENT_FLOW_VELOCITY_POS+VELOCITY_LEN;
-            hexdump(GeneralHeatData+CURRENT_HEAT_VELOCITY_POS, sizeof(ERROR_FLAG));
-            if ( 0 == memcmp(ERROR_FLAG, GeneralHeatData+CURRENT_HEAT_VELOCITY_POS, sizeof(ERROR_FLAG)) ) {
-                memset(GeneralHeatData+CURRENT_HEAT_VELOCITY_POS+1, 0, VELOCITY_LEN-1);
-            }
-            GeneralHeatData[CURRENT_HEAT_VELOCITY_POS] = 0x01;//unit
-            //adjust TotalFlow
-            const uint8 TOTAL_FLOW_POS = CURRENT_HEAT_VELOCITY_POS+VELOCITY_LEN;
-            hexdump(GeneralHeatData+TOTAL_FLOW_POS, sizeof(ERROR_FLAG));
-            if ( 0 == memcmp(ERROR_FLAG, GeneralHeatData+TOTAL_FLOW_POS, sizeof(ERROR_FLAG)) ) {
-                memset(GeneralHeatData+TOTAL_FLOW_POS+1, 0, CAPACITY_LEN-1);
-            }
-            GeneralHeatData[TOTAL_FLOW_POS] = 0x01;//unit
-            //adjust TotalHeat
-            const uint8 TOTAL_HEAT_POS = TOTAL_FLOW_POS+CAPACITY_LEN;
-            hexdump(GeneralHeatData+TOTAL_HEAT_POS, sizeof(ERROR_FLAG));
-            if ( 0 == memcmp(ERROR_FLAG, GeneralHeatData+TOTAL_HEAT_POS, sizeof(ERROR_FLAG)) ) {
-                memset(GeneralHeatData+TOTAL_HEAT_POS+1, 0, CAPACITY_LEN-1);
-            }
-            GeneralHeatData[TOTAL_HEAT_POS] = 0x01;//unit
-
-            CPortal::GetInstance()->InsertGeneralHeatData( GeneralHeatData, sizeof(GeneralHeatData) );
+            memcpy(data + ptr, iter->CurrentHeatVelocity, VELOCITY_LEN); ptr += VELOCITY_LEN;
+            data[ptr] = iter->CurrentHeatVelocityDIF; ptr ++; // error code?
+            memcpy(data + ptr, iter->TotalFlow, CAPACITY_LEN); ptr += CAPACITY_LEN;
+            data[ptr] = iter->TotalFlowDIF; ptr ++; // error code?
+            memcpy(data + ptr, iter->TotalHeat, CAPACITY_LEN); ptr += CAPACITY_LEN;
+            data[ptr] = iter->TotalHeatDIF; ptr ++; // error code?
+        }
+        if (ptr > 2) {
+            DEBUG("before setting count ");
+            hexdump(data, ptr);
+            DEBUG("count is %d\n", count);
+            memcpy(data, &count, 2); // set node count
+            CPortal::GetInstance()->InsertGeneralHeatData(data, ptr);
         }
     }
     m_HeatLock.UnLock();
@@ -428,7 +378,7 @@ bool CHeatMonitor::GetHeatNodeInfoList(HeatNodeInfoListT& HeatNodeInfoList)
 
 void CHeatMonitor::GetHeatInfoTask()
 {
-    DEBUG("m_GetHeatInforTaskActive=%d, m_IsHeatInfoReady=%d\n", m_GetHeatInforTaskActive, m_IsHeatInfoReady);
+    //DEBUG("m_GetHeatInforTaskActive=%d, m_IsHeatInfoReady=%d\n", m_GetHeatInforTaskActive, m_IsHeatInfoReady);
     if ( m_GetHeatInforTaskActive ) {
         if ( false == m_IsHeatInfoReady ) {
             DEBUG("GetHeatInfo\n");
@@ -444,4 +394,88 @@ void CHeatMonitor::GetHeatInfoTask()
         DEBUG("HeatInfo NOT ready\n");
         m_IsHeatInfoReady = false;
     }
+}
+
+bool CHeatMonitor::SendCommand(uint8 * data, uint16 len)
+{
+    fd_set wfds;
+    struct timeval tv;
+    int retval, w, wrote = 0;
+    uint8 * buf = data;
+    uint16 wlen = len;
+    uint8 retry = 3;
+
+    FD_ZERO(&wfds);
+    FD_SET(com, &wfds);
+
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+
+    while (retry > 0) {
+        retry --;
+        retval = select(com + 1, NULL, &wfds, NULL, &tv);
+        if (retval) {
+            if (FD_ISSET(com, &wfds)) {
+                w = write(com, buf + wrote, wlen - wrote);
+                if (w == -1) {
+                    continue;
+                }
+                wrote += w;
+                if (wrote == wlen) {
+                    DEBUG("Write %d bytes:", wlen);
+                    hexdump(buf, wlen);
+                    wrote = 0;
+                    myusleep(500 * 1000);
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+bool CHeatMonitor::WaitCmdAck(uint8 * data, uint16 * len)
+{
+    fd_set rfds;
+    struct timeval tv;
+    int retval, r, readed = 0;
+    uint8 * ack = data;
+    uint16 rlen = 0;
+    uint8 retry = 3;
+
+    FD_ZERO(&rfds);
+    FD_SET(com, &rfds);
+
+    while (retry > 0) {
+        retry --;
+        tv.tv_sec = 1;
+        tv.tv_usec = 0;
+        retval = select(com + 1, &rfds, NULL, NULL, &tv);
+        if (retval) {
+            if (FD_ISSET(com, &rfds)) {
+
+                if (readed == 0) {
+                    rlen = 253;
+                    bzero(ack, 256);
+                }
+
+                r = read(com, ack + readed, rlen - readed);
+
+                if (r == -1) {
+                    continue;
+                }
+                readed += r;
+
+                if (readed == rlen) {
+                    readed = 0;
+                    DEBUG("read %d bytes: ", rlen);
+                    hexdump(ack, rlen);
+                    * len = rlen;
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
 }

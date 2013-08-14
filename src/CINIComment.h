@@ -35,12 +35,12 @@ along with CINI.  If not, see <http://www.gnu.org/licenses/>.
 class CINIComment : public CINIElement
 {
 protected:
-	std::string m_comment;
+    std::string m_comment;
 
 public:
-	CINIComment(const std::string & comment);
-	void SetComment(const std::string & comment);
-	const std::string ToString() const;
+    CINIComment(const std::string & comment);
+    void SetComment(const std::string & comment);
+    const std::string ToString() const;
 };
 
 #endif

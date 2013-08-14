@@ -5,11 +5,11 @@ extern "C" {
 #endif
 
 typedef struct _cbuffer {
-  void *start;                  /* the start address of buffer */
-  unsigned int w;               /* the position of the write pointer */
-  unsigned int r;               /* the position of the read pointer */
-  unsigned int mask;
-  unsigned int cellsize;
+    void *start;                  /* the start address of buffer */
+    unsigned int w;               /* the position of the write pointer */
+    unsigned int r;               /* the position of the read pointer */
+    unsigned int mask;
+    unsigned int cellsize;
 } *cbuffer_t;
 
 #define cbuffer_count(buf) ((buf)->w - (buf)->r)

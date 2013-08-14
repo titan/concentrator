@@ -6,7 +6,8 @@
 
 extern bool wireless;
 
-class IValveMonitorFactory {
+class IValveMonitorFactory
+{
 public:
     static IValveMonitor * GetInstance() {
         if (wireless) {

@@ -28,7 +28,7 @@
 #endif
 
 const uint32 MAX_GPRS_RETRY_COUNT = 3;
-const int32 GPRS_TIMEOUT = 10*1000*1000;//10 seconds
+const int32 GPRS_TIMEOUT = 3*1000*1000;//10 seconds
 
 const uint32 MAX_GET_GPRSINFO_RETRY_COUNT = 3;
 const uint32 GPRS_INFO_TIMEOUT = 300;//s
@@ -163,7 +163,7 @@ CPortal::CPortal(): timeReady(false)
     , m_SerialIndex(0)
     , m_IsRegistered(false)
     , m_pGPRS(NULL)
-    , m_FixHourTimer(HOUR_TYPE)
+    , m_FixHourTimer(MINUTE_TYPE)
 {
     if (access("queues/", F_OK) == -1) {
         mkdir("queues", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
@@ -208,15 +208,15 @@ void CPortal::Start()
 void CPortal::HeartBeat()
 {
     if ( m_HeartBeatTimer.Done() ) {
-        DEBUG("HeartBeat\n");
+        DEBUG("HeartBeatTimer is done\n");
         SendHeartBeat();
     }
 }
 
 void CPortal::OnFixTimer()
 {
-    DEBUG("CPortal::OnFixTimer()\n");
-    if ( m_FixHourTimer.Done() ) {
+    if (m_FixHourTimer.Done()) {
+        DEBUG("FixTimer is done\n");
         CHeatMonitor::GetInstance()->SendHeatData();
         SendGeneralHeatData();
         // CForwarderMonitor::GetInstance()->SendValveData();
@@ -291,7 +291,7 @@ bool CPortal::IsRegistered()
 
 void CPortal::InsertGeneralHeatData(uint8 * data, uint32 len)
 {
-    DEBUG("Insert general heat data: ");
+    DEBUG("Insert general heat data %d bytes : ", len);
     hexdump(data, len);
     heatQueueLock.Lock();
     lqenqueue(heatQueue, data, len);
@@ -301,55 +301,55 @@ void CPortal::InsertGeneralHeatData(uint8 * data, uint32 len)
 void CPortal::SendGeneralHeatData()
 {
     heatQueueLock.Lock();
-    //DEBUG("PacketCount=%d\n", m_HeatPacketList.size());
-    uint8 SentPacketBuffer[MAX_GPRS_PACKET_LEN] = {0};
+
+    uint8 buf[MAX_GPRS_PACKET_LEN];
+    bzero(buf, MAX_GPRS_PACKET_LEN);
     while (!lqempty(heatQueue)) {
-        uint32 Pos = CreatePacketHeader(SentPacketBuffer, sizeof(SentPacketBuffer), jzqid, FUNCTION_CODE_GENERAL_UP, m_SerialIndex);
-        if (Pos > sizeof(SentPacketBuffer)) {
+
+        uint32 pos = CreatePacketHeader(buf, MAX_GPRS_PACKET_LEN, jzqid, FUNCTION_CODE_GENERAL_UP, m_SerialIndex);
+        if (pos > sizeof(buf)) {
             DEBUG("Buffer NOT enought\n");
             heatQueueLock.UnLock();
             return;
         }
 
-        uint16 NodeCount = 0;
-        Pos += sizeof(NodeCount);
         size_t dlen = 0;
-        if (!lqfront(heatQueue, SentPacketBuffer + Pos, &dlen)) {
+        if (!lqfront(heatQueue, buf + pos, &dlen)) {
             DEBUG("Unable to fetch first element in heat queue\n");
             heatQueueLock.UnLock();
             return;
         }
-        Pos += dlen;
-        NodeCount ++;
+        pos += dlen;
         /*
           GeneralHeatPacketListT::iterator Iter = m_HeatPacketList.begin();
-          for( ;(Iter != m_HeatPacketList.end()) && (Pos < (MAX_GPRS_PACKET_LEN-GENERAL_HEAT_DATA_PACKET_LEN-sizeof(uint32)-sizeof(uint16))); Iter++) {
-          memcpy(SentPacketBuffer+Pos, Iter->HeatData, sizeof(Iter->HeatData));
-          Pos += sizeof(Iter->HeatData);
+          for( ;(Iter != m_HeatPacketList.end()) && (pos < (MAX_GPRS_PACKET_LEN-GENERAL_HEAT_DATA_PACKET_LEN-sizeof(uint32)-sizeof(uint16))); Iter++) {
+          memcpy(buf+pos, Iter->HeatData, sizeof(Iter->HeatData));
+          pos += sizeof(Iter->HeatData);
           NodeCount++;
           }
         */
-        memcpy(SentPacketBuffer+PACKET_SUBPACKET_COUNT_POS, &NodeCount, sizeof(NodeCount));
 
         uint32 UTCTime = (uint32)time(NULL);
-        memcpy(SentPacketBuffer+Pos, &UTCTime, sizeof(UTCTime));
-        Pos += sizeof(UTCTime);
+        memcpy(buf+pos, &UTCTime, sizeof(UTCTime));
+        pos += sizeof(UTCTime);
 
         uint16 CRC16 = 0;
 
-        uint16 PacketLen = Pos - sizeof(PACKET_HEADER_FLAG);
-        memcpy(SentPacketBuffer+PACKET_LEN_POS, &(PacketLen), sizeof(PacketLen));
+        uint16 PacketLen = pos - sizeof(PACKET_HEADER_FLAG);
+        memcpy(buf+PACKET_LEN_POS, &(PacketLen), sizeof(PacketLen));
 
-        CRC16 = GenerateCRC(SentPacketBuffer, Pos);
-        memcpy(SentPacketBuffer+Pos, &CRC16, sizeof(CRC16));
-        Pos += sizeof(CRC16);
-        if (false == GPRS_Send(SentPacketBuffer, Pos)) {
-            DEBUG("fail\n");
+        CRC16 = GenerateCRC(buf, pos);
+        memcpy(buf+pos, &CRC16, sizeof(CRC16));
+        pos += sizeof(CRC16);
+        DEBUG("Send general heat data %d bytes ", pos);
+        hexdump(buf, pos);
+        if (false == GPRS_Send(buf, pos)) {
+            DEBUG("Send general heat data fail\n");
             heatQueueLock.UnLock();
             return;
-            //WriteNotSentData(SentPacketBuffer, Pos);
+            //WriteNotSentData(buf, pos);
         }
-        lqdequeue(heatQueue, SentPacketBuffer, &dlen);
+        lqdequeue(heatQueue, buf, &dlen);
     }
     heatQueueLock.UnLock();
 }
@@ -367,69 +367,69 @@ void CPortal::SendValveData()
 {
     valveQueueLock.Lock();
     //DEBUG("PacketCount=%d\n", m_ForwarderPacketList.size());
-    uint8 SentPacketBuffer[MAX_GPRS_PACKET_LEN] = {0};
+    uint8 buf[MAX_GPRS_PACKET_LEN];
     while (!lqempty(valveQueue)) {
-        uint32 Pos = 0;
+        uint32 pos = 0;
         if (VALVE_DATA_TYPE_HEAT == IValveMonitorFactory::GetInstance()->GetValveDataType()) {
-            Pos = CreatePacketHeader(SentPacketBuffer, sizeof(SentPacketBuffer), jzqid, FUNCTION_CODE_FORWARDER_HEAT_UP, m_SerialIndex);
+            pos = CreatePacketHeader(buf, sizeof(buf), jzqid, FUNCTION_CODE_FORWARDER_HEAT_UP, m_SerialIndex);
         } else {
-            Pos = CreatePacketHeader(SentPacketBuffer, sizeof(SentPacketBuffer), jzqid, FUNCTION_CODE_FORWARDER_TEMPERATURE_UP, m_SerialIndex);
+            pos = CreatePacketHeader(buf, sizeof(buf), jzqid, FUNCTION_CODE_FORWARDER_TEMPERATURE_UP, m_SerialIndex);
         }
-        if (Pos > sizeof(SentPacketBuffer)) {
+        if (pos > sizeof(buf)) {
             DEBUG("Buffer NOT enought\n");
             valveQueueLock.UnLock();
             return;
         }
 
         uint16 NodeCount = 0;
-        Pos += sizeof(NodeCount);
+        pos += sizeof(NodeCount);
         size_t dlen = 0;
-        if (!lqfront(valveQueue, SentPacketBuffer + Pos, &dlen)) {
+        if (!lqfront(valveQueue, buf + pos, &dlen)) {
             DEBUG("Unable to fetch first element in valve queue\n");
             valveQueueLock.UnLock();
             return;
         }
-        Pos += dlen;
+        pos += dlen;
         NodeCount ++;
         /*
           ForwarderPacketListT::iterator Iter = m_ForwarderPacketList.begin();
-          for (;(Iter != m_ForwarderPacketList.end()) && (Pos < (MAX_GPRS_PACKET_LEN-MAX_FORWARDER_DATA_LEN-sizeof(uint32)-sizeof(uint16))); Iter++) {
-          memcpy(SentPacketBuffer+Pos, Iter->ForwarderData, Iter->ForwarderDataLen);
-          Pos += Iter->ForwarderDataLen;
+          for (;(Iter != m_ForwarderPacketList.end()) && (pos < (MAX_GPRS_PACKET_LEN-MAX_FORWARDER_DATA_LEN-sizeof(uint32)-sizeof(uint16))); Iter++) {
+          memcpy(buf+pos, Iter->ForwarderData, Iter->ForwarderDataLen);
+          pos += Iter->ForwarderDataLen;
           NodeCount++;
           }
         */
-        memcpy(SentPacketBuffer+PACKET_SUBPACKET_COUNT_POS, &NodeCount, sizeof(NodeCount));
+        memcpy(buf+PACKET_SUBPACKET_COUNT_POS, &NodeCount, sizeof(NodeCount));
 
         uint32 UTCTime = (uint32)time(NULL);
-        memcpy(SentPacketBuffer+Pos, &UTCTime, sizeof(UTCTime));
-        Pos += sizeof(UTCTime);
+        memcpy(buf+pos, &UTCTime, sizeof(UTCTime));
+        pos += sizeof(UTCTime);
 
         uint16 CRC16 = 0;
 
-        uint16 PacketLen = Pos - sizeof(PACKET_HEADER_FLAG);
-        memcpy(SentPacketBuffer+PACKET_LEN_POS, &(PacketLen), sizeof(PacketLen));
+        uint16 PacketLen = pos - sizeof(PACKET_HEADER_FLAG);
+        memcpy(buf+PACKET_LEN_POS, &(PacketLen), sizeof(PacketLen));
         assert(sizeof(PacketLen) == PACKET_LEN_LEN);
 
-        CRC16 = GenerateCRC(SentPacketBuffer, Pos);
-        memcpy(SentPacketBuffer+Pos, &CRC16, sizeof(CRC16));
-        Pos += sizeof(CRC16);
-        if (false == GPRS_Send(SentPacketBuffer, Pos)) {
+        CRC16 = GenerateCRC(buf, pos);
+        memcpy(buf+pos, &CRC16, sizeof(CRC16));
+        pos += sizeof(CRC16);
+        if (false == GPRS_Send(buf, pos)) {
             DEBUG("fail\n");
             valveQueueLock.UnLock();
             return;
-            //WriteNotSentData(SentPacketBuffer, Pos);
+            //WriteNotSentData(buf, pos);
         }
-        lqdequeue(valveQueue, SentPacketBuffer, &dlen);
+        lqdequeue(valveQueue, buf, &dlen);
     }
     valveQueueLock.UnLock();
 }
 
 void CPortal::SendHeartBeat()
 {
-    uint8 SentPacketBuffer[MAX_GPRS_PACKET_LEN] = {0};
-    uint32 Pos = CreatePacketHeader(SentPacketBuffer, sizeof(SentPacketBuffer), jzqid, FUNCTION_CODE_HEART_BEAT_UP, m_SerialIndex);
-    if (Pos > sizeof(SentPacketBuffer)) {
+    uint8 buf[MAX_GPRS_PACKET_LEN] = {0};
+    uint32 pos = CreatePacketHeader(buf, sizeof(buf), jzqid, FUNCTION_CODE_HEART_BEAT_UP, m_SerialIndex);
+    if (pos > sizeof(buf)) {
         DEBUG("Buffer NOT enought\n");
         return;
     }
@@ -438,17 +438,17 @@ void CPortal::SendHeartBeat()
     if ( false == GetLocalTimeStamp(UTCTime) ) {
         return;
     }
-    memcpy(SentPacketBuffer+Pos, &UTCTime, sizeof(UTCTime));
-    Pos += sizeof(UTCTime);
+    memcpy(buf+pos, &UTCTime, sizeof(UTCTime));
+    pos += sizeof(UTCTime);
 
-    uint16 PacketLen = Pos-sizeof(PACKET_HEADER_FLAG);
-    memcpy(SentPacketBuffer+PACKET_LEN_POS, &PacketLen, sizeof(PacketLen));
+    uint16 PacketLen = pos-sizeof(PACKET_HEADER_FLAG);
+    memcpy(buf+PACKET_LEN_POS, &PacketLen, sizeof(PacketLen));
 
-    uint16 CRC16 = GenerateCRC(SentPacketBuffer, Pos);
-    memcpy(SentPacketBuffer+Pos, &CRC16, sizeof(CRC16));
-    Pos += sizeof(CRC16);
+    uint16 CRC16 = GenerateCRC(buf, pos);
+    memcpy(buf+pos, &CRC16, sizeof(CRC16));
+    pos += sizeof(CRC16);
 
-    GPRS_Send(SentPacketBuffer, Pos);
+    GPRS_Send(buf, pos);
 }
 
 bool CPortal::ParseData(uint8* pData, uint32 DataLen)
@@ -865,56 +865,56 @@ void CPortal::SendChargeData()
 {
     chargeQueueLock.Lock();
     // DEBUG("PacketCount = %d\n", m_ChargePacketList.size());
-    uint8 SentPacketBuffer[MAX_GPRS_PACKET_LEN] = {0};
+    uint8 buf[MAX_GPRS_PACKET_LEN] = {0};
     while (!lqempty(chargeQueue)) {
-        uint32 Pos = CreatePacketHeader(SentPacketBuffer, sizeof(SentPacketBuffer), jzqid, FUNCTION_CODE_CHARGE_DATA_UP, m_SerialIndex);
-        if (Pos > sizeof(SentPacketBuffer)) {
+        uint32 pos = CreatePacketHeader(buf, sizeof(buf), jzqid, FUNCTION_CODE_CHARGE_DATA_UP, m_SerialIndex);
+        if (pos > sizeof(buf)) {
             DEBUG("Buffer NOT enought\n");
             chargeQueueLock.UnLock();
             return;
         }
 
         uint16 NodeCount = 0;
-        Pos += sizeof(NodeCount);
+        pos += sizeof(NodeCount);
         size_t dlen = 0;
-        if (!lqfront(chargeQueue, SentPacketBuffer + Pos, &dlen)) {
+        if (!lqfront(chargeQueue, buf + pos, &dlen)) {
             DEBUG("Unable to fetch first element in charge queue\n");
             chargeQueueLock.UnLock();
             return;
         }
-        Pos += dlen;
+        pos += dlen;
         NodeCount ++;
         /*
         list<ChargePacketT>::iterator Iter = m_ChargePacketList.begin();
-        for ( ;(Iter != m_ChargePacketList.end()) && (Pos < (MAX_GPRS_PACKET_LEN-FORWARDER_CHARGE_PACKET_LEN-sizeof(uint32)-sizeof(uint16))); Iter++) {
-            memcpy(SentPacketBuffer+Pos, Iter->ChargePacket, FORWARDER_CHARGE_PACKET_LEN);
-            Pos += FORWARDER_CHARGE_PACKET_LEN;
+        for ( ;(Iter != m_ChargePacketList.end()) && (pos < (MAX_GPRS_PACKET_LEN-FORWARDER_CHARGE_PACKET_LEN-sizeof(uint32)-sizeof(uint16))); Iter++) {
+            memcpy(buf+pos, Iter->ChargePacket, FORWARDER_CHARGE_PACKET_LEN);
+            pos += FORWARDER_CHARGE_PACKET_LEN;
             NodeCount++;
         }
         */
-        memcpy(SentPacketBuffer+PACKET_SUBPACKET_COUNT_POS, &NodeCount, sizeof(NodeCount));
+        memcpy(buf+PACKET_SUBPACKET_COUNT_POS, &NodeCount, sizeof(NodeCount));
         assert(sizeof(NodeCount) == PACKET_SUB_PACKET_COUNT_LEN);
 
         uint32 UTCTime = (uint32)time(NULL);
-        memcpy(SentPacketBuffer+Pos, &UTCTime, sizeof(UTCTime));
-        Pos += sizeof(UTCTime);
+        memcpy(buf+pos, &UTCTime, sizeof(UTCTime));
+        pos += sizeof(UTCTime);
 
         uint16 CRC16 = 0;
 
-        uint16 PacketLen = Pos - sizeof(PACKET_HEADER_FLAG);
-        memcpy(SentPacketBuffer+PACKET_LEN_POS, &(PacketLen), sizeof(PacketLen));
+        uint16 PacketLen = pos - sizeof(PACKET_HEADER_FLAG);
+        memcpy(buf+PACKET_LEN_POS, &(PacketLen), sizeof(PacketLen));
         assert(sizeof(PacketLen) == PACKET_LEN_LEN);
 
-        CRC16 = GenerateCRC(SentPacketBuffer, Pos);
-        memcpy(SentPacketBuffer+Pos, &CRC16, sizeof(CRC16));
-        Pos += sizeof(CRC16);
-        if (false == GPRS_Send(SentPacketBuffer, Pos)) {
+        CRC16 = GenerateCRC(buf, pos);
+        memcpy(buf+pos, &CRC16, sizeof(CRC16));
+        pos += sizeof(CRC16);
+        if (false == GPRS_Send(buf, pos)) {
             DEBUG("fail\n");
             chargeQueueLock.UnLock();
             return;
-            //WriteNotSentData(SentPacketBuffer, Pos);
+            //WriteNotSentData(buf, pos);
         }
-        lqdequeue(chargeQueue, SentPacketBuffer, &dlen);
+        lqdequeue(chargeQueue, buf, &dlen);
     }
     chargeQueueLock.UnLock();
 }
@@ -932,56 +932,56 @@ void CPortal::SendConsumeData()
 {
     consumeQueueLock.Lock();
     // DEBUG("PacketCount=%d\n", m_ConsumePacketList.size());
-    uint8 SentPacketBuffer[MAX_GPRS_PACKET_LEN] = {0};
+    uint8 buf[MAX_GPRS_PACKET_LEN] = {0};
     while (!lqempty(consumeQueue)) {
-        uint32 Pos = CreatePacketHeader(SentPacketBuffer, sizeof(SentPacketBuffer), jzqid, FUNCTION_CODE_CONSUME_DATA_UP, m_SerialIndex);
-        if (Pos > sizeof(SentPacketBuffer)) {
+        uint32 pos = CreatePacketHeader(buf, sizeof(buf), jzqid, FUNCTION_CODE_CONSUME_DATA_UP, m_SerialIndex);
+        if (pos > sizeof(buf)) {
             DEBUG("Buffer NOT enought\n");
             consumeQueueLock.UnLock();
             return;
         }
 
         uint16 NodeCount = 0;
-        Pos += sizeof(NodeCount);
+        pos += sizeof(NodeCount);
         size_t dlen = 0;
-        if (!lqfront(consumeQueue, SentPacketBuffer + Pos, &dlen)) {
+        if (!lqfront(consumeQueue, buf + pos, &dlen)) {
             DEBUG("Unable to fetch first element in consume queue\n");
             consumeQueueLock.UnLock();
             return;
         }
-        Pos += dlen;
+        pos += dlen;
         NodeCount ++;
         /*
         list<ConsumePacketT>::iterator Iter = m_ConsumePacketList.begin();
-        for( ;(Iter != m_ConsumePacketList.end()) && (Pos < (MAX_GPRS_PACKET_LEN-FORWARDER_CONSUME_PACKET_LEN-sizeof(uint32)-sizeof(uint16))); Iter++) {
-            memcpy(SentPacketBuffer+Pos, Iter->ConsumePacket, FORWARDER_CONSUME_PACKET_LEN);
-            Pos += FORWARDER_CONSUME_PACKET_LEN;
+        for( ;(Iter != m_ConsumePacketList.end()) && (pos < (MAX_GPRS_PACKET_LEN-FORWARDER_CONSUME_PACKET_LEN-sizeof(uint32)-sizeof(uint16))); Iter++) {
+            memcpy(buf+pos, Iter->ConsumePacket, FORWARDER_CONSUME_PACKET_LEN);
+            pos += FORWARDER_CONSUME_PACKET_LEN;
             NodeCount++;
         }
         */
-        memcpy(SentPacketBuffer+PACKET_SUBPACKET_COUNT_POS, &NodeCount, sizeof(NodeCount));
+        memcpy(buf+PACKET_SUBPACKET_COUNT_POS, &NodeCount, sizeof(NodeCount));
         assert(sizeof(NodeCount) == PACKET_SUB_PACKET_COUNT_LEN);
 
         uint32 UTCTime = (uint32)time(NULL);
-        memcpy(SentPacketBuffer+Pos, &UTCTime, sizeof(UTCTime));
-        Pos += sizeof(UTCTime);
+        memcpy(buf+pos, &UTCTime, sizeof(UTCTime));
+        pos += sizeof(UTCTime);
 
         uint16 CRC16 = 0;
 
-        uint16 PacketLen = Pos - sizeof(PACKET_HEADER_FLAG);
-        memcpy(SentPacketBuffer+PACKET_LEN_POS, &(PacketLen), sizeof(PacketLen));
+        uint16 PacketLen = pos - sizeof(PACKET_HEADER_FLAG);
+        memcpy(buf+PACKET_LEN_POS, &(PacketLen), sizeof(PacketLen));
         assert(sizeof(PacketLen) == PACKET_LEN_LEN);
 
-        CRC16 = GenerateCRC(SentPacketBuffer, Pos);
-        memcpy(SentPacketBuffer+Pos, &CRC16, sizeof(CRC16));
-        Pos += sizeof(CRC16);
-        if (false == GPRS_Send(SentPacketBuffer, Pos)) {
+        CRC16 = GenerateCRC(buf, pos);
+        memcpy(buf+pos, &CRC16, sizeof(CRC16));
+        pos += sizeof(CRC16);
+        if (false == GPRS_Send(buf, pos)) {
             DEBUG("fail\n");
             consumeQueueLock.UnLock();
             return;
-            //WriteNotSentData(SentPacketBuffer, Pos);
+            //WriteNotSentData(buf, pos);
         }
-        lqdequeue(consumeQueue, SentPacketBuffer, &dlen);
+        lqdequeue(consumeQueue, buf, &dlen);
     }
     consumeQueueLock.UnLock();
 }
