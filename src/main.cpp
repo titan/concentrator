@@ -251,13 +251,20 @@ void StartGeneralHeat()
             break;
         }
         TrimInvalidChar(id);
-        if (id.length() != 12) {
+        if (id.length() != 12 && id.length() != 15) {
             DEBUG("%s is not a valid heat address\n", id.c_str());
             continue;
         }
 
+        uint8 type = 0;
         uint8 addr[MACHINENAME_LEN] = {0};
         uint32 no = atoi(id.substr(9, 3).c_str());
+        if (id.length() == 15) {
+            addr[1] = atoi(id.substr(13, 2).c_str());
+            type = atoi(id.substr(8, 1).c_str());
+        } else {
+            type = 0;
+        }
         if (no > 255) {
             DEBUG("%s is not a valid heat address\n", id.c_str());
             continue;
@@ -270,7 +277,7 @@ void StartGeneralHeat()
         addr[5] = DEC2BCD(atoi(id.substr(6, 2).c_str()));
         DEBUG("Heat node address:");
         hexdump(addr, sizeof(addr));
-        CHeatMonitor::GetInstance()->AddGeneralHeat((uint8*)addr, sizeof(addr));
+        CHeatMonitor::GetInstance()->AddGeneralHeat(type, addr, sizeof(addr));
         heatCount ++;
     }
 

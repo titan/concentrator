@@ -5,3 +5,4 @@ libEMZY_ARM_ODM.*
 concentrator
 CMainLoop.cpp
 *.pb.h
+libz.a

@@ -18,7 +18,8 @@
 #include <time.h>
 #define DEBUG(...) do {printf("%ld %s::%s %d ----", time(NULL), __FILE__, __func__, __LINE__);printf(__VA_ARGS__);} while(false)
 #ifndef hexdump
-#define hexdump(data, len) do {for (uint32 i = 0; i < (uint32)len; i ++) { printf("%02x ", *(uint8 *)(data + i));} printf("\n");} while(0)
+#include <strings.h>
+#define hexdump(data, len) do { if (len < 1024) { char hexdumpbuf[3072]; bzero(hexdumpbuf, 3072); for (uint32 i = 0; i < (uint32)len; i ++) { sprintf(hexdumpbuf + i * 3, "%02x ", *(uint8 *)(data + i));} puts(hexdumpbuf);} else { char * hexdumpbuf = (char *) malloc(len * 3 + 1); if (hexdumpbuf != NULL) {bzero(hexdumpbuf, len * 3 + 1); for (uint32 i = 0; i < (uint32)len; i ++) { sprintf(hexdumpbuf + i * 3, "%02x ", *(uint8 *)(data + i));} puts(hexdumpbuf); free(hexdumpbuf);} else puts("Too long, ignoring");}} while(0)
 #endif
 #else
 #define DEBUG(...)
@@ -28,7 +29,7 @@
 #endif
 
 const uint32 MAX_GPRS_RETRY_COUNT = 3;
-const int32 GPRS_TIMEOUT = 3*1000*1000;//10 seconds
+const int32 GPRS_TIMEOUT = 10*1000*1000;//10 seconds
 
 const uint32 MAX_GET_GPRSINFO_RETRY_COUNT = 3;
 const uint32 GPRS_INFO_TIMEOUT = 300;//s
@@ -813,7 +814,7 @@ void CPortal::GPRS_Receive()
                 memcpy( &PacketLen, PacketIter->second.PacketData+PACKET_LEN_POS, sizeof(PacketLen) );
                 switch ( FunList[i] ) {
                 case FUNCTION_CODE_SWITCH_VALVE_DOWN:
-                    ReturnData[0] = IValveMonitorFactory::GetInstance()->ConfigValve(VALVE_SWITCH_VALVE,PacketIter->second.PacketData+PACKET_CTRL_POS, PacketLen-PACKET_CTRL_POS);
+                    ReturnData[0] = IValveMonitorFactory::GetInstance()->ConfigValve(VALVE_SWITCH_VALVE, PacketIter->second.PacketData+PACKET_CTRL_POS, PacketLen-PACKET_CTRL_POS);
                     ReturnDataLen = 1;
                     break;
 

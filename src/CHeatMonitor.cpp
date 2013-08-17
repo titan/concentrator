@@ -7,7 +7,8 @@
 #include <time.h>
 #define DEBUG(...) do {printf("%ld %s::%s %d ----", time(NULL), __FILE__, __func__, __LINE__);printf(__VA_ARGS__);} while(false)
 #ifndef hexdump
-#define hexdump(data, len) do {for (uint32 i = 0; i < (uint32)len; i ++) { printf("%02x ", *(uint8 *)(data + i));} printf("\n");} while(0)
+#include <strings.h>
+#define hexdump(data, len) do { if (len < 1024) { char hexdumpbuf[3072]; bzero(hexdumpbuf, 3072); for (uint32 i = 0; i < (uint32)len; i ++) { sprintf(hexdumpbuf + i * 3, "%02x ", *(uint8 *)(data + i));} puts(hexdumpbuf);} else { char * hexdumpbuf = (char *) malloc(len * 3 + 1); if (hexdumpbuf != NULL) {bzero(hexdumpbuf, len * 3 + 1); for (uint32 i = 0; i < (uint32)len; i ++) { sprintf(hexdumpbuf + i * 3, "%02x ", *(uint8 *)(data + i));} puts(hexdumpbuf); free(hexdumpbuf);} else puts("Too long, ignoring");}} while(0)
 #endif
 #else
 #define DEBUG(...)
@@ -20,6 +21,12 @@ const int32 HEAT_TIMEOUT =  10*1000*1000;//10 second
 const uint32 GENERAL_HEAT_COMMAND_ACK_LEN = 253;
 const uint32 HEATINFO_TIMEOUT = 300;//s
 const uint8 ERROR_FLAG[] = {0xBD, 0xEB};
+const uint8 indexes[3][12] = {
+    // supply-water-temperature, supply-water-temperature-dif, return-water-temperature, return-water-temperature-dif, current-flow-velocity, current-flow-velocity-dif, current-heat-velocity, current-heat-velocity-dif, total-flow, total-flow-dif, total-heat, total-heat-dif
+    {56, 00, 60, 00, 53, 00, 47, 00, 40, 00, 20, 00}, // 丹佛斯
+    {45, 43, 51, 49, 75, 73, 63, 61, 33, 31, 27, 25}, // 卡姆鲁普
+    {56, 00, 60, 00, 53, 00, 47, 00, 40, 00, 20, 00}  // 荷德
+};
 
 CLock CHeatMonitor::m_HeatLock;
 CHeatMonitor* CHeatMonitor::m_Instance = NULL;
@@ -40,7 +47,7 @@ bool CHeatMonitor::Init(uint32 nStartTime, uint32 nInterval)
     return m_RepeatTimer.Start( nInterval*60 );/*unit:s*/
 }
 
-void CHeatMonitor::AddGeneralHeat(uint8* pGeneralHeatMacAddress, uint32 Len)
+void CHeatMonitor::AddGeneralHeat(uint8 type, uint8* pGeneralHeatMacAddress, uint32 Len)
 {
     if ( NULL == pGeneralHeatMacAddress || Len <= 0 || Len > MACHINENAME_LEN ) {
         return;
@@ -49,6 +56,7 @@ void CHeatMonitor::AddGeneralHeat(uint8* pGeneralHeatMacAddress, uint32 Len)
     HeatNodeDataT HeatNodeData;
     memset(&HeatNodeData, 0, sizeof(HeatNodeData));
     HeatNodeData.IsOffline = true;
+    HeatNodeData.Type = type;
     memcpy(HeatNodeData.MacAddress, pGeneralHeatMacAddress, Len);
     m_HeatNodeVector.push_back(HeatNodeData);
 }
@@ -117,42 +125,60 @@ bool CHeatMonitor::ParseData(const uint8* pData, uint32 DataLen, HeatNodeVectorT
         return false;
     }
 
-    const uint32 SUPPLY_WATER_TEMPERATURE_INDEX = 45; // 0x38; // 56
+    const uint32 SUPPLY_WATER_TEMPERATURE_INDEX = indexes[iter->Type][0];
     memcpy(iter->SupplyWaterTemperature, pData+SUPPLY_WATER_TEMPERATURE_INDEX, sizeof(iter->SupplyWaterTemperature));
     DEBUG("SupplyWaterTemperature ");
     hexdump(iter->SupplyWaterTemperature, GENERALHEAT_TEMPERATURE_LEN);
-    iter->SupplyWaterTemperatureDIF = pData[SUPPLY_WATER_TEMPERATURE_INDEX - 2];
+    if (indexes[iter->Type][1] == 0)
+        iter->SupplyWaterTemperatureDIF = 0;
+    else
+        iter->SupplyWaterTemperatureDIF = pData[indexes[iter->Type][1]];
 
-    const uint32 RETURN_WATER_TEMPERATURE_INDEX = 51; // 0x3C; // 60
+    const uint32 RETURN_WATER_TEMPERATURE_INDEX = indexes[iter->Type][2];
     memcpy(iter->ReturnWaterTemperature, pData+RETURN_WATER_TEMPERATURE_INDEX, sizeof(iter->ReturnWaterTemperature));
     DEBUG("ReturnWaterTemperature ");
     hexdump(iter->ReturnWaterTemperature, GENERALHEAT_TEMPERATURE_LEN);
-    iter->ReturnWaterTemperatureDIF = pData[RETURN_WATER_TEMPERATURE_INDEX - 2];
+    if (indexes[iter->Type][3] == 0)
+        iter->ReturnWaterTemperatureDIF = 0;
+    else
+        iter->ReturnWaterTemperatureDIF = pData[indexes[iter->Type][3]];
 
-    const uint32 CURRENT_FLOW_VELOCITY_INDEX = 75; // 0x35; // 53
-    memcpy(iter->CurrentFlowVelocity, pData+CURRENT_FLOW_VELOCITY_INDEX , sizeof(iter->CurrentFlowVelocity)-1);//current flow only has three bytes
+    const uint32 CURRENT_FLOW_VELOCITY_INDEX = indexes[iter->Type][4];
+    memcpy(iter->CurrentFlowVelocity, pData+CURRENT_FLOW_VELOCITY_INDEX , sizeof(iter->CurrentFlowVelocity) - 1);//current flow only has three bytes
     DEBUG("CurrentFlowVelocity ");
     hexdump(iter->CurrentFlowVelocity, VELOCITY_LEN);
-    iter->CurrentFlowVelocityDIF = pData[CURRENT_FLOW_VELOCITY_INDEX - 2];
+    if (indexes[iter->Type][5] == 0)
+        iter->CurrentFlowVelocityDIF = 0;
+    else
+        iter->CurrentFlowVelocityDIF = pData[indexes[iter->Type][5]];
     // memcpy(iter->CurrentFlowVelocity, pData+CURRENT_FLOW_VELOCITY_INDEX , sizeof(iter->CurrentFlowVelocity));
 
-    const uint32 CURRENT_HEAT_VELOCITY_INDEX = 63;// 0x2F; // 47
+    const uint32 CURRENT_HEAT_VELOCITY_INDEX = indexes[iter->Type][6];
     memcpy(iter->CurrentHeatVelocity, pData+CURRENT_HEAT_VELOCITY_INDEX, sizeof(iter->CurrentHeatVelocity));
     DEBUG("CurrentHeatVelocity ");
     hexdump(iter->CurrentHeatVelocity, VELOCITY_LEN);
-    iter->CurrentHeatVelocityDIF = pData[CURRENT_HEAT_VELOCITY_INDEX - 2];
+    if (indexes[iter->Type][7] == 0)
+        iter->CurrentHeatVelocityDIF = 0;
+    else
+        iter->CurrentHeatVelocityDIF = pData[indexes[iter->Type][7]];
 
-    const uint32 TOTAL_FLOW_CAPACITY_INDEX = 33; // 0x28; // 40
+    const uint32 TOTAL_FLOW_CAPACITY_INDEX = indexes[iter->Type][8];
     memcpy(iter->TotalFlow, pData+TOTAL_FLOW_CAPACITY_INDEX, sizeof(iter->TotalFlow));
     DEBUG("TotalFlow ");
     hexdump(iter->TotalFlow, CAPACITY_LEN);
-    iter->TotalFlowDIF = pData[TOTAL_FLOW_CAPACITY_INDEX - 2];
+    if (indexes[iter->Type][9] == 0)
+        iter->TotalFlowDIF = 0;
+    else
+        iter->TotalFlowDIF = pData[indexes[iter->Type][9]];
 
-    const uint32 TOTAL_HEAT_CAPACITY_INDEX = 27; // 0x14; // 20
+    const uint32 TOTAL_HEAT_CAPACITY_INDEX = indexes[iter->Type][10];
     memcpy(iter->TotalHeat, pData+TOTAL_HEAT_CAPACITY_INDEX, sizeof(iter->TotalHeat));
     DEBUG("TotalHeat ");
     hexdump(iter->TotalHeat, CAPACITY_LEN);
-    iter->TotalHeatDIF = pData[TOTAL_HEAT_CAPACITY_INDEX - 2];
+    if (indexes[iter->Type][11] == 0)
+        iter->TotalHeatDIF = 0;
+    else
+        iter->TotalHeatDIF = pData[indexes[iter->Type][11]];
 
     // const uint32 TOTAL_WORK_HOURS_INDEX = 39;
     // memcpy(iter->TotalWorkHours, pData+TOTAL_WORK_HOURS_INDEX, sizeof(iter->TotalWorkHours));

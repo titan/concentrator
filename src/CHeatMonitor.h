@@ -21,6 +21,7 @@ enum HeatNodeT {
 };
 struct HeatNodeDataT {
     bool IsOffline;
+    uint8 Type;
     uint8 MacAddress[MACHINENAME_LEN]; // addr(1) + branch(1) + metercode(4)
     uint8 SupplyWaterTemperature[GENERALHEAT_TEMPERATURE_LEN];
     uint8 SupplyWaterTemperatureDIF;
@@ -67,7 +68,7 @@ private:
     CHeatMonitor():m_GetHeatInforTaskActive(false), m_IsHeatInfoReady(false) {}
 
 public:
-    void AddGeneralHeat(uint8* pGeneralHeatMacAddress, uint32 Len);
+    void AddGeneralHeat(uint8 type, uint8* pGeneralHeatMacAddress, uint32 Len);
     void SendHeatData();
     bool GetStatus(Status& Status);
     bool GetHeatNodeInfoList(HeatNodeInfoListT& HeatNodeInfoList);
