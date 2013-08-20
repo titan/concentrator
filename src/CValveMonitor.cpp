@@ -11,10 +11,7 @@
 #ifdef DEBUG_VALVE
 #include <time.h>
 #define DEBUG(...) do {printf("%ld %s::%s %d ----", time(NULL), __FILE__, __func__, __LINE__);printf(__VA_ARGS__);} while(false)
-#ifndef hexdump
-#include <strings.h>
-#define hexdump(data, len) do { if (len < 1024) { char hexdumpbuf[3072]; bzero(hexdumpbuf, 3072); for (uint32 i = 0; i < (uint32)len; i ++) { sprintf(hexdumpbuf + i * 3, "%02x ", *(uint8 *)(data + i));} puts(hexdumpbuf);} else { char * hexdumpbuf = (char *) malloc(len * 3 + 1); if (hexdumpbuf != NULL) {bzero(hexdumpbuf, len * 3 + 1); for (uint32 i = 0; i < (uint32)len; i ++) { sprintf(hexdumpbuf + i * 3, "%02x ", *(uint8 *)(data + i));} puts(hexdumpbuf); free(hexdumpbuf);} else puts("Too long, ignoring");}} while(0)
-#endif
+#include "hexdump.h"
 #else
 #define DEBUG(...)
 #ifndef hexdump
@@ -157,8 +154,17 @@ registering:
             user_t u;
             csvline_populate(row, line, ',');
             if (row.size() < 2) continue;
-            if (row[0].length() != 4) continue;
-            if (row[1].length() != 8) continue;
+            if (row[0].length() != 8) continue;
+            if (row[1].length() != 16) continue;
+            /*
+            DEBUG("vmac string: %s, len: %d\n", (char *)row[0].c_str(), str2hex((char *)row[0].c_str(), (uint8 *)&u.vmac));
+            DEBUG("vmac bin: %04x \n ", u.vmac);
+            hexdump(&u.vmac, 4);
+            DEBUG("vmac bin: %04x \n", u.vmac);
+            DEBUG("uid string: %s, len: %d\n", (char *)row[1].c_str(), str2hex((char *)row[1].c_str(), (uint8 *)u.uid.x));
+            DEBUG("uid ");
+            hexdump(u.uid.x, 8);
+            */
             if (str2hex((char *)row[0].c_str(), (uint8 *)&u.vmac) == 0) u.vmac = 0;
             if (str2hex((char *)row[1].c_str(), u.uid.x) == 0) bzero(u.uid.x, sizeof(userid_t));
             if (SetUID(u.vmac, u.uid)) {
@@ -1472,6 +1478,7 @@ bool CValveMonitor::SendCommand(uint8 * data, uint16 len)
             }
         }
     }
+    DEBUG("Exceed 3 retries\n");
 
     return false;
 }
@@ -1515,7 +1522,7 @@ bool CValveMonitor::WaitCmdAck(uint8 * data, uint16 * len)
                 }
                 if (readed == rlen) {
                     readed = 0;
-                    DEBUG("read %d bytes: ", rlen);
+                    DEBUG("Read %d bytes: ", rlen);
                     hexdump(ack, rlen);
                     * len = rlen;
                     return true;
@@ -1523,6 +1530,7 @@ bool CValveMonitor::WaitCmdAck(uint8 * data, uint16 * len)
             }
         }
     }
+    DEBUG("Exceed 3 retries\n");
     return false;
 }
 
@@ -1682,8 +1690,9 @@ bool CValveMonitor::SetUID(uint32 vmac, userid_t uid)
     ptr ++; // len
     cmd[ptr] = VALVE_SET_UID;
     ptr ++;
-    memcpy(cmd, uid.x, sizeof(userid_t));
+    memcpy(cmd + ptr, uid.x, sizeof(userid_t));
     ptr += sizeof(userid_t);
+    hexdump(cmd, ptr);
     for (int i = 0; i < 3; i ++) {
         SendCommand(cmd, ptr);
         sleep(1);

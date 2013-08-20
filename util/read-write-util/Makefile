@@ -23,7 +23,7 @@ clean:
 
 # Generate dependencies for all files in project
 %.d: %.c
-	@ $(CC) $(CFLAGS) -MM $< | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' | sed -e 's/\.o: /\.o: Makefile /g' > $@
+	@ $(CC) $(CFLAGS) $(INCLUDE) -MM $< | sed -e 's@^\(.*\)\.o:@\1.d \1.o:@' | sed -e 's/\.o: /\.o: Makefile /g' > $@
 
 clean_list += ${program_OBJS:.o=.d}
 
