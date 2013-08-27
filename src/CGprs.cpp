@@ -117,6 +117,14 @@ CGprs::CGprs(const string& CommName):CSerialComm(CommName)
     , cops(0)
 {
     memset(m_DestIP, 0, sizeof(m_DestIP));
+    gpio_attr_t AttrOut;
+    AttrOut.mode = PIO_MODE_OUT;
+    AttrOut.resis = PIO_RESISTOR_DOWN;
+    AttrOut.filter = PIO_FILTER_NOEFFECT;
+    AttrOut.multer = PIO_MULDRIVER_NOEFFECT;
+    SetPIOCfg(PD2, AttrOut);
+    PowerOn();
+    PIOOutValue(PD2, 1);
     //memset(m_IMEI, 0, sizeof(m_IMEI));
 }
 
@@ -165,7 +173,7 @@ bool CGprs::Connect(const char * IP, const uint32 Port)
     strcpy(m_DestIP, IP);
     m_DestPort = Port;
 
-    PowerOn();
+    Reset();
 
     uint8 atbuf[LINE_REAL_LEN] = {0};
     uint32 len = LINE_LEN;
@@ -175,9 +183,11 @@ bool CGprs::Connect(const char * IP, const uint32 Port)
         WaitAnyString(RX_TIMEOUT, (char *)atbuf, len);
         if (Command("AT\r\n") != COMM_OK) continue;
     }
+    if (Command("AT\r\n") != COMM_OK) return false;
     for (i = 0; i < 3; i ++) {
         if (Command("ATE0\r\n") != COMM_OK) continue;
     }
+    if (Command("ATE0\r\n") != COMM_OK) return false;
 
     bzero(atbuf, LINE_REAL_LEN);
     len = LINE_LEN;
@@ -330,6 +340,14 @@ void CGprs::PowerOn()
     sleep(1);
     PIOOutValue(PB10, 0);
     sleep(4);
+}
+
+void CGprs::Reset()
+{
+    PIOOutValue(PD2, 0);
+    sleep(1);
+    PIOOutValue(PD2, 1);
+    sleep(3);
 }
 
 /*

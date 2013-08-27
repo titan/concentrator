@@ -47,6 +47,7 @@ public:
     ECommError ReceiveData(uint8* pBuffer, uint32& BufferLen, const uint8* pBeginFlag, uint32 BeginFlagLen, uint32 BufferLenPos, int32 TimeOut = -1);
 private:
     void PowerOn();
+    void Reset();
     bool SwitchMode(enum GPRSWorkMode to);
     ECommError Command(const char * cmd, int32 timeout, const char * reply, char * buf, uint32 & len);
     ECommError Command(const char * cmd, int32 timeout, const char * reply) {
