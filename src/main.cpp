@@ -75,17 +75,10 @@ static void StartValveMonitor();
 bool wireless = true;
 int heatCount = 0;
 bool cardhostEnabled = false;
-gpio_attr_t gpioattr;
 int jzqid = 0;
 
 int main()
 {
-
-    gpioattr.mode = PIO_MODE_OUT;
-    gpioattr.resis = PIO_RESISTOR_DOWN;
-    gpioattr.filter = PIO_FILTER_NOEFFECT;
-    gpioattr.multer = PIO_MULDRIVER_NOEFFECT;
-
     string device;
     string cfg;
 
@@ -174,8 +167,6 @@ void StartForwarder()
     string KeyValue = ForwardINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
     TrimInvalidChar(KeyValue);
 
-    SetPIOCfg(getGPIO(KeyValue.c_str()), gpioattr);
-    CForwarderMonitor::GetInstance()->SetGPIO(getGPIO(KeyValue.c_str()));
     DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
     CSerialComm* pForwarderCom = new CSerialComm(KeyValue);
     pForwarderCom->Open();
@@ -365,8 +356,6 @@ void StartCardHost()
     }
     DEBUG("Initilize card host servcie with %s(%s)\n", name.c_str(), cfg.c_str());
     CCardHost::GetInstance()->SetCom(com);
-    SetPIOCfg(getGPIO(name.c_str()), gpioattr);
-    CCardHost::GetInstance()->SetGPIO(getGPIO(name.c_str()));
     CCardHost::GetInstance()->Start();
     cardhostEnabled = true;
 }
@@ -409,9 +398,7 @@ void StartValveMonitor()
 
     CMainLoop::GetInstance()->SetValveCount(number);
 
-    SetPIOCfg(getGPIO(name.c_str()), gpioattr);
     CValveMonitor::GetInstance()->SetValveCount(number);
-    CValveMonitor::GetInstance()->SetGPIO(getGPIO(name.c_str()));
     CValveMonitor::GetInstance()->Init(startTime, interval);
     CValveMonitor::GetInstance()->Start();
 }

@@ -455,13 +455,11 @@ bool CForwarderMonitor::SendCommand(uint8* pCommand, uint32 CommandLen)
     for (uint8 i=0; i<1; i++) {
         DEBUG("Send Command ");
         hexdump(SendCommand, Pos);
-        TX_ENABLE(gpio);
         if ( COMM_OK != m_pCommController->WriteBuf(SendCommand, Pos, FORWARDER_TIMEOUT) ) {
             DEBUG("WriteError\n");
             continue;
         }
         FlashLight(LIGHT_FORWARD);
-        RX_ENABLE(gpio);
         myusleep(50 * 1000);
 
         uint8 Buffer[MAX_BUFFER_LEN] = {0};

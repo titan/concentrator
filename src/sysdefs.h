@@ -115,24 +115,6 @@ inline size_t genrecordkey(void * key, size_t len)
 #endif
 #include"libs_emsys_odm.h"
 
-#define TX_ENABLE(gpio) PIOOutValue(gpio, 0)
-#define RX_ENABLE(gpio) PIOOutValue(gpio, 1)
-
-inline gpio_name_t getGPIO(const char * device)
-{
-    if (strcmp(device, "/dev/ttyS4") == 0) {
-        return PA18;
-    } else if (strcmp(device, "/dev/ttyS5") == 0) {
-        return PA19;
-    } else if (strcmp(device, "/dev/ttyS6") == 0) {
-        return PA20;
-    } else if (strcmp(device, "/dev/ttyS7") == 0) {
-        return PA21;
-    } else {
-        return PA18;
-    }
-}
-
 inline int myusleep(unsigned long usec)
 {
     struct timespec tv;

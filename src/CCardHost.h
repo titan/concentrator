@@ -23,9 +23,6 @@ public:
     void AckRecharge(userid_t uid, uint8 * data, uint16 len); // called by IValveMonitor
     void AckTimeOrRemove(uint8 * data, uint16 len);
     bool GetCardInfo(vector<cardaddr_t> &);
-    void SetGPIO(gpio_name_t gpio) {
-        this->gpio = gpio;
-    };
 
 private:
     CCardHost();
@@ -45,6 +42,5 @@ private:
     cbuffer_t cmdbuf;
     vector<cardaddr_t> info;
     bool infoGotten;
-    gpio_name_t gpio;
 };
 #endif

@@ -155,9 +155,6 @@ public:
         return valveDataType;
     };
     static CForwarderMonitor* GetInstance();
-    void SetGPIO(gpio_name_t gpio) {
-        this->gpio = gpio;
-    };
 private:
     static CForwarderMonitor* m_Instance;
     CForwarderMonitor();
@@ -256,6 +253,5 @@ protected:
     CLock users_lock;
     map<uint32, record_t> records; // vmac -> record
     bool syncRecords;
-    gpio_name_t gpio;
 };
 #endif

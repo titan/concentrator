@@ -77,9 +77,6 @@ uint32 CCardHost::Run()
         FD_ZERO(&wfds);
         if (cbuffer_read(cmdbuf) != NULL) {
             FD_SET(com, &wfds);
-            TX_ENABLE(gpio);
-        } else {
-            RX_ENABLE(gpio);
         }
 
         /* Wait up to five seconds. */

@@ -19,20 +19,22 @@
 #endif
 #endif
 
+#define INTERVAL1 00 * 1000
+#define INTERVAL2 00 * 1000
+
 #define PKTLEN 512
 #define PORT 0x0F
 #define RAND 0xFB
 
 #define VALVE_PACKET_FLAG 0xF1
 
-extern gpio_attr_t gpioattr;
-
 void vuserseq(void * key, size_t klen, void * data, size_t dlen, void * params, size_t plen)
 {
     map<uint32, user_t> * users = (map<uint32, user_t> *) params;
-    uint32 vmac = (uint32) key;
+    uint32 * vmac = (uint32 *) key;
     user_t * user = (user_t *) data;
-    (* users)[vmac] = * user;
+    (* users)[* vmac] = * user;
+    DEBUG("Load user for vmac: %02x %02x %02x %02x\n", * vmac & 0xFF, (* vmac >> 8) & 0xFF, (* vmac >> 16) & 0xFF, (* vmac >> 24) & 0xFF);
 }
 
 void vrecordseq(void * key, size_t klen, void * data, size_t dlen, void * params, size_t plen)
@@ -117,7 +119,7 @@ uint32 CValveMonitor::Run()
     uint8 retry = 0; // read retry times
     uint8 priority = 0; // 0 for normal, 1 for high
     bool broadcasting = true;
-    int iomode = 0; // 1 for read, 0 for write
+    // int iomode = 0; // 1 for read, 0 for write
     int workmode = 0; // 0 for dynamical register, 1 for csv register
 
     if (access("user_info.csv", F_OK) == 0) {
@@ -130,7 +132,6 @@ uint32 CValveMonitor::Run()
 registering:
 
     if (workmode == 0) {
-        TX_ENABLE(gpio);
         BroadcastClearSID();
         sleep(1);
         BroadcastClearSID();
@@ -156,15 +157,6 @@ registering:
             if (row.size() < 2) continue;
             if (row[0].length() != 8) continue;
             if (row[1].length() != 16) continue;
-            /*
-            DEBUG("vmac string: %s, len: %d\n", (char *)row[0].c_str(), str2hex((char *)row[0].c_str(), (uint8 *)&u.vmac));
-            DEBUG("vmac bin: %04x \n ", u.vmac);
-            hexdump(&u.vmac, 4);
-            DEBUG("vmac bin: %04x \n", u.vmac);
-            DEBUG("uid string: %s, len: %d\n", (char *)row[1].c_str(), str2hex((char *)row[1].c_str(), (uint8 *)u.uid.x));
-            DEBUG("uid ");
-            hexdump(u.uid.x, 8);
-            */
             if (str2hex((char *)row[0].c_str(), (uint8 *)&u.vmac) == 0) u.vmac = 0;
             if (str2hex((char *)row[1].c_str(), u.uid.x) == 0) bzero(u.uid.x, sizeof(userid_t));
             if (SetUID(u.vmac, u.uid)) {
@@ -173,35 +165,6 @@ registering:
             } else {
                 unregistered.push_back(u);
             }
-            /*
-            bzero(cmd, PKTLEN);
-            uint8 ptr = 0;
-            memcpy(cmd, &u.vmac, sizeof(uint32));
-            ptr += sizeof(uint32);
-            cmd[ptr] = PORT;
-            ptr ++;
-            cmd[ptr] = RAND;
-            ptr ++;
-            cmd[ptr] = 0x09;
-            ptr ++; // len
-            cmd[ptr] = VALVE_SET_UID;
-            ptr ++;
-            memcpy(cmd, u.uid.x, sizeof(userid_t));
-            ptr += sizeof(userid_t);
-            for (int i = 0; i < 3; i ++) {
-                SendCommand(cmd, ptr);
-                sleep(1);
-                if (WaitCmdAck(ack, &tmplen)) {
-                    if (memcmp(ack, &u.vmac, sizeof(uint32)) == 0) {
-                        // found it
-                        users[u.vmac] = u;
-                        goto cont;
-                    }
-                }
-            }
-cont:
-            continue;
-            */
         }
         in.close();
         if (unregistered.size() > 0) {
@@ -214,13 +177,15 @@ cont:
     }
 
     while (true) {
-        // check expired
-        time_t now = time(NULL);
-        for (map<uint32, expire_t>::iterator iter = expires.begin(); iter != expires.end(); iter ++) {
-            if (now > iter->second.timestamp) {
-                DEBUG("Recharge Valve[%02x %02x %02x %02x] is expired!\n", iter->first & 0xFF, (iter->first >> 8) & 0xFF, (iter->first >> 16) & 0xFF, (iter->first >> 24) & 0xFF);
-                iter->second.callback(&users[iter->first]);
-                expires.erase(iter++);
+        if (!broadcasting) {
+            // check expired valve, only works in normal process
+            time_t now = time(NULL);
+            for (map<uint32, expire_t>::iterator iter = expires.begin(); iter != expires.end(); iter ++) {
+                if (now > iter->second.timestamp) {
+                    DEBUG("Recharge Valve[%02x %02x %02x %02x] is expired!\n", iter->first & 0xFF, (iter->first >> 8) & 0xFF, (iter->first >> 16) & 0xFF, (iter->first >> 24) & 0xFF);
+                    iter->second.callback(&users[iter->first]);
+                    expires.erase(iter++);
+                }
             }
         }
 
@@ -232,29 +197,31 @@ cont:
                 counter ++;
             } else {
                 if ((unsigned int)(time(NULL) - lastWrite) > (120 + valveCount - 60)) {
-                    if (iomode == 1) {
-                        TX_ENABLE(gpio);
-                        iomode = 0;
-                    }
                     while (cbuffer_read(rx) != NULL) {
                         uint8 ptr = 0;
-                        bzero(ack, PKTLEN);
-                        memcpy(ack, cbuffer_read(rx), sizeof(uint32));
-                        ptr += sizeof(uint32);
-                        cbuffer_read_done(rx);
-                        ack[ptr] = PORT;
-                        ptr ++;
-                        ack[ptr] = RAND;
-                        ptr ++;
-                        ack[ptr] = 0x06;
-                        ptr ++; // len
-                        ack[ptr] = VALVE_BROADCAST;
-                        ptr ++;
-                        ack[ptr] = 0xAC;
-                        ptr ++;
-                        memcpy(ack + ptr, &sid, sizeof(uint32));
-                        ptr += sizeof(uint32);
-                        SendCommand(ack, ptr); // send only
+                        buf = (uint8 *)cbuffer_write(htx);
+                        if (buf != NULL) {
+                            bzero(buf, PKTLEN);
+                            memcpy(buf, cbuffer_read(rx), sizeof(uint32));
+                            ptr += sizeof(uint32);
+                            cbuffer_read_done(rx);
+                            buf[ptr] = PORT;
+                            ptr ++;
+                            buf[ptr] = RAND;
+                            ptr ++;
+                            buf[ptr] = 0x06;
+                            ptr ++; // len
+                            buf[ptr] = VALVE_BROADCAST;
+                            ptr ++;
+                            buf[ptr] = 0xAC;
+                            ptr ++;
+                            memcpy(buf + ptr, &sid, sizeof(uint32));
+                            ptr += sizeof(uint32);
+                            cbuffer_write_done(htx);
+                        } else {
+                            goto ioloopstart;
+                        }
+                        // SendCommand(ack, ptr); // send only
                     }
                     Broadcast(++counter);
                 }
@@ -292,26 +259,22 @@ cont:
             }
         }
 
+    ioloopstart:
+
         FD_ZERO(&rfds);
         FD_ZERO(&wfds);
+        tv.tv_sec = 0;
+        tv.tv_usec = 0; //500000; // 0.5 seconds
+        FD_SET(com, &rfds);
 
         if ((cbuffer_read(tx) != NULL || cbuffer_read(htx) != NULL) && rc >= wc) {
+            tv.tv_sec = 0;
+            tv.tv_usec = 0;
             FD_SET(com, &wfds);
-            if (iomode == 1) {
-                TX_ENABLE(gpio);
-                iomode = 0;
-            }
+            retval = select(com + 1, &rfds, &wfds, NULL, &tv);
         } else {
-            FD_SET(com, &rfds);
-            if (iomode == 0) {
-                RX_ENABLE(gpio);
-                iomode = 1;
-            }
+            retval = select(com + 1, &rfds, NULL, NULL, &tv);
         }
-
-        tv.tv_sec = 1;
-        tv.tv_usec = 0;
-        retval = select(com + 1, &rfds, &wfds, NULL, &tv);
         if (retval) {
             if (FD_ISSET(com, &rfds)) {
 
@@ -323,6 +286,9 @@ cont:
                 r = read(com, ack + readed, rlen - readed);
 
                 if (r == -1 || r == 0) {
+                    if (r == -1) {
+                        DEBUG("Read error: %d\n", errno);
+                    }
                     if (retry > 2) {
                         if (rc != wc) {
                             DEBUG("Read timeout, retry: %d, rc: %d, wc: %d\n", retry, rc, wc);
@@ -400,7 +366,7 @@ cont:
                         timers[vmac].timestamp2 = lastWrite;
                     }
 #endif
-                    DEBUG("Write %d bytes:", wlen);
+                    DEBUG("Write %d bytes: ", wlen);
                     hexdump(buf, wlen);
                     if (priority == 0)
                         cbuffer_read_done(tx);
@@ -524,13 +490,14 @@ void CValveMonitor::ParseBroadcast(uint32 vmac, uint8 * data, uint16 len)
         memcpy(user.uid.x, data, sizeof(userid_t));
         map<uint32, user_t>::iterator i = users.find(vmac);
         if (i != users.end()) {
-            DEBUG("Valve [%02x %02x %02x %02x] has bound user [%02x %02x %02x %02x %02x %02x %02x %02x], but still tries to bind user [%02x %02x %02x %02x %02x %02x %02x %02x]\n", user.vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF, i->second.uid.x[0], i->second.uid.x[1], i->second.uid.x[2], i->second.uid.x[3], i->second.uid.x[4], i->second.uid.x[5], i->second.uid.x[6], i->second.uid.x[7], user.uid.x[0], user.uid.x[1], user.uid.x[2], user.uid.x[3], user.uid.x[4], user.uid.x[5], user.uid.x[6], user.uid.x[7]);
-            return;
+            DEBUG("Valve [%02x %02x %02x %02x] has bound user [%02x %02x %02x %02x %02x %02x %02x %02x], but still tries to bind user [%02x %02x %02x %02x %02x %02x %02x %02x]\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF, i->second.uid.x[0], i->second.uid.x[1], i->second.uid.x[2], i->second.uid.x[3], i->second.uid.x[4], i->second.uid.x[5], i->second.uid.x[6], i->second.uid.x[7], user.uid.x[0], user.uid.x[1], user.uid.x[2], user.uid.x[3], user.uid.x[4], user.uid.x[5], user.uid.x[6], user.uid.x[7]);
+            // we still need to response it
+        } else {
+            user.vmac = vmac;
+            users[vmac] = user;
+            DEBUG("Found user [%02x %02x %02x %02x %02x %02x %02x %02x] in valve [%02x %02x %02x %02x], total count: %d\n", user.uid.x[0], user.uid.x[1], user.uid.x[2], user.uid.x[3], user.uid.x[4], user.uid.x[5], user.uid.x[6], user.uid.x[7], user.vmac & 0xFF, (user.vmac >> 8) & 0xFF, (user.vmac >> 16) & 0xFF, (user.vmac >> 24) & 0xFF, users.size());
+            syncUsers = true;
         }
-        user.vmac = vmac;
-        users[vmac] = user;
-        DEBUG("Found user [%02x %02x %02x %02x %02x %02x %02x %02x] in valve [%02x %02x %02x %02x], total count: %d\n", user.uid.x[0], user.uid.x[1], user.uid.x[2], user.uid.x[3], user.uid.x[4], user.uid.x[5], user.uid.x[6], user.uid.x[7], user.vmac & 0xFF, (user.vmac >> 8) & 0xFF, (user.vmac >> 16) & 0xFF, (user.vmac >> 24) & 0xFF, users.size());
-        syncUsers = true;
         buf = (uint8 *) cbuffer_write(rx);
         if (buf != NULL) {
             DEBUG("Add valve [%02x %02x %02x %02x] to response queue\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF);
@@ -589,6 +556,10 @@ void CValveMonitor::ParseAck(uint8 * ack, uint16 len)
     }
     uint32 mac = 0;
     memcpy(&mac, ack, sizeof(uint32));
+    /*
+    DEBUG("Parsing Ack for valve[%02x %02x %02x %02x] ", mac & 0xFF, (mac >> 8) & 0xFF, (mac >> 16) & 0xFF, (mac >> 24) & 0xFF);
+    hexdump(ack, len);
+    */
     uint16 dlen;
     uint8 code, * data;
     if (ack[6] == 0xFF) {
@@ -1551,7 +1522,7 @@ void CValveMonitor::SaveRecords()
             dbput(db, (void *)&iter->first, sizeof(uint32), &iter->second, sizeof(record_t));
         }
         dbclose(db);
-        syncUsers = false;
+        syncRecords = false;
     }
 }
 
@@ -1678,7 +1649,7 @@ bool CValveMonitor::SetUID(uint32 vmac, userid_t uid)
     uint8 cmd[PKTLEN], ack[PKTLEN];
     bzero(cmd, PKTLEN);
     bzero(ack, PKTLEN);
-    uint8 ptr = 0;
+    uint16 ptr = 0;
     uint16 tmplen;
     memcpy(cmd, &vmac, sizeof(uint32));
     ptr += sizeof(uint32);
