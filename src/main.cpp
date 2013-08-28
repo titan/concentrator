@@ -86,17 +86,14 @@ int main()
     StartGeneralHeat(); // must be in front of StartValveMonitor
     if (access("config.ini", F_OK) == -1) {
         wireless = true;
-        StartForwarder();
         device = "/dev/ttyS7";
         cfg = "2400,8,1,N";
     } else {
         CINI ini("config.ini");
         if (ini.GetValueBool("DEFAULT", "WIRELESS", true)) {
             wireless = true;
-            StartForwarder();
         } else {
             wireless = false;
-            StartValveMonitor();
         }
 
         device = ini.GetValueString("DEFAULT", "DEVICE", "/dev/ttyS7");
@@ -124,6 +121,12 @@ int main()
         DEBUG("Initilize %s with %s failed!\n", device.c_str(), cfg.c_str());
     } else {
         DEBUG("Initilize %s(%s)\n", device.c_str(), cfg.c_str());
+    }
+
+    if (wireless) {
+        StartForwarder();
+    } else {
+        StartValveMonitor();
     }
 
     CMainLoop::GetInstance()->SetCom(com);
@@ -377,7 +380,7 @@ void StartValveMonitor()
     TrimInvalidChar(name);
     string cfg = ini.GetValueString(SECKEY, "DEV_CONFIG", "2400,8,1,N");
     TrimInvalidChar(cfg);
-    int com = OpenCom((char *)name.c_str(), (char *)cfg.c_str(), O_RDWR | O_NOCTTY);
+    int com = OpenCom((char *)name.c_str(), (char *)cfg.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
     if (com == -1) {
         DEBUG("Initilize %s with %s failed!\n", name.c_str(), cfg.c_str());
         return;
@@ -400,5 +403,5 @@ void StartValveMonitor()
 
     CValveMonitor::GetInstance()->SetValveCount(number);
     CValveMonitor::GetInstance()->Init(startTime, interval);
-    CValveMonitor::GetInstance()->Start();
+    CValveMonitor::GetInstance()->Start(99);
 }

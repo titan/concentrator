@@ -472,6 +472,7 @@ bool CPortal::ParseData(uint8* pData, uint32 DataLen)
         if ( Difference > MAX_TIME_DIFFERENCE ) {
             if ( 0 == SetDateTime(DateTime, 0) ) {
                 DEBUG("adjust time OK\n");
+                printf("ACK time--%04d-%02d-%02d %02d:%02d:%02d\n", DateTime[0], DateTime[1], DateTime[2], DateTime[3], DateTime[4], DateTime[5]);
                 timeReady = true;
             }
         }
@@ -494,7 +495,7 @@ bool CPortal::ParseHeartBeatAck(uint8* pData, uint32 DataLen)
         return false;
     }
     if ( 0 != SetDateTime(DateTime, 0) ) {
-        DEBUG("Set DateTime=%04d-%02d-%02d %02d:%02d:%02d\n", DateTime[0], DateTime[1], DateTime[2], DateTime[3], DateTime[4], DateTime[5]);
+        DEBUG("Set DateTime=%04d-%02d-%02d %02d:%02d:%02d failed\n", DateTime[0], DateTime[1], DateTime[2], DateTime[3], DateTime[4], DateTime[5]);
         timeReady = false;
         return false;
     }
