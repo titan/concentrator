@@ -135,5 +135,7 @@ private:
 #ifdef DEBUG_VALVE_TRACE_RECHARGE
     map<uint32, mytimer_t> timers;
 #endif
+    map<uint32, int> requestCounters; // remove me
+    map<uint32, int> responseCounters; // remove me
 };
 #endif

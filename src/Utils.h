@@ -29,4 +29,5 @@ void FlashLight(LightE Light);
 void SetLight(LightE Light, bool On);
 void LOG(const char* fmt, ...);
 int str2hex(char * str, uint8 * data);
+double difftimeval(const struct timeval *tv1, const struct timeval *tv2);
 #endif

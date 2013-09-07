@@ -192,6 +192,7 @@ int dbseq(LOGDB * db, dbseqfun seqfun, void * params, size_t len) {
         tuple.fd = db->dfd;
         tuple.params = params;
         tuple.len = len;
+
         sbtree_sequence(db->root, sequence, &tuple, sizeof(seqtuple_t));
     }
     return 0;

@@ -117,14 +117,14 @@ CGprs::CGprs(const string& CommName):CSerialComm(CommName)
     , cops(0)
 {
     memset(m_DestIP, 0, sizeof(m_DestIP));
+    PowerOn();
     gpio_attr_t AttrOut;
     AttrOut.mode = PIO_MODE_OUT;
     AttrOut.resis = PIO_RESISTOR_DOWN;
     AttrOut.filter = PIO_FILTER_NOEFFECT;
     AttrOut.multer = PIO_MULDRIVER_NOEFFECT;
-    SetPIOCfg(PD2, AttrOut);
-    PowerOn();
-    PIOOutValue(PD2, 1);
+    SetPIOCfg(PD6, AttrOut);
+    PIOOutValue(PD6, 1);
     //memset(m_IMEI, 0, sizeof(m_IMEI));
 }
 
@@ -247,6 +247,8 @@ bool CGprs::Connect(const char * IP, const uint32 Port)
     WaitString("OK", RX_TIMEOUT);
     */
 
+    //if (Command("AT+CIPCSGP=1,\"BJRL.YCCB.BJAPN@RL\",\"15611242430\",\"242430\"\r\n", NETREG_TIMEOUT) != COMM_OK) return false;
+
     if (Command("AT+CIPMODE=1\r\n") != COMM_OK) {
         DEBUG("Set TT mode error\n");
         return false;
@@ -344,9 +346,10 @@ void CGprs::PowerOn()
 
 void CGprs::Reset()
 {
-    PIOOutValue(PD2, 0);
+    DEBUG("Reset SIM900A\n");
+    PIOOutValue(PD6, 0);
     sleep(1);
-    PIOOutValue(PD2, 1);
+    PIOOutValue(PD6, 1);
     sleep(3);
 }
 
@@ -798,5 +801,5 @@ ECommError CGprs::ReadRawData(uint8 * buf, uint32 len, int32 timeout)
 
 void CGprs::Delay(uint32 ms)
 {
-    myusleep(ms * 1000);
+    myusleep(ms * 1000 * 10);
 }

@@ -20,9 +20,14 @@ const uint32 HEATINFO_TIMEOUT = 300;//s
 const uint8 ERROR_FLAG[] = {0xBD, 0xEB};
 const uint8 indexes[3][12] = {
     // supply-water-temperature, supply-water-temperature-dif, return-water-temperature, return-water-temperature-dif, current-flow-velocity, current-flow-velocity-dif, current-heat-velocity, current-heat-velocity-dif, total-flow, total-flow-dif, total-heat, total-heat-dif
-    {56, 00, 60, 00, 53, 00, 47, 00, 40, 00, 20, 00}, // 丹佛斯
+    {56, 00, 60, 00, 51, 00, 45, 00, 39, 00, 19, 00}, // 丹佛斯
     {45, 43, 51, 49, 75, 73, 63, 61, 33, 31, 27, 25}, // 卡姆鲁普
-    {56, 00, 60, 00, 53, 00, 47, 00, 40, 00, 20, 00}  // 荷德
+    {56, 00, 60, 00, 51, 00, 45, 00, 39, 00, 19, 00}  // 荷德
+};
+const uint8 pktlen[3] = {
+    153, // 丹佛斯
+    253, // 卡姆鲁普
+    153  // 荷德
 };
 
 CLock CHeatMonitor::m_HeatLock;
@@ -95,7 +100,7 @@ void CHeatMonitor::GetHeatData()
         }
         uint8 buf[256];
         bzero(buf, 256);
-        uint16 len = 256;
+        uint16 len = pktlen[iter->Type];
         FlashLight(LIGHT_GENERAL_HEAT);
         if (WaitCmdAck(buf, &len)) {
             DEBUG("Read from heat ");
@@ -464,7 +469,7 @@ bool CHeatMonitor::WaitCmdAck(uint8 * data, uint16 * len)
     struct timeval tv;
     int retval, r, readed = 0;
     uint8 * ack = data;
-    uint16 rlen = 0;
+    uint16 rlen = * len;
     uint8 retry = 3;
 
     FD_ZERO(&rfds);

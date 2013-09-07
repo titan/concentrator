@@ -689,6 +689,6 @@ void CMainLoop::DrawUsbDone()
 void CMainLoop::Write(uint8 * data, uint16 len)
 {
     if (com == -1) return;
-    TX_ENABLE(gpio);
+    //TX_ENABLE(gpio);
     write(com, data, len);
 }

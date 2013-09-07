@@ -7,6 +7,7 @@
 #include "csvparser.h"
 #include <iostream>
 #include <fstream>
+#include <sys/epoll.h>
 
 #ifdef DEBUG_VALVE
 #include <time.h>
@@ -34,7 +35,7 @@ void vuserseq(void * key, size_t klen, void * data, size_t dlen, void * params, 
     uint32 * vmac = (uint32 *) key;
     user_t * user = (user_t *) data;
     (* users)[* vmac] = * user;
-    DEBUG("Load user for vmac: %02x %02x %02x %02x\n", * vmac & 0xFF, (* vmac >> 8) & 0xFF, (* vmac >> 16) & 0xFF, (* vmac >> 24) & 0xFF);
+    //DEBUG("Load user for vmac: %02x %02x %02x %02x\n", * vmac & 0xFF, (* vmac >> 8) & 0xFF, (* vmac >> 16) & 0xFF, (* vmac >> 24) & 0xFF);
 }
 
 void vrecordseq(void * key, size_t klen, void * data, size_t dlen, void * params, size_t plen)
@@ -108,11 +109,10 @@ void CValveMonitor::SaveUsers()
 
 uint32 CValveMonitor::Run()
 {
-    fd_set rfds, wfds;
-    struct timeval tv;
-    int retval, r, readed = 0, w, wrote = 0;
+    struct timeval lastIO;
+    int r, readed = 0, lastReaded = 0, w, wrote = 0;
     uint8 ack[PKTLEN];
-    uint8 * buf = NULL;
+    uint8 * buf = NULL, ptr = 0;;
     uint16 rlen = 0, wlen = 0;
     time_t lastWrite = 0;
     uint32 rc = 0, wc = 0; // read and write counter
@@ -121,13 +121,34 @@ uint32 CValveMonitor::Run()
     bool broadcasting = true;
     // int iomode = 0; // 1 for read, 0 for write
     int workmode = 0; // 0 for dynamical register, 1 for csv register
+    int nfds = 0;
 
+    struct epoll_event ev, evs[1];
+
+    while ((r = read(com, buf, PKTLEN)) > 0) {
+        readed += r;
+    }
+    DEBUG("Clear tty %d bytes\n", readed);
+    readed = 0;
+
+    int epfd = epoll_create(1);
+
+    if (epfd == -1) {
+        DEBUG("Cannot create epoll\n");
+        return (uint32)-1;
+    }
+
+#if 0
+    workmode = 0;
+    broadcasting = false;
+#else
     if (access("user_info.csv", F_OK) == 0) {
         workmode = 1;
     }
 
     LoadUsers();
     LoadRecords();
+#endif
 
 registering:
 
@@ -176,6 +197,14 @@ registering:
         }
     }
 
+    ev.events = EPOLLIN | EPOLLET;
+    ev.data.fd = com;
+
+    if (epoll_ctl(epfd, EPOLL_CTL_ADD, com, &ev) == -1) {
+        DEBUG("Cannot epoll fd %d\n", com);
+        return (uint32)-1;
+    }
+
     while (true) {
         if (!broadcasting) {
             // check expired valve, only works in normal process
@@ -198,23 +227,18 @@ registering:
             } else {
                 if ((unsigned int)(time(NULL) - lastWrite) > (120 + valveCount - 60)) {
                     while (cbuffer_read(rx) != NULL) {
-                        uint8 ptr = 0;
+                        ptr = 0;
                         buf = (uint8 *)cbuffer_write(htx);
                         if (buf != NULL) {
                             bzero(buf, PKTLEN);
                             memcpy(buf, cbuffer_read(rx), sizeof(uint32));
                             ptr += sizeof(uint32);
                             cbuffer_read_done(rx);
-                            buf[ptr] = PORT;
-                            ptr ++;
-                            buf[ptr] = RAND;
-                            ptr ++;
-                            buf[ptr] = 0x06;
-                            ptr ++; // len
-                            buf[ptr] = VALVE_BROADCAST;
-                            ptr ++;
-                            buf[ptr] = 0xAC;
-                            ptr ++;
+                            buf[ptr ++] = PORT;
+                            buf[ptr ++] = RAND;
+                            buf[ptr ++] = 0x06; //len
+                            buf[ptr ++] = VALVE_BROADCAST;
+                            buf[ptr ++] = 0xAC;
                             memcpy(buf + ptr, &sid, sizeof(uint32));
                             ptr += sizeof(uint32);
                             cbuffer_write_done(htx);
@@ -252,6 +276,35 @@ registering:
                     SaveRecords();
                 }
                 if (workmode == 0) BroadcastQuery();
+                truncate("vmac.txt", 0);
+                int fd = open("vmac.txt", O_WRONLY);
+                if (fd != -1) {
+                    DEBUG("Save vmac\n");
+                    char buf[16];
+                    for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+                        bzero(buf, 16);
+                        sprintf(buf, "%02X %02X %02X %02X\n", iter->first & 0xFF, (iter->first >> 8) & 0xFF, (iter->first >> 16) & 0xFF, (iter->first >> 24) & 0xFF);
+                        write(fd, buf, 12);
+                    }
+                    close(fd);
+                } else {
+                    DEBUG("Save vmac error\n");
+                }
+
+                truncate("statistics.txt", 0);
+                fd = open("statistics.txt", O_WRONLY);
+                if (fd != -1) {
+                    DEBUG("Save statistics\n");
+                    char buf[32];
+                    for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+                        bzero(buf, 32);
+                        sprintf(buf, "%02X %02X %02X %02X %6d %6d %02.02f%%\n", iter->first & 0xFF, (iter->first >> 8) & 0xFF, (iter->first >> 16) & 0xFF, (iter->first >> 24) & 0xFF, responseCounters[iter->first], requestCounters[iter->first], responseCounters[iter->first] * (double)100 / requestCounters[iter->first]);
+                        write(fd, buf, strlen(buf));
+                    }
+                    close(fd);
+                } else {
+                    DEBUG("Save statistics error\n");
+                }
             }
             if (noonTimer.Done()) {
                 GetRechargeData();
@@ -259,76 +312,166 @@ registering:
             }
         }
 
+#if 0
+        txlock.Lock();
+        buf = (uint8 *) cbuffer_write(tx);
+        if (buf) {
+            ptr = 0;
+            switch (random() % 3) {
+            case 0:
+                buf[ptr ++] = 0x8a;
+                buf[ptr ++] = 0x6b;
+                buf[ptr ++] = 0x38;
+                buf[ptr ++] = 0x60;
+                break;
+            case 1:
+                buf[ptr ++] = 0x8a;
+                buf[ptr ++] = 0x6b;
+                buf[ptr ++] = 0x6a;
+                buf[ptr ++] = 0xd0;
+                break;
+            case 2:
+                buf[ptr ++] = 0x8a;
+                buf[ptr ++] = 0x6b;
+                buf[ptr ++] = 0x6a;
+                buf[ptr ++] = 0xd2;
+                break;
+            default:
+                break;
+            }
+            buf[ptr ++] = PORT;
+            buf[ptr ++] = RAND;
+            buf[ptr ++] = 0x01;
+            buf[ptr ++] = VALVE_GET_PUNCTUAL_DATA;
+            cbuffer_write_done(tx);
+        }
+        txlock.UnLock();
+#endif
+
     ioloopstart:
 
-        FD_ZERO(&rfds);
-        FD_ZERO(&wfds);
-        tv.tv_sec = 0;
-        tv.tv_usec = 0; //500000; // 0.5 seconds
-        FD_SET(com, &rfds);
-
-        if ((cbuffer_read(tx) != NULL || cbuffer_read(htx) != NULL) && rc >= wc) {
-            tv.tv_sec = 0;
-            tv.tv_usec = 0;
-            FD_SET(com, &wfds);
-            retval = select(com + 1, &rfds, &wfds, NULL, &tv);
-        } else {
-            retval = select(com + 1, &rfds, NULL, NULL, &tv);
+        if ((cbuffer_read(tx) != NULL || cbuffer_read(htx) != NULL) && rc == wc) {
+            struct timeval tv;
+            gettimeofday(&tv, NULL);
+            if (difftimeval(&tv, &lastIO) > 50 * 1000) {
+                ev.events |= EPOLLOUT;
+                if (epoll_ctl(epfd, EPOLL_CTL_MOD, com, &ev) == -1) {
+                    DEBUG("Cannot modify epoll to listen EPULLOUT\n");
+                }
+            }
         }
-        if (retval) {
-            if (FD_ISSET(com, &rfds)) {
+
+        nfds = epoll_wait(epfd, evs, 1, 200);
+
+        if (nfds > 0) {
+            if (evs[0].events & EPOLLIN) {
 
                 if (readed == 0) {
-                    rlen = 9;
+                    rlen = 0;
                     bzero(ack, PKTLEN);
                 }
 
-                r = read(com, ack + readed, rlen - readed);
+                while ((r = read(evs[0].data.fd, ack + readed, PKTLEN - readed)) > 0) {
+                    readed += r;
+                }
+                gettimeofday(&lastIO, NULL);
 
-                if (r == -1 || r == 0) {
-                    if (r == -1) {
+                if (r == -1) {
+                    if (errno != EAGAIN) {
                         DEBUG("Read error: %d\n", errno);
+                        continue;
                     }
-                    if (retry > 2) {
-                        if (rc != wc) {
-                            DEBUG("Read timeout, retry: %d, rc: %d, wc: %d\n", retry, rc, wc);
-                            readed = 0;
-                            rlen = 9;
+                    if (retry > 10) {
+                        DEBUG("Read timeout, retry: %d, rc: %d, wc: %d, readed: %d\n", retry, rc, wc, readed);
+                        if (readed > 0)
+                            hexdump(ack, readed);
+
+                        // try to recover from the wrong packet
+                        ptr = 0;
+                        while (readed > 5 && ack[ptr + 4] != 0x0F) {
+                            ptr ++;
+                            readed --;
+                        }
+                        if (ptr > 0) {
+                            // found mistake in packet
+                            memmove(ack, ack + ptr, readed);
+                            DEBUG("Recover to ");
+                            hexdump(ack, readed);
                         }
 
+                        if (readed > 6 && ack[6] != 0xFF) {
+                            rlen = 4 + 1 + 1 + 1 + ack[6] + 2; // mac + port + rand + len + data + crc
+                        } else if (readed > 8 && ack[6] == 0xFF) {
+                            rlen = 4 + 1 + 1 + 3 + ((uint16)ack[7]) << 8 + ack[8] + 2; // mac + port + rand + len + data + crc
+                        } else {
+                            rlen = 0;
+                        }
+
+                        if (readed >= rlen) {
+                            // it's correct
+                            goto adjust_read_packet;
+                        }
+
+                        readed = 0;
                         retry = 0;
-                        rc = wc;
+                        rlen = 0;
+                        if (rc > wc)
+                            wc = rc;
+                        else
+                            rc = wc;
+                        continue;
                     } else {
-                        retry ++;
+                        if (readed == lastReaded)
+                            retry ++;
+                        if (readed == 0) {
+                            DEBUG(" break the read loop\n");
+                            continue;
+                        }
+                        lastReaded = readed;
                     }
-                    continue;
                 }
-                DEBUG("readed: %d, rlen: %d, read %d bytes: ", readed, rlen, r);
-                hexdump(ack + readed, r);
-                readed += r;
 
                 // try to recover from the wrong packet
-                while (readed > 5 && ack[4] != 0x0F) {
+                ptr = 0;
+                while (readed > 5 && ack[ptr + 4] != 0x0F) {
+                    ptr ++;
+                    readed --;
+                }
+                if (ptr > 0) {
                     // found mistake in packet
-                    memmove(ack, ack + 1, --readed);
+                    memmove(ack, ack + ptr, readed);
                     DEBUG("Recover to ");
                     hexdump(ack, readed);
                 }
-
-                if (rlen == 9 && readed > 6 && ack[6] != 0xFF) {
-                    rlen = 4 + 1 + 1 + 1 + ack[6] + 2; // mac + port + rand + len + data + crc
-                } else if (rlen == 9 && readed > 8 && ack[6] == 0xFF) {
-                    rlen = 4 + 1 + 1 + 3 + ((uint16)ack[7]) << 8 + ack[8] + 2; // mac + port + rand + len + data + crc
-                }
-                if (readed == rlen) {
-                    readed = 0;
-                    DEBUG("Read %d bytes: ", rlen);
-                    hexdump(ack, rlen);
-                    ParseAck(ack, rlen);
-                    rc ++;
-                }
+            adjust_read_packet:
+                bool cont = false;
+                do {
+                    if (readed > 6 && ack[6] != 0xFF) {
+                        rlen = 4 + 1 + 1 + 1 + ack[6] + 2; // mac + port + rand + len + data + crc
+                    } else if (readed > 8 && ack[6] == 0xFF) {
+                        rlen = 4 + 1 + 1 + 3 + ((uint16)ack[7]) << 8 + ack[8] + 2; // mac + port + rand + len + data + crc
+                    }
+                    if (readed >= rlen && rlen > 0) {
+                        DEBUG("Read %d bytes: ", rlen);
+                        hexdump(ack, rlen);
+                        ParseAck(ack, rlen);
+                        rc ++;
+                        if (readed > rlen) {
+                            memmove(ack, ack + rlen, (readed - rlen));
+                            readed -= rlen;
+                        } else {
+                            readed = 0;
+                        }
+                        lastReaded = readed;
+                        retry = 0;
+                        rlen = 0;
+                        cont = true;
+                    } else {
+                        cont = false;
+                    }
+                } while (cont);
             }
-            if (FD_ISSET(com, &wfds)) {
+            if (evs[0].events & EPOLLOUT) {
                 buf = (uint8 *) cbuffer_read(htx);
                 priority = 1;
                 if (buf == NULL) {
@@ -346,7 +489,8 @@ registering:
                     buf[wlen - 2] = (crc >> 8) & 0xFF;
                     buf[wlen - 1] = crc & 0xFF;
                 }
-                w = write(com, buf + wrote, wlen - wrote);
+                w = write(evs[0].data.fd, buf + wrote, wlen - wrote);
+                gettimeofday(&lastIO, NULL);
                 if (w == -1 || w == 0) {
                     continue;
                 }
@@ -373,19 +517,24 @@ registering:
                     else
                         cbuffer_read_done(htx);
                     wrote = 0;
-                    myusleep(500 * 1000);
+                    //myusleep(500 * 1000);
                     wc ++;
+                    ev.events &= ~EPOLLOUT;
+                    if (epoll_ctl(epfd, EPOLL_CTL_MOD, com, &ev) == -1) {
+                        DEBUG("Cannot modify epoll to unlisten EPOLLOUT\n");
+                    }
                 }
             }
         } else {
-            if (retry > 2) {
-                if (rc != wc) {
-                    DEBUG("Read timeout, retry: %d, rc: %d, wc: %d\n", retry, rc, wc);
-                    readed = 0;
-                    rlen = 9;
-                }
+            if (retry > 5) {
+                //DEBUG("Poll timeout, retry: %d, rc: %d, wc: %d\n", retry, rc, wc);
+                if (rc > wc)
+                    wc = rc;
+                else
+                    rc = wc;
+                rlen = 0;
+                readed = 0;
                 retry = 0;
-                rc = wc;
             } else {
                 retry ++;
             }
@@ -400,23 +549,21 @@ void CValveMonitor::BroadcastClearSID()
     uint8 buf[PKTLEN];
     uint8 ptr = 0;
     bzero(buf, PKTLEN);
-    buf[ptr] = 0xFF;
-    ptr ++;
-    buf[ptr] = 0xFF;
-    ptr ++;
-    buf[ptr] = 0xFF;
-    ptr ++;
-    buf[ptr] = 0xFF;
-    ptr ++;
-    buf[ptr] = PORT;
-    ptr ++;
-    buf[ptr] = RAND;
-    ptr ++;
-    buf[ptr] = 0x01;
-    ptr ++;
-    buf[ptr] = VALVE_BROADCAST_CLEAR_SID;
-    ptr ++;
-    SendCommand(buf, ptr);
+    buf[ptr ++] = 0xFF;
+    buf[ptr ++] = 0xFF;
+    buf[ptr ++] = 0xFF;
+    buf[ptr ++] = 0xFF;
+    buf[ptr ++] = PORT;
+    buf[ptr ++] = RAND;
+    buf[ptr ++] = 0x01;
+    buf[ptr ++] = VALVE_BROADCAST_CLEAR_SID;
+    uint16 crc = GenerateCRC(buf, ptr);
+    buf[ptr ++] = (crc >> 8) & 0xFF;
+    buf[ptr ++] = crc & 0xFF;
+    ptr = write(com, buf, ptr);
+    DEBUG("Write %d bytes ", ptr);
+    hexdump(buf, ptr);
+    //SendCommand(buf, ptr);
 }
 
 void CValveMonitor::Broadcast(uint8 counter)
@@ -485,12 +632,12 @@ void CValveMonitor::ParseBroadcast(uint32 vmac, uint8 * data, uint16 len)
 {
     uint8 * buf;
     uint16 ptr = 0;
+    user_t user;
     if (len == 8) {
-        user_t user;
         memcpy(user.uid.x, data, sizeof(userid_t));
         map<uint32, user_t>::iterator i = users.find(vmac);
         if (i != users.end()) {
-            DEBUG("Valve [%02x %02x %02x %02x] has bound user [%02x %02x %02x %02x %02x %02x %02x %02x], but still tries to bind user [%02x %02x %02x %02x %02x %02x %02x %02x]\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF, i->second.uid.x[0], i->second.uid.x[1], i->second.uid.x[2], i->second.uid.x[3], i->second.uid.x[4], i->second.uid.x[5], i->second.uid.x[6], i->second.uid.x[7], user.uid.x[0], user.uid.x[1], user.uid.x[2], user.uid.x[3], user.uid.x[4], user.uid.x[5], user.uid.x[6], user.uid.x[7]);
+            DEBUG("Valve [%02x %02x %02x %02x] has bound user [%02x %02x %02x %02x %02x %02x %02x %02x], but still tries to bind user [%02x %02x %02x %02x %02x %02x %02x %02x], total count: %d\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF, i->second.uid.x[0], i->second.uid.x[1], i->second.uid.x[2], i->second.uid.x[3], i->second.uid.x[4], i->second.uid.x[5], i->second.uid.x[6], i->second.uid.x[7], user.uid.x[0], user.uid.x[1], user.uid.x[2], user.uid.x[3], user.uid.x[4], user.uid.x[5], user.uid.x[6], user.uid.x[7], users.size());
             // we still need to response it
         } else {
             user.vmac = vmac;
@@ -530,7 +677,33 @@ void CValveMonitor::ParseBroadcast(uint32 vmac, uint8 * data, uint16 len)
             }
         }
     } else if (len == 1) {
-        DEBUG("Valve[%02x %02x %02x %02x] is unregistered\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF);
+        map<uint32, user_t>::iterator i = users.find(vmac);
+        if (i != users.end()) {
+            DEBUG("Valve[%02x %02x %02x %02x] is unregistered, but we know it, total count: %d\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF, users.size());
+        } else {
+            DEBUG("Valve[%02x %02x %02x %02x] is unregistered, total count: %d\n", vmac & 0xFF, (vmac >> 8) & 0xFF, (vmac >> 16) & 0xFF, (vmac >> 24) & 0xFF, users.size());
+            bzero(user.uid.x, sizeof(userid_t));
+            user.vmac = vmac;
+            users[vmac] = user;
+
+            txlock.Lock();
+            uint8 * buf = (uint8 *) cbuffer_write(tx);
+            if (buf != NULL) {
+                uint16 ptr = 0;
+                memcpy(buf, &vmac, sizeof(uint32));
+                ptr += sizeof(uint32);
+                buf[ptr] = PORT;
+                ptr ++;
+                buf[ptr] = RAND;
+                ptr ++;
+                buf[ptr] = 0x01;
+                ptr ++; // len
+                buf[ptr] = VALVE_GET_PUNCTUAL_DATA;
+                ptr ++;
+                cbuffer_write_done(tx);
+            }
+            txlock.UnLock();
+        }
         unregisteredCounter ++;
     }
 }
@@ -573,31 +746,44 @@ void CValveMonitor::ParseAck(uint8 * ack, uint16 len)
     }
     switch (code) {
     case VALVE_GET_TIME:
+        responseCounters[mac]++;
         ParseValveTime(mac, data, dlen);
         break;
     case VALVE_GET_RECHARGE_DATA:
+        responseCounters[mac]++;
         ParseRechargeData(mac, data, dlen);
         break;
     case VALVE_GET_CONSUME_DATA:
+        responseCounters[mac]++;
         ParseConsumeData(mac, data, dlen);
         break;
     case VALVE_GET_TIME_DATA:
+        responseCounters[mac]++;
         ParseTimeData(mac, data, dlen);
         break;
     case VALVE_GET_HEAT_DATA:
+        responseCounters[mac]++;
         ParseHeatData(mac, data, dlen);
         break;
     case VALVE_GET_PUNCTUAL_DATA:
+        responseCounters[mac]++;
         ParsePunctualData(mac, data, dlen);
         break;
     case VALVE_QUERY_USER:
+        responseCounters[mac]++;
         ParseQueryUser(mac, data, dlen);
         break;
     case VALVE_RECHARGE:
+        responseCounters[mac]++;
         ParseRecharge(mac, data, dlen);
         break;
     case VALVE_BROADCAST:
+        responseCounters[mac];
         ParseBroadcast(mac, data, dlen);
+        break;
+    case VALVE_PUNCTUAL_DATA_NOT_AVAILABLE:
+        responseCounters[mac]++;
+        DEBUG("Punctual data not avaiable in valve[%02x %02x %02x %02x]\n", mac & 0xFF, (mac >> 8) & 0xFF, (mac >> 16) & 0xFF, (mac >> 24) & 0xFF);
         break;
     default:
         DEBUG("Unknow ack from valve[%02x %02x %02x %02x]: ", mac & 0xFF, (mac >> 8) & 0xFF, (mac >> 16) & 0xFF, (mac >> 24) & 0xFF);
@@ -609,21 +795,21 @@ void CValveMonitor::ParseAck(uint8 * ack, uint16 len)
 void CValveMonitor::GetPunctualData()
 {
     for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
+        user_t * user = &iter->second;
+        if (user->uid.x[0] == 0 && user->uid.x[1] == 0 && user->uid.x[2] == 0 && user->uid.x[3] == 0 && user->uid.x[4] == 0 && user->uid.x[5] == 0 && user->uid.x[6] == 0 && user->uid.x[7] == 0)
+            continue;
         txlock.Lock();
         uint8 * buf = (uint8 *) cbuffer_write(tx);
         if (buf != NULL) {
             uint16 ptr = 0;
             memcpy(buf, &iter->second.vmac, sizeof(uint32));
             ptr += sizeof(uint32);
-            buf[ptr] = PORT;
-            ptr ++;
-            buf[ptr] = RAND;
-            ptr ++;
-            buf[ptr] = 0x01;
-            ptr ++; // len
-            buf[ptr] = VALVE_GET_PUNCTUAL_DATA;
-            ptr ++;
+            buf[ptr ++] = PORT;
+            buf[ptr ++] = RAND;
+            buf[ptr ++] = 0x01; // len
+            buf[ptr ++] = VALVE_GET_PUNCTUAL_DATA;
             cbuffer_write_done(tx);
+            requestCounters[iter->second.vmac] ++;
         }
         txlock.UnLock();
     }
@@ -771,18 +957,12 @@ void CValveMonitor::GetRechargeData()
                 ptr = 0;
                 memcpy(buf, &iter->second.vmac, sizeof(uint32));
                 ptr += sizeof(uint32);
-                buf[ptr] = PORT;
-                ptr ++;
-                buf[ptr] = RAND;
-                ptr ++;
-                buf[ptr] = 0x03;
-                ptr ++; // len
-                buf[ptr] = VALVE_GET_RECHARGE_DATA;
-                ptr ++;
-                buf[ptr] = rec->sentRecharge + i * payload + 1;
-                ptr ++; // offset
-                buf[ptr] = payload;
-                ptr ++; // limit
+                buf[ptr ++] = PORT;
+                buf[ptr ++] = RAND;
+                buf[ptr ++] = 0x03; // len
+                buf[ptr ++] = VALVE_GET_RECHARGE_DATA;
+                buf[ptr ++] = rec->sentRecharge + i * payload + 1; // offset
+                buf[ptr ++] = payload; // limit
                 if (SendCommand(buf, ptr)) {
                     if (WaitCmdAck(buf, &ptr)) {
                         rec->sentRecharge += payload;
@@ -801,18 +981,12 @@ void CValveMonitor::GetRechargeData()
                 ptr = 0;
                 memcpy(buf, &iter->second.vmac, sizeof(uint32));
                 ptr += sizeof(uint32);
-                buf[ptr] = PORT;
-                ptr ++;
-                buf[ptr] = RAND;
-                ptr ++;
-                buf[ptr] = 0x03;
-                ptr ++; // len
-                buf[ptr] = VALVE_GET_RECHARGE_DATA;
-                ptr ++;
-                buf[ptr] = rec->sentRecharge + (delta / payload) * payload + 1;
-                ptr ++; // offset
-                buf[ptr] = delta % payload;
-                ptr ++; // limit
+                buf[ptr ++] = PORT;
+                buf[ptr ++] = RAND;
+                buf[ptr ++] = 0x03; // len
+                buf[ptr ++] = VALVE_GET_RECHARGE_DATA;
+                buf[ptr ++] = rec->sentRecharge + (delta / payload) * payload + 1; // offset
+                buf[ptr ++] = delta % payload; // limit
 
                 if (SendCommand(buf, ptr)) {
                     if (WaitCmdAck(buf, &ptr)) {
@@ -844,10 +1018,8 @@ void CValveMonitor::ParseRechargeData(uint32 vmac, uint8 * data, uint16 len)
         if (iter->second.vmac == vmac) {
             for (uint8 i = 0, count = len / rsize; i < count; i ++, ptr = 0) {
                 bzero(buf, PKTLEN);
-                buf[ptr] = VALVE_PACKET_FLAG;
-                ptr ++;
-                buf[ptr] = sizeof(userid_t) + rsize;
-                ptr ++;
+                buf[ptr ++] = VALVE_PACKET_FLAG;
+                buf[ptr ++] = sizeof(userid_t) + rsize;
                 memcpy(buf + ptr, iter->second.uid.x, sizeof(userid_t));
                 ptr += sizeof(userid_t);
                 * (uint32 *)(buf + ptr) = vmac;
@@ -877,20 +1049,13 @@ void CValveMonitor::GetConsumeData()
                 ptr = 0;
                 memcpy(buf, &iter->second.vmac, sizeof(uint32));
                 ptr += sizeof(uint32);
-                buf[ptr] = PORT;
-                ptr ++;
-                buf[ptr] = RAND;
-                ptr ++;
-                buf[ptr] = 0x04;
-                ptr ++; // len
-                buf[ptr] = VALVE_GET_CONSUME_DATA;
-                ptr ++;
-                buf[ptr] = (rec->sentConsume + i * payload + 1) / 256;
-                ptr ++;
-                buf[ptr] = (rec->sentConsume + i * payload + 1) % 256;
-                ptr ++;
-                buf[ptr] = payload;
-                ptr ++;
+                buf[ptr ++] = PORT;
+                buf[ptr ++] = RAND;
+                buf[ptr ++] = 0x04; // len
+                buf[ptr ++] = VALVE_GET_CONSUME_DATA;
+                buf[ptr ++] = (rec->sentConsume + i * payload + 1) / 256;
+                buf[ptr ++] = (rec->sentConsume + i * payload + 1) % 256;
+                buf[ptr ++] = payload;
                 if (SendCommand(buf, ptr)) {
                     if (WaitCmdAck(buf, &ptr)) {
                         rec->sentConsume += payload;
@@ -909,20 +1074,13 @@ void CValveMonitor::GetConsumeData()
                 ptr = 0;
                 memcpy(buf, &iter->second.vmac, sizeof(uint32));
                 ptr += sizeof(uint32);
-                buf[ptr] = PORT;
-                ptr ++;
-                buf[ptr] = RAND;
-                ptr ++;
-                buf[ptr] = 0x04;
-                ptr ++; // len
-                buf[ptr] = VALVE_GET_CONSUME_DATA;
-                ptr ++;
-                buf[ptr] = (rec->sentConsume + (delta / payload) * payload + 1) / 256;
-                ptr ++;
-                buf[ptr] = (rec->sentConsume + (delta / payload) * payload + 1) % 256;
-                ptr ++;
-                buf[ptr] = delta % payload;
-                ptr ++;
+                buf[ptr ++] = PORT;
+                buf[ptr ++] = RAND;
+                buf[ptr ++] = 0x04; // len
+                buf[ptr ++] = VALVE_GET_CONSUME_DATA;
+                buf[ptr ++] = (rec->sentConsume + (delta / payload) * payload + 1) / 256;
+                buf[ptr ++] = (rec->sentConsume + (delta / payload) * payload + 1) % 256;
+                buf[ptr ++] = delta % payload;
                 if (SendCommand(buf, ptr)) {
                     if (WaitCmdAck(buf, &ptr)) {
                         rec->sentConsume += delta % payload;
@@ -953,10 +1111,8 @@ void CValveMonitor::ParseConsumeData(uint32 vmac, uint8 * data, uint16 len)
         if (iter->second.vmac == vmac) {
             for (uint8 i = 0, count = (len - 8) / rsize; i < count; i ++, ptr = 0) {
                 bzero(buf, PKTLEN);
-                buf[ptr] = VALVE_PACKET_FLAG;
-                ptr ++;
-                buf[ptr] = sizeof(userid_t) + rsize;
-                ptr ++;
+                buf[ptr ++] = VALVE_PACKET_FLAG;
+                buf[ptr ++] = sizeof(userid_t) + rsize;
                 * (uint32 *)(buf + ptr) = vmac;
                 ptr += sizeof(uint32);
                 memcpy(buf + ptr, iter->second.uid.x, sizeof(userid_t));
@@ -994,25 +1150,17 @@ void CValveMonitor::QueryUser(userid_t uid, uint8 * data, uint16 len)
             uint16 ptr = 0;
             memcpy(buf, &iter->second.vmac, sizeof(uint32));
             ptr += sizeof(uint32);
-            buf[ptr] = PORT;
-            ptr ++;
-            buf[ptr] = RAND;
-            ptr ++;
+            buf[ptr ++] = PORT;
+            buf[ptr ++] = RAND;
             if ((1 + len) < 0xFF) {
-                buf[ptr] = (1 + len) & 0xFF;
-                ptr ++;// command + data
-                buf[ptr] = VALVE_QUERY_USER;
-                ptr ++;
+                buf[ptr ++] = (1 + len) & 0xFF; // command + data
+                buf[ptr ++] = VALVE_QUERY_USER;
                 memcpy(buf + ptr, data, len);
             } else {
-                buf[ptr] = 0xFF;
-                ptr ++;
-                buf[ptr] = ((1 + len) >> 8) & 0xFF;
-                ptr ++; // high byte for 'command + data'
-                buf[ptr] = (1 + len) & 0xFF;
-                ptr ++; // low byte for 'command + data'
-                buf[ptr] = VALVE_QUERY_USER;
-                ptr ++;
+                buf[ptr ++] = 0xFF;
+                buf[ptr ++] = ((1 + len) >> 8) & 0xFF; // high byte for 'command + data'
+                buf[ptr ++] = (1 + len) & 0xFF; // low byte for 'command + data'
+                buf[ptr ++] = VALVE_QUERY_USER;
                 memcpy(buf + ptr, data, len);
             }
             cbuffer_write_done(tx);
@@ -1056,25 +1204,17 @@ void CValveMonitor::Recharge(userid_t uid, uint8 * data, uint16 len)
             uint16 ptr = 0;
             memcpy(buf, &iter->second.vmac, sizeof(uint32));
             ptr += sizeof(uint32);
-            buf[ptr] = PORT;
-            ptr ++;
-            buf[ptr] = RAND;
-            ptr ++;
+            buf[ptr ++] = PORT;
+            buf[ptr ++] = RAND;
             if ((1 + len) < 0xFF) {
-                buf[ptr] = (1 + len) & 0xFF;
-                ptr ++;// command + data
-                buf[ptr] = VALVE_RECHARGE;
-                ptr ++;
+                buf[ptr ++] = (1 + len) & 0xFF; // command + data
+                buf[ptr ++] = VALVE_RECHARGE;
                 memcpy(buf + ptr, data, len);
             } else {
-                buf[ptr] = 0xFF;
-                ptr ++;
-                buf[ptr] = ((1 + len) >> 8) & 0xFF;
-                ptr ++; // high byte for 'command + data'
-                buf[ptr] = (1 + len) & 0xFF;
-                ptr ++; // low byte for 'command + data'
-                buf[ptr] = VALVE_RECHARGE;
-                ptr ++;
+                buf[ptr ++] = 0xFF;
+                buf[ptr ++] = ((1 + len) >> 8) & 0xFF; // high byte for 'command + data'
+                buf[ptr ++] = (1 + len) & 0xFF; // low byte for 'command + data'
+                buf[ptr ++] = VALVE_RECHARGE;
                 memcpy(buf + ptr, data, len);
             }
             cbuffer_write_done(htx);
@@ -1132,25 +1272,17 @@ uint16 CValveMonitor::ConfigValve(ValveCtrlType cmd, uint8 * data, uint16 len)
         bzero(buf, PKTLEN);
         memcpy(buf, &iter->second.vmac, sizeof(uint32));
         ptr += sizeof(uint32);
-        buf[ptr] = PORT;
-        ptr ++;
-        buf[ptr] = RAND;
-        ptr ++;
+        buf[ptr ++] = PORT;
+        buf[ptr ++] = RAND;
         if ((1 + len) < 0xFF) {
-            buf[ptr] = (1 + len) & 0xFF;
-            ptr ++;// command + data
-            buf[ptr] = cmd;
-            ptr ++;
+            buf[ptr ++] = (1 + len) & 0xFF; // command + data
+            buf[ptr ++] = cmd;
             memcpy(buf + ptr, data, len);
         } else {
-            buf[ptr] = 0xFF;
-            ptr ++;
-            buf[ptr] = ((1 + len) >> 8) & 0xFF;
-            ptr ++; // high byte for 'command + data'
-            buf[ptr] = (1 + len) & 0xFF;
-            ptr ++; // low byte for 'command + data'
-            buf[ptr] = cmd;
-            ptr ++;
+            buf[ptr ++] = 0xFF;
+            buf[ptr ++] = ((1 + len) >> 8) & 0xFF; // high byte for 'command + data'
+            buf[ptr ++] = (1 + len) & 0xFF; // low byte for 'command + data'
+            buf[ptr ++] = cmd;
             memcpy(buf + ptr, data, len);
         }
         cbuffer_write_done(htx);
@@ -1183,15 +1315,12 @@ void CValveMonitor::GetTimeData()
             uint16 ptr = 0;
             memcpy(buf, &iter->second.vmac, sizeof(uint32));
             ptr += sizeof(uint32);
-            buf[ptr] = PORT;
-            ptr ++;
-            buf[ptr] = RAND;
-            ptr ++;
-            buf[ptr] = 0x01;
-            ptr ++; // len
-            buf[ptr] = VALVE_GET_TIME_DATA;
-            ptr ++;
+            buf[ptr ++] = PORT;
+            buf[ptr ++] = RAND;
+            buf[ptr ++] = 0x01; // len
+            buf[ptr ++] = VALVE_GET_TIME_DATA;
             cbuffer_write_done(tx);
+            requestCounters[iter->second.vmac] ++;
         }
         txlock.UnLock();
     }
@@ -1227,10 +1356,8 @@ void CValveMonitor::SendValveData()
         for (map<uint32, valve_temperature_t>::iterator iter = valveTemperatures.begin(); iter != valveTemperatures.end(); iter ++) {
             bzero(buf, PKTLEN);
             ptr = 0;
-            buf[ptr] = VALVE_PACKET_FLAG;
-            ptr ++;
-            buf[ptr] = 1 + 1 + sizeof(valve_temperature_t);
-            ptr ++;
+            buf[ptr ++] = VALVE_PACKET_FLAG;
+            buf[ptr ++] = 1 + 1 + sizeof(valve_temperature_t);
             memcpy(buf + ptr, &iter->second, sizeof(valve_temperature_t));
             ptr += sizeof(valve_temperature_t);
             CPortal::GetInstance()->InsertValveData(buf, ptr);
@@ -1239,10 +1366,8 @@ void CValveMonitor::SendValveData()
         for (map<uint32, valve_heat_t>::iterator iter = valveHeats.begin(); iter != valveHeats.end(); iter ++) {
             bzero(buf, PKTLEN);
             ptr = 0;
-            buf[ptr] = VALVE_PACKET_FLAG;
-            ptr ++;
-            buf[ptr] = 1 + 1 + sizeof(valve_heat_t);
-            ptr ++;
+            buf[ptr ++] = VALVE_PACKET_FLAG;
+            buf[ptr ++] = 1 + 1 + sizeof(valve_heat_t);
             memcpy(buf + ptr, &iter->second, sizeof(valve_heat_t));
             ptr += sizeof(valve_heat_t);
             CPortal::GetInstance()->InsertValveData(buf, ptr);
@@ -1259,47 +1384,28 @@ void CValveMonitor::GetHeatData()
             uint16 ptr = 0;
             memcpy(buf, &iter->second.vmac, sizeof(uint32));
             ptr += sizeof(uint32);
-            buf[ptr] = PORT;
-            ptr ++;
-            buf[ptr] = RAND;
-            ptr ++;
-            buf[ptr] = 0x11;
-            ptr ++; // len
-            buf[ptr] = VALVE_GET_HEAT_DATA;
-            ptr ++;
-            buf[ptr] = 0x68;
-            ptr ++;
-            buf[ptr] = 0x20;
-            ptr ++;
-            buf[ptr] = 0xAA;
-            ptr ++;
-            buf[ptr] = 0xAA;
-            ptr ++;
-            buf[ptr] = 0xAA;
-            ptr ++;
-            buf[ptr] = 0xAA;
-            ptr ++;
-            buf[ptr] = 0xAA;
-            ptr ++;
-            buf[ptr] = 0xAA;
-            ptr ++;
-            buf[ptr] = 0xAA;
-            ptr ++;
-            buf[ptr] = 0x01;
-            ptr ++;
-            buf[ptr] = 0x03;
-            ptr ++;
-            buf[ptr] = 0x90;
-            ptr ++;
-            buf[ptr] = 0x1F;
-            ptr ++;
-            buf[ptr] = 0x0B;
-            ptr ++;
-            buf[ptr] = 0xEC;
-            ptr ++;
-            buf[ptr] = 0x16;
-            ptr ++;
+            buf[ptr ++] = PORT;
+            buf[ptr ++] = RAND;
+            buf[ptr ++] = 0x11; // len
+            buf[ptr ++] = VALVE_GET_HEAT_DATA;
+            buf[ptr ++] = 0x68;
+            buf[ptr ++] = 0x20;
+            buf[ptr ++] = 0xAA;
+            buf[ptr ++] = 0xAA;
+            buf[ptr ++] = 0xAA;
+            buf[ptr ++] = 0xAA;
+            buf[ptr ++] = 0xAA;
+            buf[ptr ++] = 0xAA;
+            buf[ptr ++] = 0xAA;
+            buf[ptr ++] = 0x01;
+            buf[ptr ++] = 0x03;
+            buf[ptr ++] = 0x90;
+            buf[ptr ++] = 0x1F;
+            buf[ptr ++] = 0x0B;
+            buf[ptr ++] = 0xEC;
+            buf[ptr ++] = 0x16;
             cbuffer_write_done(tx);
+            requestCounters[iter->second.vmac] ++;
         }
         txlock.UnLock();
     }
@@ -1318,20 +1424,16 @@ void CValveMonitor::ParseHeatData(uint32 vmac, uint8 * data, uint16 len)
 
             ptr ++; // skip frame start flag
 
-            uint8 type = data[ptr];
-            ptr ++;
+            uint8 type = data[ptr ++];
             uint8 addr[7];
             memcpy(addr, data + ptr, 7);
             ptr += 7;
-            uint8 code = data[ptr];
-            ptr ++;
-            uint8 dlen = data[ptr];
-            ptr ++;
+            uint8 code = data[ptr ++];
+            uint8 dlen = data[ptr ++];
             uint16 identifier;
             memcpy(&identifier, data + ptr, 2);
             ptr += 2;
-            uint8 sn = data[ptr];
-            ptr ++;
+            uint8 sn = data[ptr ++];
             uint8 dayHeat[5], heat[5], heatPower[5], flow[5], totalFlow[5];
             memcpy(dayHeat, data + ptr, 5);
             ptr += 5;
@@ -1416,8 +1518,8 @@ bool CValveMonitor::SendCommand(uint8 * data, uint16 len)
     FD_ZERO(&wfds);
     FD_SET(com, &wfds);
 
-    tv.tv_sec = 1;
-    tv.tv_usec = 0;
+    tv.tv_sec = 0;
+    tv.tv_usec = 1000;
 
     while (retry > 0) {
         retry --;
@@ -1443,7 +1545,7 @@ bool CValveMonitor::SendCommand(uint8 * data, uint16 len)
                     DEBUG("Write %d bytes:", wlen);
                     hexdump(buf, wlen);
                     wrote = 0;
-                    myusleep(500 * 1000);
+                    //myusleep(500 * 1000);
                     return true;
                 }
             }
@@ -1468,8 +1570,8 @@ bool CValveMonitor::WaitCmdAck(uint8 * data, uint16 * len)
 
     while (retry > 0) {
         retry --;
-        tv.tv_sec = 1;
-        tv.tv_usec = 0;
+        tv.tv_sec = 0;
+        tv.tv_usec = 1000;
         retval = select(com + 1, &rfds, NULL, NULL, &tv);
         if (retval) {
             if (FD_ISSET(com, &rfds)) {
@@ -1535,15 +1637,12 @@ void CValveMonitor::GetValveTime(uint32 vmac)
         uint16 ptr = 0;
         memcpy(buf, &vmac, sizeof(uint32));
         ptr += sizeof(uint32);
-        buf[ptr] = PORT;
-        ptr ++;
-        buf[ptr] = RAND;
-        ptr ++;
-        buf[ptr] = 0x01;
-        ptr ++; // len
-        buf[ptr] = VALVE_GET_TIME;
-        ptr ++;
+        buf[ptr ++] = PORT;
+        buf[ptr ++] = RAND;
+        buf[ptr ++] = 0x01; // len
+        buf[ptr ++] = VALVE_GET_TIME;
         cbuffer_write_done(tx);
+        requestCounters[vmac] ++;
     }
     txlock.UnLock();
 }
@@ -1571,7 +1670,7 @@ void CValveMonitor::ParseValveTime(uint32 vmac, uint8 * data, uint16 len)
     uint32 now = 0;
     if (GetLocalTimeStamp(now)) {
         now += 8*60*60; // convert to be Beijing Time
-        DEBUG("Time now: %d, valve: %d, cportal time ready? %s\n", now, utc, CPortal::GetInstance()->timeReady? "true": "false");
+        DEBUG("Time now: %d, valve: %d, portal time ready? %s\n", now, utc, CPortal::GetInstance()->timeReady? "true": "false");
         if (CPortal::GetInstance()->timeReady && (now - utc > 60 || utc - now > 60)) {
             tm t;
             if (GetLocalTime(t, now))
@@ -1589,32 +1688,20 @@ void CValveMonitor::SetValveTime(uint32 vmac, tm * t)
         uint16 ptr = 0;
         memcpy(buf, &vmac, sizeof(uint32));
         ptr += sizeof(uint32);
-        buf[ptr] = PORT;
-        ptr ++;
-        buf[ptr] = RAND;
-        ptr ++;
-        buf[ptr] = 0x09;
-        ptr ++; // len
-        buf[ptr] = VALVE_SET_TIME;
-        ptr ++;
+        buf[ptr ++] = PORT;
+        buf[ptr ++] = RAND;
+        buf[ptr ++] = 0x09; // len
+        buf[ptr ++] = VALVE_SET_TIME;
         uint16 century = ((t->tm_year + 1900) / 100);
         uint16 year = (t->tm_year + 1900) % 100;
-        buf[ptr] = DEC2BCD(century);
-        ptr ++;
-        buf[ptr] = DEC2BCD(year);
-        ptr ++;
-        buf[ptr] = DEC2BCD(t->tm_mon + 1);
-        ptr ++;
-        buf[ptr] = DEC2BCD(t->tm_mday);
-        ptr ++;
-        buf[ptr] = DEC2BCD(t->tm_hour);
-        ptr ++;
-        buf[ptr] = DEC2BCD(t->tm_min);
-        ptr ++;
-        buf[ptr] = DEC2BCD(t->tm_sec);
-        ptr ++;
-        buf[ptr] = DEC2BCD(t->tm_wday);
-        ptr ++;
+        buf[ptr ++] = DEC2BCD(century);
+        buf[ptr ++] = DEC2BCD(year);
+        buf[ptr ++] = DEC2BCD(t->tm_mon + 1);
+        buf[ptr ++] = DEC2BCD(t->tm_mday);
+        buf[ptr ++] = DEC2BCD(t->tm_hour);
+        buf[ptr ++] = DEC2BCD(t->tm_min);
+        buf[ptr ++] = DEC2BCD(t->tm_sec);
+        buf[ptr ++] = DEC2BCD(t->tm_wday);
         cbuffer_write_done(tx);
     }
     txlock.UnLock();
@@ -1653,20 +1740,16 @@ bool CValveMonitor::SetUID(uint32 vmac, userid_t uid)
     uint16 tmplen;
     memcpy(cmd, &vmac, sizeof(uint32));
     ptr += sizeof(uint32);
-    cmd[ptr] = PORT;
-    ptr ++;
-    cmd[ptr] = RAND;
-    ptr ++;
-    cmd[ptr] = 0x09;
-    ptr ++; // len
-    cmd[ptr] = VALVE_SET_UID;
-    ptr ++;
+    cmd[ptr ++] = PORT;
+    cmd[ptr ++] = RAND;
+    cmd[ptr ++] = 0x09; // len
+    cmd[ptr ++] = VALVE_SET_UID;
     memcpy(cmd + ptr, uid.x, sizeof(userid_t));
     ptr += sizeof(userid_t);
     hexdump(cmd, ptr);
     for (int i = 0; i < 3; i ++) {
         SendCommand(cmd, ptr);
-        sleep(1);
+        //sleep(1);
         if (WaitCmdAck(ack, &tmplen)) {
             if (memcmp(ack, &vmac, sizeof(uint32)) == 0 && ack[7] == VALVE_SET_UID) {
                 // found it
