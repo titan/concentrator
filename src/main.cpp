@@ -291,42 +291,53 @@ void StartGeneralHeat()
     CHeatMonitor::GetInstance()->Start();
 }
 
+#ifdef SECKEY
+#undef SECKEY
+#define SECKEY "GPRS"
+#else
+#define SECKEY "GPRS"
+#endif
+
 void StartPortal()
 {
-    CINI GPRSINI("gprs_cfg.ini");
-    string SectionStr = GPRS_SESSION ;
-    string Key = COM_ADDRESS_KEY;
-    string KeyValue = GPRSINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
-    TrimInvalidChar(KeyValue);
-    DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
-    CGprs* pGPRS = new CGprs(KeyValue);
+    CINI ini("gprs_cfg.ini");
+    string name = ini.GetValueString(SECKEY, "DEVICE", "/dev/ttyS3");
+    TrimInvalidChar(name);
+    DEBUG("[%s]%s=%s\n", SECKEY, "DEVICE", name.c_str());
+    CGprs * pGPRS = new CGprs(name);
     pGPRS->Open();
-    Key = COM_CONFIG_KEY;
-    KeyValue = GPRSINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
-    TrimInvalidChar(KeyValue);
-    DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
-    pGPRS->SetParity( KeyValue.c_str() );
+    string cfg = ini.GetValueString(SECKEY, "DEV_CONFIG", "115200,8,1,N");
+    TrimInvalidChar(cfg);
+    DEBUG("[%s]%s=%s\n", SECKEY, "DEV_CONFIG", cfg.c_str());
+    pGPRS->SetParity(cfg.c_str());
 
-    Key = GPRS_LOCAL_PORT;
-    uint32 LocalPort = GPRSINI.GetValueInt(SectionStr, Key, 0/*default port*/);
-    DEBUG("[%s]%s=%d\n", SectionStr.c_str(), Key.c_str(), LocalPort);
+    string apn = ini.GetValueString(SECKEY, "APN", "");
+    TrimInvalidChar(apn);
+    string user = ini.GetValueString(SECKEY, "USER", "");
+    TrimInvalidChar(user);
+    string passwd = ini.GetValueString(SECKEY, "PASSWD", "");
+    TrimInvalidChar(passwd);
+    pGPRS->SetApn(apn.c_str());
+    pGPRS->SetUser(user.c_str());
+    pGPRS->SetPasswd(passwd.c_str());
 
-    Key = GPRS_SERVER_IP;
-    KeyValue = GPRSINI.GetValueString(SectionStr, Key, INVALID_KEY_VALUE);
-    TrimInvalidChar(KeyValue);
-    DEBUG("[%s]%s=%s\n", SectionStr.c_str(), Key.c_str(), KeyValue.c_str());
+    uint32 localport = ini.GetValueInt(SECKEY, "LOCAL_PORT", 0/*default port*/);
+    DEBUG("[%s]%s=%d\n", SECKEY, "LOCAL_PORT", localport);
 
-    Key = GPRS_SERVER_PORT;
-    uint32 DestPort = GPRSINI.GetValueInt(SectionStr, Key, 0/*default port*/);
-    DEBUG("[%s]%s=%d\n", SectionStr.c_str(), Key.c_str(), DestPort);
-    pGPRS->SetIP(LocalPort, KeyValue.c_str(), DestPort);
+    string serverip = ini.GetValueString(SECKEY, "SERVER_IP", INVALID_KEY_VALUE);
+    TrimInvalidChar(serverip);
+    DEBUG("[%s]%s=%s\n", SECKEY, "SERVER_IP", serverip.c_str());
+
+    uint32 serverport = ini.GetValueInt(SECKEY, "SERVER_PORT", 0/*default port*/);
+    DEBUG("[%s]%s=%d\n", SECKEY, "SERVER_PORT", serverport);
+    pGPRS->SetIP(localport, serverip.c_str(), serverport);
 
     CPortal::GetInstance()->SetJZQID((uint32)jzqid);
     CPortal::GetInstance()->SetGPRS(pGPRS);
-    Key = GPRS_HEART_INTERVAL;
-    int HeartInterval = GPRSINI.GetValueInt(SectionStr, Key, DefaultIntervalTime);
 
-    CPortal::GetInstance()->Init(HeartInterval);
+    int interval = ini.GetValueInt(SECKEY, "HEART_TIM", DefaultIntervalTime);
+
+    CPortal::GetInstance()->Init(interval);
 
     CPortal::GetInstance()->Start();
 }

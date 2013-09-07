@@ -118,13 +118,17 @@ CGprs::CGprs(const string& CommName):CSerialComm(CommName)
 {
     memset(m_DestIP, 0, sizeof(m_DestIP));
     PowerOn();
+
     gpio_attr_t AttrOut;
     AttrOut.mode = PIO_MODE_OUT;
     AttrOut.resis = PIO_RESISTOR_DOWN;
     AttrOut.filter = PIO_FILTER_NOEFFECT;
     AttrOut.multer = PIO_MULDRIVER_NOEFFECT;
     SetPIOCfg(PD6, AttrOut);
+
+    /*
     PIOOutValue(PD6, 1);
+    */
     //memset(m_IMEI, 0, sizeof(m_IMEI));
 }
 
@@ -247,7 +251,12 @@ bool CGprs::Connect(const char * IP, const uint32 Port)
     WaitString("OK", RX_TIMEOUT);
     */
 
-    //if (Command("AT+CIPCSGP=1,\"BJRL.YCCB.BJAPN@RL\",\"15611242430\",\"242430\"\r\n", NETREG_TIMEOUT) != COMM_OK) return false;
+    if (strlen(apn) != 0 && strlen(user) != 0 && strlen(passwd) != 0) {
+        len = LINE_LEN;
+        bzero(atbuf, LINE_REAL_LEN);
+        sprintf((char *)atbuf, "AT+CIPCSGP=1,\"%s\",\"%s\",\"%s\"\r\n", this->apn, this->user, this->passwd);
+        if (Command((char *)atbuf, NETREG_TIMEOUT) != COMM_OK) return false;
+    }
 
     if (Command("AT+CIPMODE=1\r\n") != COMM_OK) {
         DEBUG("Set TT mode error\n");
@@ -307,6 +316,10 @@ void CGprs::Disconnect()
     if ( false == IsOpen() ) {
         return;
     }
+    if (this->mode == WORK_MODE_TT) {
+        Command("+++", RX_TIMEOUT);
+        this->mode = WORK_MODE_HTTP;
+    }
     m_IsConnected = false;
 }
 
@@ -348,7 +361,7 @@ void CGprs::Reset()
 {
     DEBUG("Reset SIM900A\n");
     PIOOutValue(PD6, 0);
-    sleep(1);
+    Delay(500);
     PIOOutValue(PD6, 1);
     sleep(3);
 }

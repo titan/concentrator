@@ -37,6 +37,9 @@ public:
     };
     bool GetSignalIntesity(uint8& nSignalIntesity);
     void Disconnect();
+    void SetApn(const char * apn) {strncpy(this->apn, apn, 32);};
+    void SetUser(const char * user) {strncpy(this->user, user, 32);};
+    void SetPasswd(const char * passwd) {strncpy(this->passwd, passwd, 32);};
     //bool GetIMEI(uint8* pIMEI, uint32& IMEILen);
 //*: <timesout>[in]   指定最大的阻塞读取等待间隔，单位: useconds(微秒)
 //*:当timesout<=0，阻塞读模式，即直到读够指定数据个数后函数返回
@@ -83,5 +86,8 @@ private:
     //char m_IMEI[IMEI_LEN];
     enum GPRSWorkMode mode;
     int cops; // 0 for china unicom, 1 for china mobile
+    char apn[32];
+    char user[32];
+    char passwd[32];
 };
 #endif
