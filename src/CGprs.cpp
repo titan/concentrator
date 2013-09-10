@@ -245,21 +245,8 @@ bool CGprs::Connect(const char * IP, const uint32 Port)
             cops = 1;
     }
 
-    /*
-    if (Command("AT+CGATT=1\r\n", NETREG_TIMEOUT) != COMM_OK) return false;
-    if (Command("AT+CGATT?\r\n", NETREG_TIMEOUT, "+CGATT: 1") != COMM_OK)  return false;
-    WaitString("OK", RX_TIMEOUT);
-    */
-
-    if (strlen(apn) != 0 && strlen(user) != 0 && strlen(passwd) != 0) {
-        len = LINE_LEN;
-        bzero(atbuf, LINE_REAL_LEN);
-        sprintf((char *)atbuf, "AT+CIPCSGP=1,\"%s\",\"%s\",\"%s\"\r\n", this->apn, this->user, this->passwd);
-        if (Command((char *)atbuf, NETREG_TIMEOUT) != COMM_OK) return false;
-    }
-
     if (Command("AT+CIPMODE=1\r\n") != COMM_OK) {
-        DEBUG("Set TT mode error\n");
+        DEBUG("Set Data mode error\n");
         return false;
     }
 
@@ -272,7 +259,41 @@ bool CGprs::Connect(const char * IP, const uint32 Port)
     sprintf((char *)atbuf, "AT+CLPORT=\"UDP\",%d\r\n", m_SrcPort);
 
     if (Command((char *)atbuf) != COMM_OK) return false;
+    sleep(3);
+
+    /*
+    if (Command("AT+CGATT=1\r\n", NETREG_TIMEOUT) != COMM_OK) return false;
+    if (Command("AT+CGATT?\r\n", NETREG_TIMEOUT, "+CGATT: 1") != COMM_OK)  return false;
+    WaitString("OK", RX_TIMEOUT);
+    */
+    while (Command("AT+CGATT?\r\n", NETREG_TIMEOUT, "+CGATT: 1") != COMM_OK) {
+        WaitString("OK", RX_TIMEOUT);
+    }
+
+    //Command("AT+IFC=2,2\r\n", RX_TIMEOUT);
+
+    if (strlen(apn) != 0 && strlen(user) != 0 && strlen(passwd) != 0) {
+        len = LINE_LEN;
+        bzero(atbuf, LINE_REAL_LEN);
+        //sprintf((char *)atbuf, "AT+CIPCSGP=1,\"%s\",\"%s\",\"%s\"\r\n", this->apn, this->user, this->passwd);
+        sprintf((char *)atbuf, "AT+CSTT=\"%s\",\"%s\",\"%s\"\r\n", this->apn, this->user, this->passwd);
+        if (Command((char *)atbuf, NETREG_TIMEOUT) != COMM_OK) return false;
+    } else {
+        if (cops == 1) {
+            sprintf((char *)atbuf, "AT+CSTT=\"CMNET\"\r\n");
+        } else {
+            sprintf((char *)atbuf, "AT+CSTT=\"UNINET\"\r\n");
+        }
+    }
+
+    if (Command("AT+CIICR\r\n", NETREG_TIMEOUT) != COMM_OK) return false;
     sleep(10);
+
+    len = LINE_LEN;
+    bzero(atbuf, len);
+    if (Command("AT+CIFSR\r\n", NETREG_TIMEOUT, NULL, (char *)atbuf, len) != COMM_OK) return false;
+    if (strstr((char *)atbuf, "ERROR") != NULL) return false;
+    DEBUG("Local ip address: %s\n", (char *)atbuf);
 
     for (i = 0; i < 3; i ++) {
         // if (Command("AT+CIPSHUT\r\n", "SHUT OK") != COMM_OK) continue;
@@ -307,7 +328,7 @@ bool CGprs::Connect(const char * IP, const uint32 Port)
     }
 
     m_IsConnected = true;
-    mode = WORK_MODE_TT;
+    mode = GPRS_MODE_DATA;
     return true;
 }
 
@@ -316,10 +337,13 @@ void CGprs::Disconnect()
     if ( false == IsOpen() ) {
         return;
     }
-    if (this->mode == WORK_MODE_TT) {
+    if (this->mode == GPRS_MODE_DATA) {
+        sleep(1);
         Command("+++", RX_TIMEOUT);
-        this->mode = WORK_MODE_HTTP;
+        sleep(1);
+        this->mode = GPRS_MODE_COMMAND;
     }
+    Command("AT+CIPSHUT\r\n");
     m_IsConnected = false;
 }
 
@@ -381,10 +405,11 @@ bool CGprs::GetIMEI(uint8* pIMEI, uint32& IMEILen)
 
 bool CGprs::SwitchMode(enum GPRSWorkMode to)
 {
-    if (this->mode == WORK_MODE_TT) {
-        if (to == WORK_MODE_HTTP) {
-            myusleep(500 * 1000);
+    if (this->mode == GPRS_MODE_DATA) {
+        if (to == GPRS_MODE_COMMAND) {
+            myusleep(1000 * 1000);
             if (Command("+++", RX_TIMEOUT) != COMM_OK) goto switch_to_http_err0;
+            myusleep(500 * 1000);
             if (Command("AT+CSQ\r\n", RX_TIMEOUT, "+CSQ:") != COMM_OK) goto switch_to_http_err1;
             if (Command("AT+CGATT?\r\n", RX_TIMEOUT, "+CGATT:") != COMM_OK) goto switch_to_http_err1;
             if (Command("AT+SAPBR=3,1,\"CONTYPE\",\"GPRS\"\r\n") != COMM_OK) goto switch_to_http_err1;
@@ -407,7 +432,7 @@ switch_to_http_err1:
 switch_to_http_err0:
         return false;
     } else {
-        if (to == WORK_MODE_TT) {
+        if (to == GPRS_MODE_DATA) {
             if (Command("AT+HTTPTERM\r\n") != COMM_OK) return false;
             if (Command("ATO\r\n", RX_TIMEOUT, "CONNECT") != COMM_OK) return false;
             this->mode = to;
@@ -426,9 +451,9 @@ ECommError CGprs::HttpGet(const char * url, uint8 * buf, size_t * size)
         DEBUG("Disconnected\n");
         return COMM_FAIL;
     }
-    if (this->mode != WORK_MODE_HTTP) {
+    if (this->mode != GPRS_MODE_COMMAND) {
         DEBUG("it's tt mode, switch to http mode\n");
-        if (!SwitchMode(WORK_MODE_HTTP)) {
+        if (!SwitchMode(GPRS_MODE_COMMAND)) {
             DEBUG("Switch work mode fail\n");
             return COMM_FAIL;
         }
@@ -476,8 +501,8 @@ ECommError CGprs::SendData(uint8* pBuffer, uint32& BufferLen, int32 TimeOut)
         DEBUG("Disconnected\n");
         return COMM_FAIL;
     }
-    if (this->mode != WORK_MODE_TT) {
-        if (!SwitchMode(WORK_MODE_TT)) {
+    if (this->mode != GPRS_MODE_DATA) {
+        if (!SwitchMode(GPRS_MODE_DATA)) {
             DEBUG("Switch work mode fail\n");
             return COMM_FAIL;
         }
@@ -514,8 +539,8 @@ ECommError CGprs::ReceiveData(uint8* pBuffer, uint32& BufferLen, int32 TimeOut)
         DEBUG("Disconnected\n");
         return COMM_FAIL;
     }
-    if (this->mode != WORK_MODE_TT) {
-        if (!SwitchMode(WORK_MODE_TT)) {
+    if (this->mode != GPRS_MODE_DATA) {
+        if (!SwitchMode(GPRS_MODE_DATA)) {
             DEBUG("Switch work mode fail\n");
             return COMM_FAIL;
         }
@@ -535,8 +560,8 @@ ECommError CGprs::ReceiveData(uint8* pBuffer, uint32& BufferLen, const uint8* pB
         DEBUG("NOT connect\n");
         return COMM_FAIL;
     }
-    if (this->mode != WORK_MODE_TT) {
-        if (!SwitchMode(WORK_MODE_TT)) {
+    if (this->mode != GPRS_MODE_DATA) {
+        if (!SwitchMode(GPRS_MODE_DATA)) {
             DEBUG("Switch work mode fail\n");
             return COMM_FAIL;
         }
@@ -635,8 +660,8 @@ bool CGprs::GetSignalIntesity(uint8& nSignalIntesity)
     uint32 len = LINE_LEN;
     bool goBackTT = false;
 
-    if (mode == WORK_MODE_TT) {
-        myusleep(500 * 1000);
+    if (mode == GPRS_MODE_DATA) {
+        myusleep(1000 * 1000);
         if (Command("+++", RX_TIMEOUT) != COMM_OK) {
             DEBUG("Cannot leave TT mode\n");
             return false;
@@ -745,7 +770,7 @@ ECommError CGprs::WaitAnyString(int32 timeout, char * buf, uint32 & len)
     uint32 idx = 0;
     uint32 one = 1;
 
-    DEBUG("Wait for any string\n");
+    DEBUG("Wait for any string in %dms\n", timeout);
     while (retry < timeout && idx < len) {
         one = 1;
         if (COMM_OK != ReadBuf((uint8 *)(buf + idx), one, 1)) {
@@ -814,5 +839,5 @@ ECommError CGprs::ReadRawData(uint8 * buf, uint32 len, int32 timeout)
 
 void CGprs::Delay(uint32 ms)
 {
-    myusleep(ms * 1000 * 10);
+    myusleep(ms * 1000);
 }

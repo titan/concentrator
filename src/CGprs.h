@@ -14,8 +14,8 @@ using namespace std;
 #define HTTP_TIMEOUT    180000 // ms
 
 enum GPRSWorkMode {
-    WORK_MODE_TT = 0, // Transparent transmission
-    WORK_MODE_HTTP
+    GPRS_MODE_DATA = 0, // Transparent transmission
+    GPRS_MODE_COMMAND
 };
 
 const uint8 UNKNOWN_SIGNAL_INTESITY = 99;
