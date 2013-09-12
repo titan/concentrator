@@ -313,9 +313,9 @@ void StartPortal()
 
     string apn = ini.GetValueString(SECKEY, "APN", "");
     TrimInvalidChar(apn);
-    string user = ini.GetValueString(SECKEY, "USER", "");
+    string user = ini.GetValueString(SECKEY, "USER_NAME", "");
     TrimInvalidChar(user);
-    string passwd = ini.GetValueString(SECKEY, "PASSWD", "");
+    string passwd = ini.GetValueString(SECKEY, "USER_PWD", "");
     TrimInvalidChar(passwd);
     pGPRS->SetApn(apn.c_str());
     pGPRS->SetUser(user.c_str());
