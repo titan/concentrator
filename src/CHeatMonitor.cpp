@@ -25,9 +25,9 @@ const uint8 indexes[3][12] = {
     {56, 00, 60, 00, 51, 00, 45, 00, 39, 00, 19, 00}  // 荷德
 };
 const uint8 pktlen[3] = {
-    153, // 丹佛斯
+    154, // 丹佛斯
     253, // 卡姆鲁普
-    153  // 荷德
+    154  // 荷德
 };
 
 CLock CHeatMonitor::m_HeatLock;
@@ -484,7 +484,6 @@ bool CHeatMonitor::WaitCmdAck(uint8 * data, uint16 * len)
             if (FD_ISSET(com, &rfds)) {
 
                 if (readed == 0) {
-                    rlen = 253;
                     bzero(ack, 256);
                 }
 
@@ -497,7 +496,7 @@ bool CHeatMonitor::WaitCmdAck(uint8 * data, uint16 * len)
 
                 if (readed == rlen) {
                     readed = 0;
-                    DEBUG("read %d bytes: ", rlen);
+                    DEBUG("Read %d bytes: ", rlen);
                     hexdump(ack, rlen);
                     * len = rlen;
                     return true;
