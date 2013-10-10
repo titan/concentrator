@@ -460,7 +460,7 @@ bool CForwarderMonitor::SendCommand(uint8* pCommand, uint32 CommandLen)
             continue;
         }
         FlashLight(LIGHT_FORWARD);
-        myusleep(50 * 1000);
+        //myusleep(50 * 1000);
 
         uint8 Buffer[MAX_BUFFER_LEN] = {0};
         uint32 BufferCount = sizeof(Buffer);
@@ -471,6 +471,8 @@ bool CForwarderMonitor::SendCommand(uint8* pCommand, uint32 CommandLen)
                 , FORWARDER_COMMAND_END_FLAG
                 , sizeof(FORWARDER_COMMAND_END_FLAG)
                 , FORWARDER_TIMEOUT) ) {
+            DEBUG("Readbuf %d bytes ", BufferCount);
+            hexdump(Buffer, BufferCount);
             FlashLight(LIGHT_FORWARD);
             if (ParseData(Buffer+sizeof(FORWARDER_COMMAND_BEGIN_FLAG)
                           , BufferCount-sizeof(FORWARDER_COMMAND_BEGIN_FLAG)-sizeof(FORWARDER_COMMAND_END_FLAG)
@@ -478,7 +480,7 @@ bool CForwarderMonitor::SendCommand(uint8* pCommand, uint32 CommandLen)
                           , CommandLen)) {
                 return true;
             } else {
-                myusleep(200 * 1000);
+                sleep(1);//myusleep(200 * 1000);
             }
         } else {
             DEBUG("ReadBuf timeout\n");
