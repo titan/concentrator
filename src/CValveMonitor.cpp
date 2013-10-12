@@ -276,19 +276,19 @@ registering:
                     SaveRecords();
                 }
                 if (workmode == 0) BroadcastQuery();
-                truncate("vmac.txt", 0);
-                int fd = open("vmac.txt", O_WRONLY);
+                truncate("realusers.csv", 0);
+                int fd = open("realusers.csv", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
                 if (fd != -1) {
-                    DEBUG("Save vmac\n");
-                    char buf[16];
+                    DEBUG("Save real users\n");
+                    char buf[32];
                     for (map<uint32, user_t>::iterator iter = users.begin(); iter != users.end(); iter ++) {
-                        bzero(buf, 16);
-                        sprintf(buf, "%02X %02X %02X %02X\n", iter->first & 0xFF, (iter->first >> 8) & 0xFF, (iter->first >> 16) & 0xFF, (iter->first >> 24) & 0xFF);
-                        write(fd, buf, 12);
+                        bzero(buf, 32);
+                        sprintf(buf, "%02X%02X%02X%02X,%02X%02X%02X%02X%02X%02X%02X%02X\r\n", iter->first & 0xFF, (iter->first >> 8) & 0xFF, (iter->first >> 16) & 0xFF, (iter->first >> 24) & 0xFF, iter->second.uid.x[0], iter->second.uid.x[1], iter->second.uid.x[2], iter->second.uid.x[3], iter->second.uid.x[4], iter->second.uid.x[5], iter->second.uid.x[6], iter->second.uid.x[7]);
+                        write(fd, buf, strlen(buf));
                     }
                     close(fd);
                 } else {
-                    DEBUG("Save vmac error\n");
+                    DEBUG("Save real users error\n");
                 }
 
                 truncate("statistics.txt", 0);
@@ -311,42 +311,6 @@ registering:
                 GetConsumeData();
             }
         }
-
-#if 0
-        txlock.Lock();
-        buf = (uint8 *) cbuffer_write(tx);
-        if (buf) {
-            ptr = 0;
-            switch (random() % 3) {
-            case 0:
-                buf[ptr ++] = 0x8a;
-                buf[ptr ++] = 0x6b;
-                buf[ptr ++] = 0x38;
-                buf[ptr ++] = 0x60;
-                break;
-            case 1:
-                buf[ptr ++] = 0x8a;
-                buf[ptr ++] = 0x6b;
-                buf[ptr ++] = 0x6a;
-                buf[ptr ++] = 0xd0;
-                break;
-            case 2:
-                buf[ptr ++] = 0x8a;
-                buf[ptr ++] = 0x6b;
-                buf[ptr ++] = 0x6a;
-                buf[ptr ++] = 0xd2;
-                break;
-            default:
-                break;
-            }
-            buf[ptr ++] = PORT;
-            buf[ptr ++] = RAND;
-            buf[ptr ++] = 0x01;
-            buf[ptr ++] = VALVE_GET_PUNCTUAL_DATA;
-            cbuffer_write_done(tx);
-        }
-        txlock.UnLock();
-#endif
 
     ioloopstart:
 
