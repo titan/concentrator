@@ -276,8 +276,8 @@ registering:
                     SaveRecords();
                 }
                 if (workmode == 0) BroadcastQuery();
-                truncate("realusers.csv", 0);
-                int fd = open("realusers.csv", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+                truncate("user_info.log", 0);
+                int fd = open("user_info.log", O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
                 if (fd != -1) {
                     DEBUG("Save real users\n");
                     char buf[32];
